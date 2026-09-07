@@ -1,0 +1,18 @@
+// Boxes pushed apart because they would otherwise overlap.
+//
+// Nothing here says that the wide box must clear "left" — that is implicit on
+// every pair. What the file does say is enough to fix the direction: "middle"
+// is right of "left", and the wide box is centred under "middle", so the file
+// lets the wide box travel rightward away from "left" and offers no way back.
+// Separating the other way would contradict a line that was written.
+//
+// The wide box also sits below "left", so both axes could separate the pair.
+// The tie goes to whichever they overlap less. "left" is tall, so they share a
+// lot of vertical space and very little horizontal, and the sideways push wins.
+//
+// The benchmark does not exercise any of this, so this file is the coverage.
+
+box left    "L/L/L/L/L/L/L/L/L/L/L/L/L/L"
+box right   "R"                             right of left
+box middle  "m"   right of left  left of right  level with left
+box wide    "a wide box that overruns both"    below middle  gap: tight

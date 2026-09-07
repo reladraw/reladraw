@@ -1,0 +1,63 @@
+// Links that pass between two named things.
+//
+// `between a and b` says where a line goes while it is passing that pair, and
+// nothing about where it goes before or after. The benchmark only exercises one
+// shape of this — a horizontal channel, both ends naming a side, one lane per
+// link — so everything else lives here.
+
+diagram background: #111111
+
+style channel  fill: #191920  stroke: #25242f
+
+// --- a horizontal channel ----------------------------------------------------
+// `north` and `south` are apart vertically, so that is the gap `between` means
+// and it binds y. Neither of them is anywhere near either end of either link:
+// the lines start well to the left, climb into the channel, run along it, and
+// leave for their far ends. Two links share it, so they take a lane each, and
+// the lanes are a label's depth apart rather than an arrowhead's.
+
+box west   "West"
+box lower  "Lower"   below west     gap: tight
+box north  "North"   right of west  gap: wide   style: channel
+box south  "South"   below north    gap: wide   style: channel
+box east   "East"    right of north and south  level with west  gap: wide
+
+link west  -> east  "over"   between north and south  from: right  to: left
+link lower -> east  "under"  between north and south  from: right  to: left
+
+// --- the same clause, the other axis -----------------------------------------
+// `port` and `starboard` are apart horizontally, so here the gap binds x and the
+// line runs down it. Nothing had to say which axis was meant either time.
+//
+// This link names no sides, which is the other case: an end the author left
+// open would otherwise aim at the far box's centre, and it aims at the channel
+// instead — so the line leaves `bow` already heading for the gap.
+
+box bow        "Bow"        below lower  gap: wide
+box port       "Port"       below bow    gap: wide       style: channel
+box starboard  "Starboard"  right of port  level with port  gap: wide  style: channel
+box stern      "Stern"      below port   gap: wide
+
+link bow -> stern  "down"  between port and starboard
+
+// --- travelling the other way ------------------------------------------------
+// The run is read in the direction the link actually goes, so a channel works
+// the same backwards. This one carries no label, so its lane needs only the
+// spacing two arrows need.
+
+link stern -> bow  between port and starboard  from: top  to: bottom
+
+// --- a pair with two gaps ----------------------------------------------------
+// `high` and `low` sit diagonally, so there are two gaps between them and the
+// derivation has nothing to go on. This is the only place the file has to say
+// which axis, and the word is checked rather than assumed: `vertically` is the
+// gap you measure with a vertical ruler — under `high`, over `low` — so a line
+// running along it travels horizontally. Leave the word out and the error says
+// so in these node names; write the wrong one and it says that too.
+
+box far   "Far"    below stern  gap: wide
+box high  "High"   right of far  gap: wide  style: channel
+box low   "Low"    below-right of high  gap: wide  style: channel
+box near  "Near"   right of low  level with high  gap: wide
+
+link far -> near  "threaded"  between high and low vertically

@@ -1,0 +1,20 @@
+// A node sits as close to what it names as its placements allow, in every
+// direction.
+//
+// "left of" and "above" bound their target rather than the node that wrote
+// them, so a node carrying only those has nothing behind it pushing it toward
+// what it names. It used to settle at the far edge of the drawing instead,
+// which was neither what the file said nor what the language promises.
+//
+// "near" is carried rightward by the chain from the anchor, and the note has to
+// follow it. The note's right edge belongs one tight gap from "near", wherever
+// that ends up. Widen a label anywhere in the chain and it still does.
+//
+// The benchmark cannot show this: every note in it is bounded on both sides or
+// placed with "right of", so nothing there drifts. This file is the coverage.
+
+box anchor "anchor"
+box far    "far"   right of anchor
+box near   "near"  right of far
+
+note trailing "one tight gap from near"  left of near  below anchor  gap: tight  overlap: allow

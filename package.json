@@ -1,0 +1,48 @@
+{
+  "name": "reladraw",
+  "version": "0.1.0",
+  "description": "A diagram language where placement is stated, not computed.",
+  "type": "module",
+  "bin": {
+    "reladraw": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "NOTICE"
+  ],
+  "keywords": [
+    "diagram",
+    "diagrams",
+    "diagramming",
+    "svg",
+    "layout",
+    "dsl",
+    "text-to-diagram",
+    "cli"
+  ],
+  "homepage": "https://reladraw.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/reladraw/reladraw.git"
+  },
+  "bugs": {
+    "url": "https://github.com/reladraw/reladraw/issues"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "dev": "tsc --watch",
+    "example": "npm run build && node dist/cli.js examples/arch.reladraw -o examples/out/arch.svg"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  },
+  "author": "Joe Walsh <jpwalsh234@gmail.com>"
+}

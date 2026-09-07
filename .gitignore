@@ -1,0 +1,28 @@
+# Working context that names private paths. Never commit: this repo is public.
+CLAUDE.md
+CLAUDE.local.md
+
+node_modules/
+dist/
+build/
+*.log
+
+# Rendered output. Regenerable from examples/*.reladraw.
+examples/out/
+
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+.DS_Store
+
+# Never ships from this repo: the design record lives in notes, not here.
+*.org
+
+# Scratch space for throwaway files, so private things are unstageable by default.
+scratch/
+
+# draw.io's own lock and backup files, written beside an open drawing.
+.$*.bkp
+.$*.dtmp

@@ -1,0 +1,31 @@
+// The whole icon palette, and the cases the benchmark does not cover.
+//
+// The benchmark exercises icons on containers with two-line titles and on one
+// short leaf. What is here instead: every name in the set, an icon carried by a
+// style rather than written on the node, an icon on a node with no label at
+// all, and an icon on a `size: small` node so the glyph shrinks with the text.
+
+diagram  background: #111111
+
+// An icon is appearance, so a style can carry one. Every store in a diagram
+// then looks alike without anyone writing the word more than once.
+style store  fill: #142814  stroke: #486544  icon: database
+
+box row1 ""  fill: none  stroke: none
+box row1.disk     "Spinning disk"     icon: disk
+box row1.desktop  "Workstation"       right of row1.disk     gap: tight  icon: desktop
+box row1.laptop   "Portable"          right of row1.desktop  gap: tight  icon: laptop
+
+box row2 ""  below row1  gap: tight  fill: none  stroke: none
+box row2.package  "Archive"           icon: package
+box row2.cubes    "Service instances" right of row2.package  gap: tight  icon: cubes
+box row2.db       "Records"           right of row2.cubes    gap: tight  style: store
+
+// No label. The box is exactly the icon plus its padding, which is what makes
+// an icon usable as a marker rather than only as a title-block ornament.
+box bare ""  below row2  gap: tight  icon: disk
+
+// The icon is two lines of the label tall, so it follows `size:` down. These
+// two sit side by side to make the difference plain.
+box small "Small text / and a small icon"  right of bare  gap: tight  size: small  icon: laptop
+box large "Large text / and a large icon"  right of small gap: tight  size: large  icon: laptop

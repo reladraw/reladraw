@@ -1,0 +1,29 @@
+// A gap belongs to the placement, not to the box at either end of it.
+//
+// The benchmark exercises one asymmetric wedge and nothing else, so this file
+// carries the rest: a node-wide default with one placement overriding it, a
+// bracket on each of two opposing placements, and contact written as a gap of
+// none on a node whose other placement keeps its distance.
+
+diagram background: #111111
+
+style plain  fill: #191728  stroke: #4f5367
+
+box left_wall  "Left wall"   style: plain
+box right_wall "Right wall"  right of left_wall  style: plain
+
+// Both sides bind, and they want different distances. Without a gap of its own
+// per placement there is one number for both, and the corridor is symmetric
+// whether or not the picture wants it to be.
+box wedge "Wedged tight left, wide right"  right of left_wall (gap: tight)  left of right_wall (gap: wide)  level with left_wall  style: plain
+
+// `gap:` on the node is still the default for whatever does not say. Here the
+// stack sits wide below the wedge and tight to the right of the left wall.
+box stack "Node default is wide"  below wedge  right of left_wall (gap: tight)  gap: wide  style: plain
+
+// A gap of none is contact, and it is now sayable on one placement while the
+// other keeps its distance — which the node-wide attribute could not do.
+box shelf "Flat on the stack"  below stack (gap: none)  right of left_wall (gap: tight)  style: plain
+
+link left_wall -> wedge  from: right  to: left
+link wedge -> right_wall  from: right  to: left
