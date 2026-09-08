@@ -27,3 +27,14 @@ box shelf "Flat on the stack"  below stack (gap: none)  right of left_wall (gap:
 
 link left_wall -> wedge  from: right  to: left
 link wedge -> right_wall  from: right  to: left
+
+// A node's `gap:` reaches the placements written *against* it as well as its
+// own. `island` names nothing and states wide; both neighbours are held off at
+// that distance, which is what lets an author push a box away from what is
+// crowding it without first working out which line happens to mention which.
+//
+// `west` asks for tight and gets wide, because both ends stated something and a
+// gap is a minimum, so the larger of the two is the one that holds.
+box island "States wide, names nobody"  below shelf  gap: wide  style: plain
+box east   "Takes the island's wide"    right of island  level with island  style: plain
+box west   "Asks tight, gets wide"      left of island   level with island  gap: tight  style: plain

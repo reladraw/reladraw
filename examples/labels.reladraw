@@ -20,14 +20,14 @@ link parser -> resolver  "statements"  from: right  to: left
 
 // The same two placements with nothing written on the link, which is the
 // comparison: delete the label above and the row above closes to this one.
-box sink  "Sink"   below parser              gap: wide  style: box
+box sink  "Sink"   below parser (gap: wide)  style: box
 box quiet "Quiet"  right of sink  level with sink       style: box
 link sink -> quiet  from: right  to: left
 
 // A vertical run, where the room is measured along the corridor and so is the
 // label's depth rather than its width. A long label crossing a vertical gap
 // therefore opens it by one line and hangs out either side.
-box writer "Writer"  right of resolver  gap: wide  style: box
+box writer "Writer"  right of resolver (gap: wide)  style: box
 box disk   "Disk"    below writer                  style: box
 link writer -> disk  "flushed to disk"  from: bottom  to: top
 
@@ -39,6 +39,6 @@ link roomy -> spare  "fits"  from: right  to: left
 
 // Corner to corner: the line runs diagonally through open space, so there is no
 // one corridor the label sits in and nothing is widened for it.
-box high "High"  right of writer  gap: wide  style: box
+box high "High"  right of writer (gap: wide)  style: box
 box low  "Low"   below high  right of high  style: box
 link high -> low  "diagonal"

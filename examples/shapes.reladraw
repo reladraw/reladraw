@@ -30,7 +30,7 @@ box services.worker "worker"  right of services.api  gap: tight  shape: instance
 
 // Unlabelled, so the node is exactly the glyph. These are the shape the
 // benchmark's Docker cubes take.
-box bare1 ""  below services  gap: normal  shape: instance
+box bare1 ""  below services (gap: normal)  shape: instance
 box bare2 ""  below bare1     gap: tight  shape: instance
 
 // A glyph body is an ordinary node, so it takes links and sides like any other.
@@ -41,7 +41,7 @@ link bare1 -> sink  from: right  to: left
 link bare2 -> sink  from: right  to: left
 
 // Any icon can be a body, not just the cube.
-box store ""  below bare2  gap: normal  shape: database
+box store ""  below bare2 (gap: normal)  shape: database
 box drive ""  right of store  gap: tight  shape: disk
 
 // A label's own modifiers ride in brackets on the label. `at: bottom` puts it

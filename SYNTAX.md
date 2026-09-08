@@ -164,7 +164,7 @@ Any of them may name more than one target — `right of borg and bare`, `level w
 
 `of` is optional after any direction, so `below X` and `below of X` both parse. Write whichever reads as English.
 
-There are no coordinates and no numeric offsets. Each direction leaves a gap, one of `none`, `tight`, `normal` (the default) and `wide`. Write it in brackets on the placement itself, or as `gap:` on the node to set the default for all of them. See [A gap belongs to the placement](#a-gap-belongs-to-the-placement).
+There are no coordinates and no numeric offsets. Each direction leaves a gap, one of `none`, `tight`, `normal` (the default) and `wide`. Write it in brackets on the placement itself, or as `gap:` on a node to set the default for every relationship that node is in — including the ones named against it. See [A gap belongs to the placement](#a-gap-belongs-to-the-placement).
 
 Exactly one node in the document may be left unplaced. Everything else is positioned, directly or transitively, relative to it.
 
@@ -244,6 +244,17 @@ box stack "Stack"  below wedge  right of wall (gap: tight)  gap: wide
 ```
 
 Wide below the wedge, tight to the right of the wall.
+
+**A node's `gap:` reaches every relationship it is in, not only the ones it wrote down.** A relationship exists regardless of which of its two ends happened to name the other, so `gap:` on a box also applies to placements written *against* it:
+
+```
+box parser "Parser"  gap: wide
+box renderer "Renderer"  right of parser
+```
+
+`parser` names nothing, and the gap still opens. Without this, the only way to push those two apart would be to know that `renderer` is the one that mentioned `parser` and to edit that line instead — which is a fact about how the file was typed, not about the picture.
+
+Where both ends state a gap the larger applies, since a gap is a minimum either way. A gap in brackets is not a default and is not overruled: it is the specific statement about that one pair, so it wins outright. If you mean a gap to govern one placement and not the whole node, that is what the brackets are for.
 
 The brackets take `gap:` and nothing else at present; anything else in them is an error naming it. An alignment is an error too — `level with x (gap: tight)` — because sharing a line leaves no distance for a gap to set, and a word that quietly does nothing looks like a fault in the tool.
 

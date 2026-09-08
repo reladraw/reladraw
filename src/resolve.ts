@@ -385,6 +385,7 @@ function layoutChildren(
         }
         return {
           name,
+          node: target,
           index: indexOf.get(target)!,
           offset: { x: 0, y: 0 },
           width: target.width,
@@ -468,7 +469,14 @@ function placeRoots(
           offset.y += step.y;
           root = root.parent;
         }
-        return { name, index: indexOf.get(root)!, offset, width: target.width, height: target.height };
+        return {
+          name,
+          node: target,
+          index: indexOf.get(root)!,
+          offset,
+          width: target.width,
+          height: target.height,
+        };
       }),
     { x: [], y: [] },
     corridorsIn(links, (node) => liftTo(node, indexOf, local), measurer, fontSize),
@@ -505,6 +513,8 @@ const AXIS_WORD: Record<Axis, string> = { x: 'horizontally', y: 'vertically' };
 /** Where a placement's target sits: which member owns it, and where inside that member. */
 interface Target {
   name: string;
+  /** The node that was named, which may be nested inside the member holding it. */
+  node: LayoutNode;
   index: number;
   offset: { x: number; y: number };
   width: number;
@@ -555,6 +565,7 @@ function liftTo(
   }
   return {
     name: node.name,
+    node,
     index: indexOf.get(member)!,
     offset,
     width: node.width,
@@ -629,11 +640,12 @@ function positionGroup(
   const pending: Pending[] = [];
 
   for (const node of members) {
+    // Checked here as well as in `gapFor`, so a misspelt node-wide gap is caught
+    // on a node whose placements all name their own or are alignments — and on
+    // one that carries no placements at all, where it now still has an effect.
+    namedGap(node, node.attrs['gap'], node.line);
     if (node.placements.length === 0) continue;
     const me = indexOf.get(node)!;
-    // Checked here as well as in `gapFor`, so a misspelt node-wide gap is still
-    // caught on a node whose placements all name their own or are alignments.
-    namedGap(node, node.attrs['gap'], node.line);
     const size: Record<Axis, number> = { x: node.width, y: node.height };
     const located = node.placements.map((placement) => ({ placement, targets: locate(placement, node) }));
 
@@ -673,8 +685,8 @@ function positionGroup(
       // each placement may name its own and the node's `gap:` is only the
       // default. That is what lets a node wedged between two things sit tight
       // against one of them and wide of the other.
-      const gap = gapFor(node, placement);
       for (const target of targets) {
+        const gap = gapFor(node, placement, target.node);
         if (direction.includes('right')) {
           constraints.x.push({
             from: target.index,
@@ -1142,12 +1154,33 @@ function noRoom(contradiction: Contradiction, axis: Axis, members: LayoutNode[])
 
 
 /**
- * How far this placement holds the node off its target. A placement may name
- * its own gap; `gap:` on the node is the default for the ones that do not.
+ * How far this placement holds the node off its target.
+ *
+ * A gap is a property of the relationship, not of either box in it, so the
+ * placement's own bracketed gap is the specific statement about this pair and
+ * wins outright. Where it says nothing, `gap:` on a node is a default — and both
+ * ends of the relationship may offer one. The node doing the placing wrote its
+ * gap down; the target had someone else's placement written against it. Neither
+ * is more entitled than the other, so the larger applies, which is the only
+ * answer consistent with a gap being a minimum in the first place.
+ *
+ * That is what makes `gap: wide` on a node that carries no placements of its own
+ * do the obvious thing rather than nothing at all: an author looking at two boxes
+ * pushed too close together has no reason to know which of the two happened to
+ * name the other.
  */
-function gapFor(node: LayoutNode, placement: OffsetPlacement): number {
-  if (placement.gap === undefined) return namedGap(node, node.attrs['gap'], node.line);
-  return namedGap(node, placement.gap, placement.line);
+function gapFor(node: LayoutNode, placement: OffsetPlacement, target: LayoutNode): number {
+  if (placement.gap !== undefined) return namedGap(node, placement.gap, placement.line);
+  const mine = node.attrs['gap'];
+  const theirs = target.attrs['gap'];
+  // Only a gap somebody actually wrote down counts. Reading an absent one as the
+  // default would make it a floor rather than a fallback, and every `gap: tight`
+  // placed against a silent node would quietly widen back to normal.
+  const stated: number[] = [];
+  if (mine !== undefined) stated.push(namedGap(node, mine, node.line));
+  if (theirs !== undefined) stated.push(namedGap(target, theirs, target.line));
+  if (stated.length === 0) return namedGap(node, undefined, node.line);
+  return Math.max(...stated);
 }
 
 function namedGap(node: LayoutNode, named: string | undefined, line: number): number {
