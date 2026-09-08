@@ -44,6 +44,7 @@ const OFFERED = [
   'icons',
   'labels',
   'lanes',
+  'coincident',
   'corridors',
   'overhang',
 ];

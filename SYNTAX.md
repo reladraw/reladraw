@@ -332,7 +332,7 @@ That line leaves the right side of `computer1.files` heading right, and arrives 
 
 You name a side and never a point on it. Alone on a side, a link lands at its centre. Sharing a side with other links, the attachments space themselves apart, and which one goes where is derived from where the far ends actually sit — of two links arriving at one top edge, the one coming from further left arrives further left. Move a box and the order follows it. This is the same rule as boxes not overlapping: the tool separates things by default and reads the direction off the solved layout rather than asking you.
 
-The space it leaves is deliberately small, and shrinks further if the side is too short to hold the whole group. On a side short enough, it shrinks to nothing and the attachments coincide — nothing warns you about that yet, so a small box with several links arriving on one edge is worth a look.
+The space it leaves is deliberately small, and shrinks further if the side is too short to hold the whole group. On a side short enough, it shrinks to nothing and the attachments coincide. Their labels still come apart, because the lines bow in the middle to make up what the edge could not give them, but the arrowheads themselves land on one point and nothing warns you — so a small box with several links arriving on one edge is worth a look.
 
 #### Several links between the same two sides
 
@@ -347,7 +347,31 @@ Both of those join the bottom of `gateway` to the left of `queue`, so they run i
 
 Which link takes the outer lane is derived where the diagram says anything: two links pointing opposite ways each keep to one side of their own run, so a reciprocal pair reads as a circulation and re-ordering the two lines changes nothing. Links pointing the *same* way give the tool nothing to read, and there the order you wrote them in is what decides.
 
-The lanes are as wide as the labels riding in them, so labels come apart with the lines. Note which way that pushes: on a horizontal run the labels stack, a line apart, but on a vertical run they all sit at the same height and have to clear each other sideways, so each lane is a whole label wide. Five labelled links down a narrow box will not fit, and will crowd in the same silence the paragraph above describes.
+The lanes are as wide as the labels riding in them, so labels come apart with the lines. Note which way that pushes: on a horizontal run the labels stack, a line apart, but on a vertical run they all sit at the same height and have to clear each other sideways, so each lane is a whole label wide.
+
+A side too short to hold the whole group is squeezed, exactly as above — and the room the ends could not give is then made up in the middle, each line bowing across its run by its own share of the shortfall. The captions come apart even where the attachments are packed together. A group that fits its sides is drawn exactly as it was, because the shortfall is nothing.
+
+#### Several links with no side named at all
+
+Links between the same two boxes that name no side anywhere have the same problem in a harder form: an unnamed end has no side to be spread along. It aims at the far box's centre and attaches wherever that ray crosses the border, so every link between one pair produces the same point, and three of them come out as one visible line with three labels stacked on it.
+
+```
+box a
+box b right of a
+link a -> b "first"
+link a -> b "second"
+link a -> b "third"
+```
+
+Where a link would attach is not changed by there being others. What changes is only that they no longer do it in the same place: each takes the line it would have drawn alone and moves it sideways, across its own run, by a lane. The lines are parallel and a lane apart, and where each end lands falls out of that. With the two boxes level, all three attach further up and down the same two edges. With them on a diagonal — where a single line would leave through a corner — the two lines straddle it, and one end lands on each of the two edges meeting there. Neither of those is a case you have to know about; they are the same rule seen from two positions.
+
+Lane order follows the rule above: opposite-pointing links keep to their own side of the run, same-pointing ones fall back to the order you wrote them in. A lone link is in no group and is untouched, and naming a side on either end takes a link out of the group, since it then has a side of its own to be spread along.
+
+Lanes are as wide as the labels riding in them, as with named sides — so two links between the same two boxes come apart far enough for their captions to clear.
+
+Past a point they cannot: every line still has to attach on the same two edges, and those are only as tall as the boxes. When the group wants more room than the edges can give, the attachments squeeze evenly to fit and each line makes up the shortfall in the middle, bowing across its own run by exactly what its ends could not give it. The labels ride at the midpoints, so they still come apart even though the arrowheads crowd together. The innermost line has no shortfall and stays straight, which is what every group small enough for its boxes looks like.
+
+The bow is the shortfall, not a style — nothing bends until the edge is full, and a group that fits is drawn with straight lines exactly as it always was.
 
 ### Passing between two things
 
@@ -491,6 +515,8 @@ That one was found by testing the lexer, not by rendering — and it could not h
 ~~A labelled link between two boxes at the default gap drew its label across both of them.~~ Fixed. The default gap is sized for boxes to breathe and a label is wider than that, so `link a -> b "statements"` on two adjacent boxes came out unreadable and nothing said so; the authoring workaround was to name a wider gap on a placement that had no reason to be wider. A labelled link now widens the corridor it crosses by what the label needs. Note what this is *not*: no coordinate, no repair of a solved layout, and nothing that finds a route — the corridor is derived from where the boxes landed and then becomes an ordinary minimum distance like any other.
 
 ~~Two links between the same pair of sides were drawn on top of each other.~~ Fixed. Each side was ordered on its own, by where the far ends sat, and for links that share both ends that signal says nothing — so the two edges were ordered without reference to each other and the lines converged in the middle instead of nesting. The visible damage was to the labels: both landed at the same point and the second knocked a hole through the first, leaving one word of it. A group like this now takes one lane order used at both ends. See "Several links between the same two sides".
+
+~~Several links between the same two boxes with no side named were drawn on top of each other.~~ Fixed. This is the same defect as the one above, one step out: a bundle is a statement about two named edges, and an end with no side named has not made one, so nothing saw the group. `link a -> b` three times drew one visible line carrying one label. Each such link now takes its own line, parallel to the one it would have drawn alone and a lane away from it. Note what did *not* change: an unnamed end still attaches where the centre-to-centre ray crosses the border, so no single link anywhere moved. See "Several links with no side named at all".
 
 ~~A link label ignored the line break.~~ Fixed. ` / ` split a node's label and was never applied to a link's, so the marker came out as a literal slash on an arrow and the benchmark's two-line captions had to be flattened to one. The measurer had always returned the split lines; the renderer was handing it the raw string and drawing that instead. The block now centres on the point the label already occupied, so a one-line label sits exactly where it did.
 

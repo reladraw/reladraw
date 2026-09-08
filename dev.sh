@@ -49,6 +49,9 @@ Commands:
                                  into the editor without clicking. Run
                                  `playground` first — this looks at what is on
                                  disk, not at the template.
+  before <file> [ref]           Render one example as <ref> renders it, into
+                                 examples/out/<name>-before.png. `regress` says
+                                 that something moved; this is how you see what.
   regress [ref]                 Render every example with the working tree and
                                  with the source at <ref> (default HEAD) and
                                  report which ones moved. The check to run after
@@ -283,6 +286,25 @@ case "$cmd" in
       fi
     done
     echo "$moved of $(ls examples/*.reladraw | wc -l | tr -d ' ') examples differ from $ref"
+    ;;
+  before)
+    # One example as a git ref renders it, beside the working tree's own render.
+    # `regress` says *that* something moved; this is how you look at what. It
+    # goes through the same throwaway build, so the comparison is of the code
+    # and never of whatever is stale in examples/out.
+    in="${1:?input .reladraw path required}"
+    ref="${2:-HEAD}"
+    name="$(basename "$in" .reladraw)"
+    work="$(mktemp -d -t reladraw-before-XXXXXX)"
+    trap 'rm -rf "$work"' EXIT
+    git archive "$ref" | tar -x -C "$work"
+    ln -s "$PWD/node_modules" "$work/node_modules"
+    (cd "$work" && npx tsc >/dev/null)
+    mkdir -p examples/out
+    node "$work/dist/cli.js" "$in" -o "examples/out/$name-before.svg"
+    rm -f "examples/out/$name-before.png"
+    screenshot "examples/out/$name-before.svg" "examples/out/$name-before.png" "$(svg_size "examples/out/$name-before.svg")" ffffff
+    echo "examples/out/$name-before.png"
     ;;
   screenshot)
     in="${1:?input .svg path required}"

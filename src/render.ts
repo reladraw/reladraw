@@ -388,13 +388,41 @@ function drawLink(
     midY = path.mid.y;
   } else if (curved) {
     const reach = controlReach(start, end);
-    const c1 = { x: start.x + start.tx * reach, y: start.y + start.ty * reach };
-    const c2 = { x: end.x + end.tx * reach, y: end.y + end.ty * reach };
+    // A bundle whose sides were too short to spread it takes the rest of the
+    // room in the middle, exactly as a straight group does — see `bowBundles`.
+    // Displacing both control points equally moves the curve's middle by three
+    // quarters as much, so the bow is scaled up by the inverse of that.
+    const lift = 4 / 3;
+    const bx = (ends.bow?.x ?? 0) * lift;
+    const by = (ends.bow?.y ?? 0) * lift;
+    const c1 = { x: start.x + start.tx * reach + bx, y: start.y + start.ty * reach + by };
+    const c2 = { x: end.x + end.tx * reach + bx, y: end.y + end.ty * reach + by };
     parts.push(
       `  <path d="M ${round(start.x)} ${round(start.y)} C ${round(c1.x)} ${round(c1.y)}, ${round(c2.x)} ${round(c2.y)}, ${round(end.x)} ${round(end.y)}" fill="none" stroke="${colour}" stroke-width="${LINE_WIDTH}"${markerEnd}${markerStart}/>`,
     );
     ink = union(ink, cubicExtent(start, c1, c2, end));
     // The point halfway along a cubic, which is where the label belongs.
+    midX = (start.x + 3 * c1.x + 3 * c2.x + end.x) / 8;
+    midY = (start.y + 3 * c1.y + 3 * c2.y + end.y) / 8;
+  } else if (ends.bow && (ends.bow.x !== 0 || ends.bow.y !== 0)) {
+    // A straight line that could not get the room it needed at its ends, so it
+    // takes it in the middle. Both control points carry the same displacement,
+    // which keeps the arc symmetric; a cubic's middle moves three quarters of
+    // the way its controls do, so the displacement is the bow scaled up by that.
+    const lift = 4 / 3;
+    const run = { x: (end.x - start.x) / 3, y: (end.y - start.y) / 3 };
+    const c1 = {
+      x: start.x + run.x + ends.bow.x * lift,
+      y: start.y + run.y + ends.bow.y * lift,
+    };
+    const c2 = {
+      x: end.x - run.x + ends.bow.x * lift,
+      y: end.y - run.y + ends.bow.y * lift,
+    };
+    parts.push(
+      `  <path d="M ${round(start.x)} ${round(start.y)} C ${round(c1.x)} ${round(c1.y)}, ${round(c2.x)} ${round(c2.y)}, ${round(end.x)} ${round(end.y)}" fill="none" stroke="${colour}" stroke-width="${LINE_WIDTH}"${markerEnd}${markerStart}/>`,
+    );
+    ink = union(ink, cubicExtent(start, c1, c2, end));
     midX = (start.x + 3 * c1.x + 3 * c2.x + end.x) / 8;
     midY = (start.y + 3 * c1.y + 3 * c2.y + end.y) / 8;
   } else {
@@ -541,6 +569,12 @@ interface Anchor {
 interface LinkEnds {
   start: Anchor;
   end: Anchor;
+  /**
+   * How far the middle of the line is pushed across its own run, when the two
+   * boxes are too small to give the group enough edge to spread along. See
+   * `planSpreads`.
+   */
+  bow?: { x: number; y: number };
 }
 
 /** One link's claim on one side of one box, before the point on it is known. */
@@ -614,8 +648,10 @@ function planEndpoints(
   fontSize: number,
 ): Map<LayoutLink, LinkEnds> {
   const claims = new Map<LayoutNode, Map<Side, Claim[]>>();
+  const achieved = new Map<LayoutNode, Map<Side, number>>();
   const named = new Map<LayoutLink, { start?: Anchor; end?: Anchor }>();
   const bundles = planBundles(links, measurer, fontSize);
+  const spreads = planSpreads(links, measurer, fontSize);
 
   for (const link of links) {
     named.set(link, {});
@@ -668,8 +704,15 @@ function planEndpoints(
         const at = first + index * step;
         named.get(entry.link)![entry.which] = anchorOn(face, side, at);
       });
+      // What the side could actually give, which is less than `wanted` when it
+      // is too short for the group. `bowBundles` makes up the difference.
+      let steps = achieved.get(node);
+      if (!steps) achieved.set(node, (steps = new Map()));
+      steps.set(side, step);
     }
   }
+
+  const bows = bowBundles(bundles, achieved);
 
   // Fill in the ends the author said nothing about, now that the named ones
   // are known: an unnamed end aims at wherever its partner ended up.
@@ -678,11 +721,18 @@ function planEndpoints(
     const partial = named.get(link)!;
     const fromFace = faceOf(link.from);
     const toFace = faceOf(link.to);
+    // Several links between one pair of boxes with no side named anywhere: the
+    // line each would have drawn alone, moved aside so they do not coincide.
+    const spread = spreads.get(link);
+    if (spread) {
+      ends.set(link, { ...parallelEnds(fromFace, toFace, spread.offset), bow: spread.bow });
+      continue;
+    }
     // With neither end named this is the straight line it always was, each end
     // aiming at the other box's centre.
     const start = partial.start ?? free(fromFace, partial.end ?? centreOf(toFace));
     const end = partial.end ?? free(toFace, partial.start ?? centreOf(fromFace));
-    ends.set(link, { start, end });
+    ends.set(link, { start, end, bow: bows.get(link) });
   }
   return ends;
 }
@@ -771,6 +821,190 @@ function planBundles(
     for (const link of lanes) bundles.set(link, bundle);
   }
   return bundles;
+}
+
+/** Where one link of a coincident group runs, relative to the line it would draw alone. */
+interface Spread {
+  /** How far its two ends are moved across the run. */
+  offset: number;
+  /**
+   * How far its middle is moved further still, as a vector. Zero — and so a
+   * straight line — whenever the boxes are big enough to hold the whole group
+   * at full spacing, which is the ordinary case.
+   */
+  bow: { x: number; y: number };
+}
+
+/**
+ * The sideways offset each link takes when several run between the same two
+ * boxes and none of them names a side.
+ *
+ * An unnamed end has no side to spread along: it aims at the far box's centre
+ * and attaches wherever that ray crosses the border, so every link in such a
+ * group produces the *same* ray and they are drawn on top of one another —
+ * one visible line, every label stacked on one point. `planEndpoints` cannot
+ * see this and `planBundles` will not, since a bundle is a statement about two
+ * named edges.
+ *
+ * The repair keeps the attachment rule exactly as it is and only stops two
+ * links using it at the same place: the line a link would have drawn alone is
+ * translated across its own run by a lane, which is the straight-line version
+ * of the nesting a bundle already gives curves. A lone link is in no group and
+ * so is untouched.
+ *
+ * Where the boxes are too small to hold the group at full spacing, the ends
+ * are squeezed evenly to fit the edge — there is nowhere further to attach —
+ * and the shortfall is made up in the middle instead: each line bows across
+ * its run by exactly what its endpoints could not give it, so the labels, which
+ * ride at the midpoints, come apart even though the arrows do not. The bow is
+ * therefore derived rather than styled, and it is zero whenever the edge was
+ * long enough, which is why the ordinary case is still a straight line.
+ *
+ * A `between` link is left out. Its route is the corridor it named, its lane
+ * inside that corridor is `planCorridors`' business, and `aimFreeEnds` will
+ * re-aim these ends at the corridor afterwards regardless.
+ */
+function planSpreads(
+  links: LayoutLink[],
+  measurer: Measurer,
+  fontSize: number,
+): Map<LayoutLink, Spread> {
+  const ids = new Map<LayoutNode, number>();
+  const idOf = (node: LayoutNode): number => {
+    let id = ids.get(node);
+    if (id === undefined) {
+      id = ids.size;
+      ids.set(node, id);
+    }
+    return id;
+  };
+
+  const groups = new Map<string, { first: LayoutNode; links: LayoutLink[] }>();
+  for (const link of links) {
+    if (sideAttr(link, 'from') || sideAttr(link, 'to')) continue;
+    if (link.from === link.to || link.between) continue;
+
+    const a = idOf(link.from);
+    const b = idOf(link.to);
+    const swap = b < a;
+    const key = swap ? `${b}|${a}` : `${a}|${b}`;
+    const first = swap ? link.to : link.from;
+
+    const group = groups.get(key);
+    if (group) group.links.push(link);
+    else groups.set(key, { first, links: [link] });
+  }
+
+  const spreads = new Map<LayoutLink, Spread>();
+  for (const group of groups.values()) {
+    if (group.links.length < 2) continue;
+    const from = centreOf(faceOf(group.first));
+    const sample = group.links[0]!;
+    const other = sample.from === group.first ? sample.to : sample.from;
+    const to = centreOf(faceOf(other));
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const length = Math.hypot(dx, dy) || 1;
+    // Translating the line moves its midpoint — where the label goes — by
+    // exactly this, so it is the drift `laneStep` needs.
+    const across = { x: -dy / length, y: dx / length };
+
+    // The same derived order a bundle uses: links pointing opposite ways each
+    // keep to one side of their own run, so a reciprocal pair reads as a
+    // circulation, and only links pointing the same way fall back to the file.
+    const order = new Map(group.links.map((link, index) => [link, index]));
+    const lanes = [...group.links].sort(
+      (a, b) =>
+        Number(a.from !== group.first) - Number(b.from !== group.first) ||
+        order.get(a)! - order.get(b)!,
+    );
+
+    // How far a lane may be shifted before its line no longer passes through the
+    // box at all. `exitAlong` clamps beyond that, which piles the outer lanes
+    // onto a corner and puts their labels back on top of each other — so the
+    // group is squeezed evenly instead, exactly as `planEndpoints` squeezes a
+    // side too short for the links arriving on it, and just as silently.
+    const reach = (node: LayoutNode): number => {
+      const face = faceOf(node);
+      const byX = across.x === 0 ? Infinity : face.width / 2 / Math.abs(across.x);
+      const byY = across.y === 0 ? Infinity : face.height / 2 / Math.abs(across.y);
+      return Math.max(0, Math.min(byX, byY) - ATTACH_MARGIN);
+    };
+    // Which way lane 0 lies is arbitrary, so fix it the way the rest of the
+    // renderer does — toward increasing x, or increasing y where the run is
+    // horizontal. Without this the first link written is topmost on a rightward
+    // run and rightmost on a downward one, for no reason a reader could see.
+    const orient = across.x < 0 || (across.x === 0 && across.y < 0) ? -1 : 1;
+    const usable = 2 * Math.min(reach(group.first), reach(other));
+    const wanted = Math.max(ATTACH_STEP, laneStep(lanes, across, measurer, fontSize));
+    const step = Math.min(wanted, usable / (lanes.length - 1));
+    lanes.forEach((link, index) => {
+      const place = index - (lanes.length - 1) / 2;
+      // The lane is measured across the pair's own run, which has one direction;
+      // a link written the other way round travels the opposite way and would
+      // otherwise take the same offset to the opposite side, putting a
+      // reciprocal pair back on one line. Negated, both keep to their own left,
+      // which is the circulation a bundle already draws.
+      const sense = (link.from === group.first ? 1 : -1) * orient;
+      const shortfall = place * (wanted - step) * sense;
+      spreads.set(link, {
+        offset: place * step * sense,
+        bow: { x: across.x * shortfall, y: across.y * shortfall },
+      });
+    });
+  }
+  return spreads;
+}
+
+/**
+ * The bow each bundled link needs, where the sides it was given were too short
+ * to hold the group at the spacing its labels asked for.
+ *
+ * A named side is squeezed exactly as an unnamed group's edge is — the step
+ * shrinks to `usable / (n - 1)` and the labels ride down on top of each other —
+ * and until this existed, naming the two sides the tool would have chosen
+ * anyway made the picture strictly worse than saying nothing. That is not a
+ * line worth defending, so the same repair applies: a lane's midpoint is not
+ * on an edge and is free to move, and each line makes up in the middle exactly
+ * what its two ends could not give it.
+ *
+ * The shortfall is a vector because the two ends move along different sides.
+ * `drift` is how far a lane's midpoint travels per unit of step — the average
+ * of the two ends' displacements, which is what `laneStep` sized the step
+ * against — so the room a lane wanted is `drift * step`, the room it got is the
+ * same average taken over the steps the two sides actually managed, and the
+ * bow is the difference. It is zero whenever both sides were long enough,
+ * which is why nothing that already fitted has moved.
+ */
+function bowBundles(
+  bundles: Map<LayoutLink, Bundle>,
+  achieved: Map<LayoutNode, Map<Side, number>>,
+): Map<LayoutLink, { x: number; y: number }> {
+  const bows = new Map<LayoutLink, { x: number; y: number }>();
+  const stepOn = (end: BundleEnd): number => achieved.get(end.node)?.get(end.side) ?? 0;
+
+  for (const bundle of new Set(bundles.values())) {
+    const [first, second] = bundle.ends;
+    const t0 = tangentOf(first.side);
+    const t1 = tangentOf(second.side);
+    const sense = bundle.aligned ? 1 : -1;
+    const drift = { x: (t0.x + sense * t1.x) / 2, y: (t0.y + sense * t1.y) / 2 };
+
+    const s0 = stepOn(first);
+    const s1 = stepOn(second);
+    const got = { x: (s0 * t0.x + sense * s1 * t1.x) / 2, y: (s0 * t0.y + sense * s1 * t1.y) / 2 };
+    const short = {
+      x: drift.x * bundle.step - got.x,
+      y: drift.y * bundle.step - got.y,
+    };
+    if (short.x === 0 && short.y === 0) continue;
+
+    bundle.lanes.forEach((link, index) => {
+      const place = index - (bundle.lanes.length - 1) / 2;
+      bows.set(link, { x: short.x * place, y: short.y * place });
+    });
+  }
+  return bows;
 }
 
 /**
@@ -873,6 +1107,57 @@ function free(face: Box, toward: { x: number; y: number }): Anchor {
   const dy = point.y - centre.y;
   const length = Math.hypot(dx, dy) || 1;
   return { x: point.x, y: point.y, tx: dx / length, ty: dy / length };
+}
+
+/**
+ * Walk from a point inside a box along a direction, stopping at the border.
+ *
+ * `edgePoint` walks from the centre, which is the only place a single line
+ * passes through. A fanned-out group's lines are parallel to that one and
+ * beside it, so each needs the border crossing of its own line rather than of
+ * the centre's — which is what keeps the group parallel instead of splayed.
+ */
+function exitAlong(
+  box: Box,
+  from: { x: number; y: number },
+  dir: { x: number; y: number },
+): { x: number; y: number } {
+  // A shift wider than the box leaves the origin outside it; clamping back in
+  // is the graceful answer, and the crowding it signals is a diagnostic.
+  const x = Math.min(Math.max(from.x, box.x), box.x + box.width);
+  const y = Math.min(Math.max(from.y, box.y), box.y + box.height);
+  const tx = dir.x === 0 ? Infinity : ((dir.x > 0 ? box.x + box.width : box.x) - x) / dir.x;
+  const ty = dir.y === 0 ? Infinity : ((dir.y > 0 ? box.y + box.height : box.y) - y) / dir.y;
+  const t = Math.min(tx, ty);
+  if (!Number.isFinite(t)) return { x, y };
+  return { x: x + dir.x * Math.max(0, t), y: y + dir.y * Math.max(0, t) };
+}
+
+/**
+ * Both ends of a link that named no side, moved `offset` sideways across its
+ * own run.
+ *
+ * The whole line is translated rather than each end being nudged along its
+ * border, so the result is genuinely parallel to the line the link would have
+ * drawn alone, exactly `offset` away from it. Where each end lands then falls
+ * out of that: level boxes put both points further along the same two edges,
+ * and a diagonal pair whose line leaves through a corner puts one point on each
+ * of the two edges meeting there. Neither is a case in the code.
+ */
+function parallelEnds(from: Box, to: Box, offset: number): LinkEnds {
+  const a = centreOf(from);
+  const b = centreOf(to);
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const length = Math.hypot(dx, dy) || 1;
+  const dir = { x: dx / length, y: dy / length };
+  const across = { x: -dir.y * offset, y: dir.x * offset };
+  const startAt = exitAlong(from, { x: a.x + across.x, y: a.y + across.y }, dir);
+  const endAt = exitAlong(to, { x: b.x + across.x, y: b.y + across.y }, { x: -dir.x, y: -dir.y });
+  return {
+    start: { x: startAt.x, y: startAt.y, tx: dir.x, ty: dir.y },
+    end: { x: endAt.x, y: endAt.y, tx: -dir.x, ty: -dir.y },
+  };
 }
 
 /** How far the control points sit off the ends. Proportional, but bounded. */
