@@ -28,10 +28,23 @@ Attribute values are a single bare word unless quoted. No commas between attribu
 ## Nodes
 
 ```
-box <name> "<text>" [<placement> ...] [attributes]
+box <name> ["<text>"] [<placement> ...] [attributes]
 ```
 
 `name` identifies the node and must be unique. `text` is what appears inside it, with ` / ` — a slash with whitespace on both sides — marking a line break.
+
+The text is optional, and a box without it is labelled with its own name:
+
+```
+box parser
+box resolver  right of parser
+```
+
+draws two boxes reading "parser" and "resolver". A dotted name shows its last segment only — `box server.docker` reads "docker", because the containment is already drawn and repeating it in the label says nothing new.
+
+Write `""` for a box that is deliberately blank: an invisible container, a node that is nothing but its icon, a glyph body. The empty string is the way to say a box has no label, and leaving the text out entirely is the way to say the name is the label.
+
+A name written this way is doing two jobs, so renaming such a node changes the picture. That is the trade, and the escape from it is to state the label.
 
 The whitespace is part of the marker, not decoration. A slash inside a word is an ordinary character, so `TCP/IP`, `16/9`, `I/O` and `https://example.com/x` all render as written. An earlier version broke on every `/` and quietly tore those labels in half.
 

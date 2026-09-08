@@ -424,7 +424,7 @@
           <dl>
             <dt>Statements</dt>
             <dd>
-              <code>box <i>name</i> "text" <i>[placements]</i> <i>[key: value …]</i></code><br />
+              <code>box <i>name</i> <i>["text"]</i> <i>[placements]</i> <i>[key: value …]</i></code><br />
               <code>note <i>name</i> "text" <i>placements</i></code><br />
               <code>link <i>a</i> -&gt; <i>b</i> <i>["label"]</i> <i>[key: value …]</i></code>
               &nbsp;<i>(<code>&lt;-&gt;</code> for both ends)</i><br />
@@ -433,8 +433,15 @@
               <code>diagram background: #111111</code>
             </dd>
 
+            <dt>Labels</dt>
+            <dd>
+              <code>box parser</code> — no text, so the box is labelled with its name.<br />
+              <code>box parser ""</code> — deliberately blank.<br />
+              <code>"two / lines"</code> — <code> / </code> with spaces either side breaks a line.
+            </dd>
+
             <dt>Containment</dt>
-            <dd><code>box server.docker "Docker"</code> — a dotted name is a child. Declare the parent first.</dd>
+            <dd><code>box server.docker "Docker"</code> — a dotted name is a child. Declare the parent first. Unlabelled, it reads "docker".</dd>
 
             <dt>Placement</dt>
             <dd>

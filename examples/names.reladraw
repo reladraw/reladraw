@@ -1,0 +1,27 @@
+// A box with no text is labelled with its own name. The first lines anybody
+// types are these, and before this they were a parse error asking for quotes
+// before anything had appeared on the canvas.
+
+box parser
+box resolver  right of parser
+box renderer  right of resolver
+link parser -> resolver "statements"
+link resolver -> renderer "geometry"
+
+// A dotted name shows its last segment. The containment is already drawn, so
+// "server.docker" in the label would repeat what the picture says.
+
+box server  "My Server Machine"  below parser  gap: wide
+box server.docker
+box server.backup  right of server.docker  gap: tight
+
+// `""` is the other half: a box that is deliberately blank. Unchanged by any
+// of this, and the reason the shorter form could be added at all.
+
+box pool ""  right of server (gap: wide)  level with server  fill: none  stroke: none
+box pool.one    ""  shape: instance
+box pool.two    ""  right of pool.one  gap: tight  shape: instance
+
+// A stated label still wins, and is the escape from a name doing two jobs.
+
+box store "Records"  below pool.one and pool.two  gap: normal  icon: database

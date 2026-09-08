@@ -115,15 +115,41 @@ function parseAttrs(tokens: Token[], line: number): Attrs {
   return attrs;
 }
 
-/** `box <name> "<text>" [(<label modifiers>)] [<placement> ...]` */
+/**
+ * `box <name> ["<text>"] [(<label modifiers>)] [<placement> ...]`
+ *
+ * The text is optional and the name stands in for it, because a bare `box a`
+ * asking for an empty rectangle is a default nobody wants: the first lines
+ * anybody types are `box a` and `box b right of a`, and they mean the two
+ * boxes to say "a" and "b". `""` is how a box says it is deliberately blank —
+ * an invisible container, a glyph body, a node that is nothing but its icon —
+ * and every such box already writes it, so nothing that predates this changed
+ * meaning. The syntax being added was a parse error before, which is what
+ * makes it purely additive.
+ *
+ * A dotted name shows its last segment only. Containment is already drawn, so
+ * `server.docker` reading "docker" says everything the whole path would.
+ *
+ * A name now has two jobs, so renaming a node can change the picture. That is
+ * the price, and it is honest: a file that states no label is saying the name
+ * is the label.
+ */
 function parseBox(head: Token[], attrs: Attrs, line: number): BoxStmt {
   const name = requireName(head[1], 'box', line);
-  const textToken = head[2];
-  if (!textToken || !textToken.quoted) {
-    throw new SourceError(`box "${name}" needs quoted text`, line);
+  const written = head[2];
+  const textToken = written?.quoted ? written : undefined;
+  // A bare word here is a label somebody forgot to quote far more often than
+  // it is anything else, and `"Parser" is not a direction` would send them
+  // looking in the wrong place.
+  if (written && !textToken && !isAttrKey(written) && !startsPlacement(written) && written.text !== '(') {
+    throw new SourceError(
+      `box "${name}": a label is quoted — write "${written.text}" rather than ${written.text}`,
+      line,
+    );
   }
+  const text = textToken ? textToken.text : name.slice(name.lastIndexOf('.') + 1);
   const subject = `box "${name}"`;
-  const label = readBracket(head, 3, LABEL_KEYS, {
+  const label = readBracket(head, textToken ? 3 : 2, LABEL_KEYS, {
     subject,
     what: 'the label',
     kind: 'a label',
@@ -131,7 +157,7 @@ function parseBox(head: Token[], attrs: Attrs, line: number): BoxStmt {
     line,
   });
   const placements = parsePlacements(head.slice(label.next), line, subject);
-  return { kind: 'box', name, text: textToken.text, label: label.values, placements, attrs, line };
+  return { kind: 'box', name, text, label: label.values, placements, attrs, line };
 }
 
 /** `note <name> "<text>" [<placement> ...]` */
