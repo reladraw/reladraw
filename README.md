@@ -2,6 +2,8 @@
 
 A text language for diagrams where **placement is stated, not computed**.
 
+**[Try it in your browser →](https://reladraw.github.io/reladraw/)** — edit the source on the left, watch the layout re-solve on the right. Nothing to install.
+
 A diagram drawn by hand in draw.io:
 
 ![The reference diagram, drawn by hand](examples/reference/arch.png)
