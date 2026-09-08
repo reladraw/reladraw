@@ -1,0 +1,274 @@
+<!doctype html>
+<!--
+  Source for the playground page. This is the file to edit; docs/index.html is
+  generated from it by `./dev.sh playground`, which replaces the bundle marker
+  below with the whole compiled library inlined into a <script>. Do not edit
+  docs/index.html — the next build overwrites it.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>reladraw playground</title>
+    <meta
+      name="description"
+      content="Write a diagram as stated relationships and watch it solve, in the browser."
+    />
+    <style>
+      :root {
+        --page: #0d0d10;
+        --panel: #16161c;
+        --edge: #2a2a34;
+        --ink: #d9d9d9;
+        --muted: #8b8b8b;
+        --warn: #d2904e;
+        --diagram: #111111;
+        --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        height: 100%;
+      }
+
+      body {
+        margin: 0;
+        background: var(--page);
+        color: var(--ink);
+        font: 14px/1.5 var(--mono);
+        display: flex;
+        flex-direction: column;
+      }
+
+      header {
+        display: flex;
+        align-items: baseline;
+        gap: 14px;
+        flex-wrap: wrap;
+        padding: 12px 18px;
+        border-bottom: 1px solid var(--edge);
+      }
+
+      header h1 {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+      }
+
+      header p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      header nav {
+        margin-left: auto;
+        display: flex;
+        gap: 16px;
+        font-size: 13px;
+      }
+
+      a {
+        color: var(--ink);
+        text-decoration: none;
+        border-bottom: 1px solid var(--edge);
+      }
+
+      a:hover {
+        border-bottom-color: var(--muted);
+      }
+
+      main {
+        flex: 1;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: minmax(300px, 2fr) 3fr;
+      }
+
+      section {
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      section + section {
+        border-left: 1px solid var(--edge);
+      }
+
+      h2 {
+        margin: 0;
+        padding: 8px 18px;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--muted);
+        border-bottom: 1px solid var(--edge);
+      }
+
+      textarea {
+        flex: 1;
+        min-height: 0;
+        resize: none;
+        border: 0;
+        outline: 0;
+        padding: 16px 18px;
+        background: var(--panel);
+        color: var(--ink);
+        font: 13px/1.65 var(--mono);
+        tab-size: 2;
+        /* Statements are long by design — a corridor of placements on one line
+           is the normal shape. Wrapping keeps them all visible in a narrow pane
+           rather than hiding half of each behind a horizontal scrollbar. */
+        white-space: pre-wrap;
+        overflow-y: auto;
+      }
+
+      textarea::selection {
+        background: #3a3a4c;
+      }
+
+      #diagram {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+        padding: 18px;
+        background: var(--diagram);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: opacity 120ms ease;
+      }
+
+      #diagram svg {
+        max-width: 100%;
+        height: auto;
+      }
+
+      #diagram.stale {
+        opacity: 0.35;
+      }
+
+      #error {
+        padding: 10px 18px;
+        border-top: 1px solid var(--edge);
+        background: var(--panel);
+        color: var(--warn);
+        font-size: 13px;
+        white-space: pre-wrap;
+      }
+
+      #error:empty {
+        display: none;
+      }
+
+      #error b {
+        font-weight: 600;
+        color: var(--warn);
+      }
+
+      @media (max-width: 760px) {
+        main {
+          grid-template-columns: 1fr;
+          grid-template-rows: 1fr 1fr;
+        }
+
+        section + section {
+          border-left: 0;
+          border-top: 1px solid var(--edge);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>reladraw</h1>
+      <p>a diagram language where placement is stated, not computed</p>
+      <nav>
+        <a href="https://github.com/reladraw/reladraw">GitHub</a>
+        <a href="https://github.com/reladraw/reladraw/blob/main/SYNTAX.md">Syntax</a>
+      </nav>
+    </header>
+
+    <main>
+      <section>
+        <h2>Source</h2>
+        <textarea id="source" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+        <div id="error" role="status" aria-live="polite"></div>
+      </section>
+      <section>
+        <h2>Diagram</h2>
+        <div id="diagram"></div>
+      </section>
+    </main>
+
+    <!-- RELADRAW_BUNDLE -->
+
+    <script>
+      (function () {
+        'use strict';
+
+        // Eight lines that make the argument: a gap is a minimum, so putting
+        // something between two boxes is what pushes them apart, and deleting it
+        // closes them back up. Nothing here is a coordinate.
+        var SEED = [
+          '// A gap is a minimum, not a measurement. The resolver',
+          '// is what holds these two apart — delete its line and',
+          '// watch them close back up. Nothing here is a coordinate.',
+          '',
+          'box parser "Parser"',
+          'box renderer "Renderer"  right of parser',
+          'box resolver "Resolver"  right of parser  left of renderer  level with parser',
+          '',
+          'link parser -> resolver    "statements"  from: right  to: left',
+          'link resolver -> renderer  "layout"      from: right  to: left',
+          '',
+        ].join('\n');
+
+        var source = document.getElementById('source');
+        var diagram = document.getElementById('diagram');
+        var error = document.getElementById('error');
+
+        function show(message, line) {
+          error.textContent = '';
+          if (message === null) {
+            diagram.classList.remove('stale');
+            return;
+          }
+          if (line !== undefined && line !== null) {
+            var where = document.createElement('b');
+            where.textContent = 'line ' + line + ': ';
+            error.appendChild(where);
+          }
+          error.appendChild(document.createTextNode(message));
+          // The last good diagram stays up, dimmed. Every half-typed line is a
+          // parse error, so blanking the pane would make it flicker on every
+          // keystroke and hide the thing being edited against.
+          diagram.classList.add('stale');
+        }
+
+        function draw() {
+          var svg;
+          try {
+            svg = reladraw.compile(source.value);
+          } catch (e) {
+            show(e.message, e instanceof reladraw.SourceError ? e.line : undefined);
+            return;
+          }
+          diagram.innerHTML = svg;
+          show(null);
+        }
+
+        source.value = SEED;
+        source.addEventListener('input', draw);
+        draw();
+      })();
+    </script>
+  </body>
+</html>

@@ -33,6 +33,12 @@ Commands:
                                  out.png defaults to a temp file, path printed.
   readme-image                  Regenerate docs/arch-render.png, the rendered
                                  half of the README's comparison
+  playground                    Regenerate docs/index.html, the browser
+                                 playground, with the compiled library inlined
+                                 into the page. Edit tools/playground.html, not
+                                 docs/index.html. Re-run after any source
+                                 change, or the hosted page demonstrates an
+                                 older version of the language.
   boxes <file>                  Print the solved geometry of every node
   overlaps <file>               List box pairs that share space (exit 1 if any)
   screenshot <in.svg> <out.png> [WxH] [bg]
@@ -187,6 +193,11 @@ case "$cmd" in
     screenshot "$svg" docs/arch-render.png "$(svg_size "$svg")" ffffff
     rm -f "$svg"
     echo docs/arch-render.png
+    ;;
+  playground)
+    # docs/index.html is generated: the page from tools/playground.html with the
+    # whole compiled library inlined, so it needs no server and no bundler.
+    node tools/playground.mjs
     ;;
   boxes)
     node tools/geometry.mjs boxes "${1:?input .reladraw path required}"

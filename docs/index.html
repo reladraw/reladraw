@@ -1,0 +1,3014 @@
+<!doctype html>
+<!--
+  Source for the playground page. This is the file to edit; docs/index.html is
+  generated from it by `./dev.sh playground`, which replaces the bundle marker
+  below with the whole compiled library inlined into a <script>. Do not edit
+  docs/index.html — the next build overwrites it.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>reladraw playground</title>
+    <meta
+      name="description"
+      content="Write a diagram as stated relationships and watch it solve, in the browser."
+    />
+    <style>
+      :root {
+        --page: #0d0d10;
+        --panel: #16161c;
+        --edge: #2a2a34;
+        --ink: #d9d9d9;
+        --muted: #8b8b8b;
+        --warn: #d2904e;
+        --diagram: #111111;
+        --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        height: 100%;
+      }
+
+      body {
+        margin: 0;
+        background: var(--page);
+        color: var(--ink);
+        font: 14px/1.5 var(--mono);
+        display: flex;
+        flex-direction: column;
+      }
+
+      header {
+        display: flex;
+        align-items: baseline;
+        gap: 14px;
+        flex-wrap: wrap;
+        padding: 12px 18px;
+        border-bottom: 1px solid var(--edge);
+      }
+
+      header h1 {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+      }
+
+      header p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      header nav {
+        margin-left: auto;
+        display: flex;
+        gap: 16px;
+        font-size: 13px;
+      }
+
+      a {
+        color: var(--ink);
+        text-decoration: none;
+        border-bottom: 1px solid var(--edge);
+      }
+
+      a:hover {
+        border-bottom-color: var(--muted);
+      }
+
+      main {
+        flex: 1;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: minmax(300px, 2fr) 3fr;
+      }
+
+      section {
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      section + section {
+        border-left: 1px solid var(--edge);
+      }
+
+      h2 {
+        margin: 0;
+        padding: 8px 18px;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--muted);
+        border-bottom: 1px solid var(--edge);
+      }
+
+      textarea {
+        flex: 1;
+        min-height: 0;
+        resize: none;
+        border: 0;
+        outline: 0;
+        padding: 16px 18px;
+        background: var(--panel);
+        color: var(--ink);
+        font: 13px/1.65 var(--mono);
+        tab-size: 2;
+        /* Statements are long by design — a corridor of placements on one line
+           is the normal shape. Wrapping keeps them all visible in a narrow pane
+           rather than hiding half of each behind a horizontal scrollbar. */
+        white-space: pre-wrap;
+        overflow-y: auto;
+      }
+
+      textarea::selection {
+        background: #3a3a4c;
+      }
+
+      #diagram {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+        padding: 18px;
+        background: var(--diagram);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: opacity 120ms ease;
+      }
+
+      #diagram svg {
+        max-width: 100%;
+        height: auto;
+      }
+
+      #diagram.stale {
+        opacity: 0.35;
+      }
+
+      #error {
+        padding: 10px 18px;
+        border-top: 1px solid var(--edge);
+        background: var(--panel);
+        color: var(--warn);
+        font-size: 13px;
+        white-space: pre-wrap;
+      }
+
+      #error:empty {
+        display: none;
+      }
+
+      #error b {
+        font-weight: 600;
+        color: var(--warn);
+      }
+
+      @media (max-width: 760px) {
+        main {
+          grid-template-columns: 1fr;
+          grid-template-rows: 1fr 1fr;
+        }
+
+        section + section {
+          border-left: 0;
+          border-top: 1px solid var(--edge);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>reladraw</h1>
+      <p>a diagram language where placement is stated, not computed</p>
+      <nav>
+        <a href="https://github.com/reladraw/reladraw">GitHub</a>
+        <a href="https://github.com/reladraw/reladraw/blob/main/SYNTAX.md">Syntax</a>
+      </nav>
+    </header>
+
+    <main>
+      <section>
+        <h2>Source</h2>
+        <textarea id="source" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+        <div id="error" role="status" aria-live="polite"></div>
+      </section>
+      <section>
+        <h2>Diagram</h2>
+        <div id="diagram"></div>
+      </section>
+    </main>
+
+    <script>
+(function () {
+'use strict';
+// ---- ast.js ----
+/**
+ * The shape a source file parses into. Nothing here knows about geometry —
+ * these types are a faithful record of what the author wrote, and no more.
+ */
+const DIRECTIONS = [
+    'above',
+    'below',
+    'left',
+    'right',
+    'above-left',
+    'above-right',
+    'below-left',
+    'below-right',
+];
+function isDirection(word) {
+    return DIRECTIONS.includes(word);
+}
+/**
+ * Which edge of the target a `level with` shares. `centre` is the plain form;
+ * the rest are written in front of it, as in `top level with media`.
+ */
+const EDGES = ['centre', 'top', 'bottom', 'left', 'right'];
+/** An edge belongs to one axis, so an alignment never has to say which. */
+const EDGE_AXIS = {
+    centre: 'y',
+    top: 'y',
+    bottom: 'y',
+    left: 'x',
+    right: 'x',
+};
+/**
+ * The modifiers a placement understands, in brackets after its targets. Refused
+ * by name when unrecognised, for the reason `DIAGRAM_KEYS` are: a modifier that
+ * silently does nothing looks like a bug in the tool rather than a typo.
+ */
+const PLACEMENT_KEYS = ['gap'];
+/** How a placement reads back in the author's own words, for error messages. */
+function describePlacement(placement) {
+    const targets = listTargets(placement.targets);
+    if (placement.kind === 'align') {
+        const edge = placement.edge === 'centre' ? '' : `${placement.edge} `;
+        return `${edge}level with ${targets}`;
+    }
+    // "left of X" and "above X" are both good English; "above of X" is not.
+    const joiner = placement.direction === 'above' || placement.direction === 'below' ? '' : 'of ';
+    const gap = placement.gap === undefined ? '' : ` (gap: ${placement.gap})`;
+    return `${placement.direction} ${joiner}${targets}${gap}`;
+}
+/** "borg", "borg and bare", "borg, bare and media" — as the author would write them. */
+function listTargets(targets) {
+    if (targets.length <= 1)
+        return targets[0] ?? '';
+    return `${targets.slice(0, -1).join(', ')} and ${targets[targets.length - 1]}`;
+}
+/** How the axis of a passage is written, and what it means. */
+const PASSAGE_AXES = {
+    // The gap you measure with a vertical ruler: one target above, one below. A
+    // line running along it therefore travels horizontally, which is the reading
+    // to watch out for — the word describes the gap, not the direction of travel.
+    vertically: 'y',
+    horizontally: 'x',
+};
+/** `vertically` or `horizontally`, from the axis it binds. */
+function describeAxis(axis) {
+    return axis === 'y' ? 'vertically' : 'horizontally';
+}
+/**
+ * What a label's brackets may say: `"Docker" (at: bottom, align: centre)`.
+ *
+ * They are bracketed onto the label rather than written among the node's
+ * attributes for the same reason a gap is bracketed onto its placement — they
+ * modify that one thing, and the brackets make the scope visible instead of
+ * positional. `at` and `align` are independent: neither implies the other, and a
+ * label at the bottom is an ordinary label that happens to be at the bottom.
+ */
+const LABEL_KEYS = ['at', 'align'];
+/** The attributes a `diagram` statement understands. */
+const DIAGRAM_KEYS = ['background'];
+
+// ---- errors.js ----
+/** A problem in the source, reported in the vocabulary of the source. */
+class SourceError extends Error {
+    line;
+    constructor(message, line) {
+        super(message);
+        this.line = line;
+        this.name = 'SourceError';
+    }
+    /** `12: two placements for "server"` — the form the command-line tool prints. */
+    format(file) {
+        const where = file ? `${file}:${this.line}` : `line ${this.line}`;
+        return `${where}: ${this.message}`;
+    }
+}
+
+// ---- lexer.js ----
+/**
+ * Split one line into tokens. Whitespace separates; double quotes group, with
+ * `\"` and `\\` as the only escapes. A `//` outside quotes starts a comment and
+ * runs to the end of the line, so a comment may trail a statement.
+ *
+ * A lone `/` is an ordinary character, which keeps a path or a ratio writable
+ * unquoted. `#` is ordinary too: it opens a hex colour, which is why comments
+ * are spelled `//` rather than the `#` an earlier version used.
+ *
+ * Parentheses group the modifiers on a placement — `left of hub (gap: wide)` —
+ * and are tokens in their own right so that `(gap:` does not read as one word
+ * ending in a colon. They are deliberately *not* punctuation everywhere: an
+ * opening bracket counts only where a token starts, and a closing one only
+ * while a group is open, so an unquoted `rgb(20,20,20)` stays a single token.
+ *
+ * Returns an empty array for a blank or comment-only line.
+ */
+function tokenizeLine(line, lineNumber) {
+    const tokens = [];
+    let i = 0;
+    let depth = 0;
+    while (i < line.length) {
+        const ch = line[i];
+        if (ch === ' ' || ch === '\t') {
+            i += 1;
+            continue;
+        }
+        if (ch === '/' && line[i + 1] === '/')
+            break;
+        if (ch === '(') {
+            depth += 1;
+            tokens.push({ text: '(', quoted: false });
+            i += 1;
+            continue;
+        }
+        if (ch === ')' && depth > 0) {
+            depth -= 1;
+            tokens.push({ text: ')', quoted: false });
+            i += 1;
+            continue;
+        }
+        if (ch === '"') {
+            let text = '';
+            i += 1;
+            let closed = false;
+            while (i < line.length) {
+                const c = line[i];
+                if (c === '\\' && i + 1 < line.length) {
+                    const next = line[i + 1];
+                    // `\/` is the one escape that must survive tokenizing. The line break
+                    // it escapes is not resolved until `splitLines`, long after this, so
+                    // collapsing it to a bare `/` here would lose the fact that the
+                    // author asked for a literal. Every other escape resolves now.
+                    text += next === '/' ? '\\/' : next;
+                    i += 2;
+                    continue;
+                }
+                if (c === '"') {
+                    closed = true;
+                    i += 1;
+                    break;
+                }
+                text += c;
+                i += 1;
+            }
+            if (!closed)
+                throw new SourceError('unterminated string', lineNumber);
+            tokens.push({ text, quoted: true });
+            continue;
+        }
+        let text = '';
+        while (i < line.length) {
+            const c = line[i];
+            if (c === ' ' || c === '\t' || c === '"')
+                break;
+            if (c === '/' && line[i + 1] === '/')
+                break;
+            if (c === ')' && depth > 0)
+                break;
+            text += c;
+            i += 1;
+        }
+        tokens.push({ text, quoted: false });
+    }
+    return tokens;
+}
+/** A bare token ending in `:` opens the attribute section of a statement. */
+function isAttrKey(token) {
+    return !token.quoted && token.text.length > 1 && token.text.endsWith(':');
+}
+
+// ---- parser.js ----
+/** Parse a whole source file. One statement per line; blanks and comments drop out. */
+function parse(source) {
+    const statements = [];
+    source.split(/\r?\n/).forEach((line, index) => {
+        const lineNumber = index + 1;
+        const tokens = tokenizeLine(line, lineNumber);
+        if (tokens.length === 0)
+            return;
+        statements.push(parseStatement(tokens, lineNumber));
+    });
+    return { statements };
+}
+function parseStatement(tokens, line) {
+    const split = attributesBegin(tokens);
+    const head = split === -1 ? tokens : tokens.slice(0, split);
+    const attrs = split === -1 ? {} : parseAttrs(tokens.slice(split), line);
+    const keyword = head[0];
+    if (!keyword || keyword.quoted) {
+        throw new SourceError('a statement must begin with a keyword', line);
+    }
+    switch (keyword.text) {
+        case 'box':
+            return parseBox(head, attrs, line);
+        case 'note':
+            return parseNote(head, attrs, line);
+        case 'link':
+            return parseLink(head, attrs, line);
+        case 'deck':
+            return parseDeck(head, line);
+        case 'style':
+            return parseStyle(head, attrs, line);
+        case 'diagram':
+            return parseDiagram(head, attrs, line);
+        default:
+            throw new SourceError(`unknown statement "${keyword.text}"`, line);
+    }
+}
+/**
+ * Where the node's own attributes start: the first `key:` outside any brackets.
+ * A placement's modifiers are `key: value` too, so a plain search for the first
+ * attribute key would cut the head in the middle of `left of hub (gap: wide)`.
+ */
+function attributesBegin(tokens) {
+    let depth = 0;
+    for (const [at, token] of tokens.entries()) {
+        if (token.quoted)
+            continue;
+        if (token.text === '(')
+            depth += 1;
+        else if (token.text === ')')
+            depth = Math.max(0, depth - 1);
+        else if (depth === 0 && isAttrKey(token))
+            return at;
+    }
+    return -1;
+}
+function parseAttrs(tokens, line) {
+    const attrs = {};
+    let i = 0;
+    while (i < tokens.length) {
+        const keyToken = tokens[i];
+        if (!isAttrKey(keyToken)) {
+            // Attributes end the positional part of a statement, so a placement
+            // written after one is a real mistake with an obvious remedy. Saying what
+            // the parser expected describes its own state; say what to move instead.
+            if (startsPlacement(keyToken)) {
+                throw new SourceError(`"${keyToken.text}" starts a placement, and placements come before the attributes — move it in front of the first "key: value"`, line);
+            }
+            throw new SourceError(`expected an attribute like "key: value", found "${keyToken.text}"`, line);
+        }
+        const key = keyToken.text.slice(0, -1);
+        const valueToken = tokens[i + 1];
+        if (!valueToken)
+            throw new SourceError(`attribute "${key}" has no value`, line);
+        if (isAttrKey(valueToken)) {
+            throw new SourceError(`attribute "${key}" has no value`, line);
+        }
+        attrs[key] = valueToken.text;
+        i += 2;
+    }
+    return attrs;
+}
+/** `box <name> "<text>" [(<label modifiers>)] [<placement> ...]` */
+function parseBox(head, attrs, line) {
+    const name = requireName(head[1], 'box', line);
+    const textToken = head[2];
+    if (!textToken || !textToken.quoted) {
+        throw new SourceError(`box "${name}" needs quoted text`, line);
+    }
+    const subject = `box "${name}"`;
+    const label = readBracket(head, 3, LABEL_KEYS, {
+        subject,
+        what: 'the label',
+        kind: 'a label',
+        example: 'at: bottom',
+        line,
+    });
+    const placements = parsePlacements(head.slice(label.next), line, subject);
+    return { kind: 'box', name, text: textToken.text, label: label.values, placements, attrs, line };
+}
+/** `note <name> "<text>" [<placement> ...]` */
+function parseNote(head, attrs, line) {
+    const name = requireName(head[1], 'note', line);
+    const textToken = head[2];
+    if (!textToken || !textToken.quoted) {
+        throw new SourceError(`note "${name}" needs quoted text`, line);
+    }
+    // A note is bare text with no box, so it has no band for a label to sit in
+    // and nowhere for `at:` to put one. Refused by name rather than ignored.
+    if (follows(head, 3, '(')) {
+        throw new SourceError(`note "${name}" carries label modifiers. A note is bare text, so there is no box for its label to sit anywhere in`, line);
+    }
+    const placements = parsePlacements(head.slice(3), line, `note "${name}"`);
+    return { kind: 'note', name, text: textToken.text, placements, attrs, line };
+}
+/**
+ * `link <from> -> <to> ["<label>"] [between <a> and <b>]`, or `<->` for a
+ * two-headed arrow.
+ */
+function parseLink(head, attrs, line) {
+    const from = requireName(head[1], 'link', line);
+    const arrow = head[2];
+    if (!arrow || arrow.quoted || (arrow.text !== '->' && arrow.text !== '<->')) {
+        throw new SourceError('a link needs "->" or "<->" between its endpoints', line);
+    }
+    const toToken = head[3];
+    if (!toToken || toToken.quoted) {
+        throw new SourceError('a link needs a node on the right of the arrow', line);
+    }
+    let at = 4;
+    const labelToken = head[at]?.quoted ? head[at] : undefined;
+    if (labelToken)
+        at += 1;
+    // A gap has two sides, so `between` takes exactly two targets rather than the
+    // open list a placement takes. `right of a and b` means "clear of both", and
+    // there is no matching reading of "pass between three things".
+    let between;
+    if (at < head.length) {
+        const word = head[at];
+        if (word.quoted || word.text !== 'between') {
+            throw new SourceError(`unexpected "${word.text}" after the link`, line);
+        }
+        const read = readTargets(head, at + 1, 'link', 'between', line);
+        if (read.targets.length !== 2) {
+            throw new SourceError(`"between" takes two nodes, one for each side of the gap — found ${read.targets.length}`, line);
+        }
+        at = read.next;
+        // Two targets sitting diagonally have two gaps between them, and this is
+        // the only way to say which. It is optional because most pairs have one.
+        const trailing = head[at];
+        const axis = trailing && !trailing.quoted ? PASSAGE_AXES[trailing.text] : undefined;
+        if (axis !== undefined)
+            at += 1;
+        between = { targets: read.targets, ...(axis !== undefined ? { axis } : {}) };
+    }
+    if (at < head.length) {
+        throw new SourceError(`unexpected "${head[at].text}" after the link`, line);
+    }
+    return {
+        kind: 'link',
+        from,
+        to: toToken.text,
+        both: arrow.text === '<->',
+        ...(labelToken ? { label: labelToken.text } : {}),
+        ...(between ? { between } : {}),
+        attrs,
+        line,
+    };
+}
+/** `deck <name> "<label>" ["<label>" ...]` */
+function parseDeck(head, line) {
+    const name = requireName(head[1], 'deck', line);
+    const labels = [];
+    for (const token of head.slice(2)) {
+        if (!token.quoted) {
+            throw new SourceError(`deck "${name}" takes quoted labels only`, line);
+        }
+        labels.push(token.text);
+    }
+    if (labels.length === 0) {
+        throw new SourceError(`deck "${name}" needs at least one label`, line);
+    }
+    return { kind: 'deck', name, labels, line };
+}
+/** `style <name> <attributes>` */
+function parseStyle(head, attrs, line) {
+    const name = requireName(head[1], 'style', line);
+    if (head.length > 2) {
+        throw new SourceError(`unexpected "${head[2].text}" after style name`, line);
+    }
+    if (Object.keys(attrs).length === 0) {
+        throw new SourceError(`style "${name}" sets nothing`, line);
+    }
+    return { kind: 'style', name, attrs, line };
+}
+/**
+ * `diagram <attributes>` — no name, because a file holds one diagram. Unknown
+ * keys are refused rather than ignored: a misspelt diagram-wide setting that
+ * silently does nothing is the kind of thing an author stares at for a while.
+ */
+function parseDiagram(head, attrs, line) {
+    if (head.length > 1) {
+        throw new SourceError(`unexpected "${head[1].text}" after diagram`, line);
+    }
+    if (Object.keys(attrs).length === 0) {
+        throw new SourceError('diagram sets nothing', line);
+    }
+    for (const key of Object.keys(attrs)) {
+        if (!DIAGRAM_KEYS.includes(key)) {
+            throw new SourceError(`diagram has no "${key}" — it takes ${DIAGRAM_KEYS.join(', ')}`, line);
+        }
+    }
+    return { kind: 'diagram', attrs, line };
+}
+function requireName(token, keyword, line) {
+    if (!token || token.quoted) {
+        throw new SourceError(`${keyword} needs a name`, line);
+    }
+    return token.text;
+}
+/**
+ * Read however many placements the author wrote. Each is a direction and a target
+ * (`right of docker`, `below deploy`) or an alignment (`level with docker`).
+ * None at all is fine — that node is the anchor.
+ *
+ * `of` is optional after every direction. "left of X" and "below X" are both
+ * good English and "below of X" is not, so the word is accepted wherever it
+ * helps and never demanded. Shorthands added later — chaining targets with
+ * `and`, say — extend this loop without disturbing what it already reads.
+ */
+function parsePlacements(tokens, line, subject) {
+    const placements = [];
+    let i = 0;
+    while (i < tokens.length) {
+        const word = tokens[i];
+        if (word.quoted) {
+            throw new SourceError(`${subject}: unexpected text "${word.text}"`, line);
+        }
+        // `top level with media` names an edge rather than the centre line. `left`
+        // and `right` are edges as well as directions, so it is the word after them
+        // that says which was meant — "left of bup_hd" against "left level with bup_hd".
+        const edge = isEdgeWord(word.text) && follows(tokens, i + 1, 'level') ? word.text : undefined;
+        const head = edge ? tokens[i + 1] : word;
+        if (head.text === 'level' && !head.quoted) {
+            const at = edge ? i + 1 : i;
+            const written = edge ? `${edge} level with` : 'level with';
+            if (!follows(tokens, at + 1, 'with')) {
+                throw new SourceError(`${subject}: an alignment reads "${written} <node>"`, line);
+            }
+            const read = readTargets(tokens, at + 2, subject, written, line);
+            const modifiers = readModifiers(tokens, read.next, subject, written, line);
+            // An alignment shares a line outright, so there is no distance in it for
+            // a gap to set. Refusing rather than dropping it, for the reason unknown
+            // modifier names are refused: a word that quietly does nothing reads as a
+            // fault in the tool.
+            if (modifiers.gap !== undefined) {
+                throw new SourceError(`${subject}: "${written} ${listTargets(read.targets)}" shares a line rather than leaving a space, so it takes no gap`, line);
+            }
+            placements.push({
+                kind: 'align',
+                axis: EDGE_AXIS[edge ?? 'centre'],
+                edge: edge ?? 'centre',
+                targets: read.targets,
+                line,
+            });
+            i = modifiers.next;
+            continue;
+        }
+        if (!isDirection(word.text)) {
+            throw new SourceError(`${subject}: "${word.text}" is not a direction`, line);
+        }
+        let next = i + 1;
+        if (follows(tokens, next, 'of'))
+            next += 1;
+        const read = readTargets(tokens, next, subject, word.text, line);
+        const modifiers = readModifiers(tokens, read.next, subject, word.text, line);
+        placements.push({
+            kind: 'offset',
+            direction: word.text,
+            targets: read.targets,
+            ...(modifiers.gap !== undefined ? { gap: modifiers.gap } : {}),
+            line,
+        });
+        i = modifiers.next;
+    }
+    return placements;
+}
+/**
+ * The bracketed modifiers on one placement — `left of hub (gap: wide)`.
+ *
+ * A gap describes the relationship rather than the box at either end of it, so
+ * a node wedged between two things can be tight against one and wide of the
+ * other. The brackets are what make the scope visible: a bare `gap:` sitting
+ * between two placements cannot be told from the node-wide default, and would
+ * attach silently to whichever clause happened to precede it.
+ */
+function readModifiers(tokens, start, subject, placement, line) {
+    const read = readBracket(tokens, start, PLACEMENT_KEYS, {
+        subject,
+        what: `"${placement}"`,
+        kind: 'a placement',
+        example: 'gap: wide',
+        line,
+    });
+    return { ...read.values, next: read.next };
+}
+/**
+ * A bracketed `key: value` list, shared by a placement's modifiers and a
+ * label's. Both exist for the same reason — a modifier belongs to the clause it
+ * modifies, and the brackets say which clause that is rather than leaving it to
+ * be inferred from what happens to precede it.
+ *
+ * The keys are whitelisted and an unknown one is refused by name, the same rule
+ * `DIAGRAM_KEYS` follows: a modifier that silently does nothing is worse than an
+ * error, because the picture moves and nothing says why.
+ */
+function readBracket(tokens, start, keys, about) {
+    if (!follows(tokens, start, '('))
+        return { values: {}, next: start };
+    const values = {};
+    let i = start + 1;
+    while (!follows(tokens, i, ')')) {
+        const keyToken = tokens[i];
+        if (!keyToken) {
+            throw new SourceError(`${about.subject}: ${about.what} opens a "(" and never closes it`, about.line);
+        }
+        if (!isAttrKey(keyToken)) {
+            throw new SourceError(`${about.subject}: ${about.what} takes modifiers like "${about.example}" in its brackets, found "${keyToken.text}"`, about.line);
+        }
+        const key = keyToken.text.slice(0, -1);
+        if (!keys.includes(key)) {
+            throw new SourceError(`${about.kind} has no "${key}" — it takes ${keys.join(', ')}`, about.line);
+        }
+        const valueToken = tokens[i + 1];
+        if (!valueToken || valueToken.quoted || isAttrKey(valueToken) || valueToken.text === ')') {
+            throw new SourceError(`${about.subject}: "${key}" has no value`, about.line);
+        }
+        // A comma between modifiers is punctuation, exactly as it is between the
+        // targets of a placement. `(at: bottom, align: centre)` and the same without
+        // the comma are the same statement.
+        const value = valueToken.text;
+        values[key] = value.endsWith(',') && value.length > 1 ? value.slice(0, -1) : value;
+        i += 2;
+    }
+    return { values, next: i + 1 };
+}
+function follows(tokens, at, word) {
+    const token = tokens[at];
+    return token !== undefined && !token.quoted && token.text === word;
+}
+/** Could this token open a placement? `top` and `left` open the edge alignments. */
+function startsPlacement(token) {
+    if (token.quoted)
+        return false;
+    return (isDirection(token.text) ||
+        token.text === 'level' ||
+        EDGES.includes(token.text));
+}
+function isEdgeWord(word) {
+    return word !== 'centre' && EDGES.includes(word);
+}
+/**
+ * One target, or several joined by `and` — `right of borg and bare`, or
+ * `level with borg, bare and media`. A trailing comma separates just as `and`
+ * does, so both the way people write lists come out the same.
+ */
+function readTargets(tokens, start, subject, placement, line) {
+    const targets = [];
+    let i = start;
+    for (;;) {
+        const token = tokens[i];
+        if (!token || token.quoted || token.text === '(' || token.text === ')') {
+            throw new SourceError(`${subject}: "${placement}" names no node`, line);
+        }
+        const listed = token.text.endsWith(',') && token.text.length > 1;
+        targets.push(listed ? token.text.slice(0, -1) : token.text);
+        i += 1;
+        if (follows(tokens, i, 'and')) {
+            i += 1;
+            continue;
+        }
+        if (listed)
+            continue;
+        return { targets, next: i };
+    }
+}
+
+// ---- constants.js ----
+/** Inside a box, between its border and its contents. */
+const PAD = 14;
+/** Between stacked children of one container. */
+const CHILD_GAP = 10;
+/** Between a container's own label and its first child. */
+const HEADER_GAP = 10;
+/**
+ * How far each deck copy is offset behind the front face. It has to clear a
+ * whole line of text plus the padding above it, or a copy's label is drawn and
+ * then immediately covered by the copy in front of it.
+ */
+const DECK_STEP = 34;
+/**
+ * The named gaps a placement may ask for, each a *minimum* distance rather than a
+ * fixed one. Anything the author puts between two things widens the space
+ * between them on its own, so no gap here ever has to be chosen large enough
+ * to leave room for something else.
+ */
+const GAPS = {
+    // A zero gap turns an offset into edge-to-edge contact, so "my top edge
+    // against Docker's bottom edge" needs no vocabulary of its own.
+    none: 0,
+    tight: 24,
+    normal: 56,
+    wide: 110,
+};
+/**
+ * How far apart two boxes are pushed when they would otherwise overlap. Small
+ * on purpose: this is the tool enforcing something the author did not write, so
+ * the space it leaves should read as "these are not the same box" and never as
+ * a relationship someone stated. Say `gap:` if you want breathing room.
+ */
+const SEPARATION_GAP = GAPS['tight'];
+/**
+ * Between two links meeting the same side of the same box. An author names a
+ * side, never a point on it, so this is the tool keeping two attachments apart
+ * rather than a distance anyone asked for — small, like `SEPARATION_GAP`, and
+ * squeezed further if the side is too short to hold the whole group.
+ */
+const ATTACH_STEP = 16;
+/** Kept clear at each end of a side, so an attachment never sits on a corner. */
+const ATTACH_MARGIN = 10;
+/**
+ * Between a link's label and the boxes at either end of the corridor it crosses.
+ * Small, like `SEPARATION_GAP` and `ATTACH_MARGIN`, and for the same reason: the
+ * tool is making room for something the author never measured, so the space
+ * should read as "the label is not touching that" and never as a distance anyone
+ * asked for. Say `gap:` if you want the corridor wider than its contents.
+ */
+const LABEL_CLEARANCE = 10;
+/**
+ * How much room a link's label takes along one axis.
+ *
+ * The knockout rectangle drawn behind a label is the text plus five either side,
+ * so that rectangle, not the glyphs, is what must not overlap anything.
+ *
+ * Shared by the resolver, which widens a corridor to hold a label, and the
+ * renderer, which spaces the lanes of a channel by it, so the two cannot
+ * disagree about how much room a label needs. The two ask different questions of
+ * it and both are right: the resolver measures *along* the run, so a link
+ * travelling horizontally needs the label's width; the renderer measures *across*
+ * the channel, so a link travelling horizontally down one needs its height.
+ */
+function labelExtent(label, appearance, axis, measurer, fontSize, line) {
+    const size = fontSizeFor('link', appearance, fontSize, line);
+    const { width, lines } = measurer.measure(label, size);
+    return axis === 'x' ? width + 10 : lines.length * measurer.lineHeight(size);
+}
+/**
+ * An icon is two lines of the label tall, and that ratio is what makes it a
+ * *label-sized* ornament rather than a picture with a size of its own. It is
+ * read off the reference, where the title lines run 25 pixels baseline to
+ * baseline and the drive and machine glyphs are close to 50 tall. Deriving it
+ * from the text also means an icon on a `size: small` node shrinks with it,
+ * which is what anyone would expect and what a fixed pixel count would not do.
+ */
+const ICON_LINES = 2;
+/** Between the label column and the icon column beside it. */
+const ICON_GAP = 10;
+const DEFAULT_FONT_SIZE = 14;
+/**
+ * The named text sizes, each a multiple of the document's own size. Named
+ * rather than numeric for the reason gaps are: a number here is typography by
+ * coordinate. It goes stale the moment the document is set at another size, and
+ * it says nothing about why one piece of text is smaller than another.
+ *
+ * `small` is sampled rather than chosen. In
+ * `examples/reference/arch.png` the box and container labels run 25
+ * pixels baseline to baseline and every annotation runs 21, which is this
+ * ratio; `./dev.sh textrows` is how that was read off. `large` is the same step
+ * taken the other way, so the scale is symmetric about the document size.
+ */
+const TEXT_SIZES = {
+    small: 21 / 25,
+    normal: 1,
+    large: 25 / 21,
+};
+/**
+ * What each kind of text is set at when the file says nothing. A note annotates
+ * the diagram rather than being part of it, and at the size of a box label an
+ * aside reads as a statement — so `note` starts small and says so by being a
+ * note. This is a default and not a ceiling: `size:` overrides it, the same way
+ * `fill:` overrides the theme's colour.
+ */
+const DEFAULT_TEXT_SIZE = { note: 'small' };
+/**
+ * The size a piece of text is set at. Shared by the resolver, which reserves
+ * the room, and the renderer, which fills it, so the two cannot disagree about
+ * how much room there is.
+ */
+function fontSizeFor(kind, appearance, fontSize, line) {
+    const named = appearance['size'] ?? DEFAULT_TEXT_SIZE[kind] ?? 'normal';
+    const scale = TEXT_SIZES[named];
+    if (scale === undefined) {
+        throw new SourceError(`size takes ${Object.keys(TEXT_SIZES).join(', ')}, not "${named}"`, line);
+    }
+    return Math.round(fontSize * scale);
+}
+const DEFAULT_MARGIN = 40;
+/**
+ * Where a container's own label sits. Every container reserves a band for its
+ * label and its icon; `at` says which end of the box that band is, and the
+ * contents take what is left. `align` says how the text sits across it.
+ *
+ * The two are independent and neither implies the other. A label at the bottom
+ * is an ordinary label that happens to be at the bottom — there is no kind of
+ * label being named here and no second thing quietly coming along with the
+ * first. An earlier version bundled them as `label: heading | caption`, which
+ * read a position as though it were a meaning; a folded corner means "artifact
+ * rather than process" and a reader decodes it, while "lower down" means only
+ * lower down.
+ *
+ * A leaf has no band — its label is centred in the box — so neither says
+ * anything about one.
+ */
+const LABEL_ENDS = ['top', 'bottom'];
+/**
+ * Author's word to the SVG's. Both spellings of the middle one are taken: this
+ * is a vocabulary an author types from memory, and being right about the
+ * arrangement and wrong about a dialect is not a mistake worth an error.
+ */
+const LABEL_ALIGNMENTS = {
+    left: 'start',
+    centre: 'middle',
+    center: 'middle',
+    right: 'end',
+};
+/**
+ * Read a label's bracketed modifiers. Shared by the resolver, which offsets the
+ * contents away from the band, and the renderer, which draws into it, so the two
+ * cannot disagree about which end the band is at.
+ */
+function labelStyleFor(label, line) {
+    const at = label['at'];
+    if (at !== undefined && !LABEL_ENDS.includes(at)) {
+        throw new SourceError(`a label's at takes ${LABEL_ENDS.join(' or ')}, not "${at}"`, line);
+    }
+    const align = label['align'];
+    if (align !== undefined && LABEL_ALIGNMENTS[align] === undefined) {
+        throw new SourceError(`a label's align takes left, centre or right, not "${align}"`, line);
+    }
+    return {
+        at: at ?? 'top',
+        align: align === undefined ? 'start' : LABEL_ALIGNMENTS[align],
+    };
+}
+
+// ---- icons.js ----
+/**
+ * The built-in icon set.
+ *
+ * Every glyph is path data written into the SVG, and that is the whole reason
+ * this file exists rather than a dependency. The output contract is a standalone
+ * document: an icon font would render as blank boxes on any machine that does
+ * not have the font, and an `<image href>` would need the file to travel beside
+ * the SVG. Inline paths cost a few hundred bytes each and always arrive.
+ *
+ * A name here says what the thing *is*, never what the picture looks like. The
+ * same discipline as `gap: wide` over `gap: 110` and `muted` over a hex value:
+ * the word is the whole interface, so it has to carry meaning rather than
+ * geometry, and naming the meaning is what lets the drawing be improved later
+ * without every diagram that uses it changing sense.
+ *
+ * The set is deliberately small. In a drawing tool you pick a shape out of a
+ * visual palette and hundreds are browsable; here you type the word from memory,
+ * which caps the useful vocabulary at something that fits in a head. Add a name
+ * when a diagram asks for a distinction it cannot otherwise make.
+ */
+
+const GRID = 24;
+/** Line width on the 24-unit grid, scaled with everything else. */
+const ICON_STROKE = 1.1;
+/** A full circle as one path, so the data below can stay declarative. */
+function circle(cx, cy, r) {
+    return `M${cx - r} ${cy} a${r} ${r} 0 1 0 ${r * 2} 0 a${r} ${r} 0 1 0 ${-r * 2} 0 Z`;
+}
+/** The three visible faces of an isometric cube, top face centred on `cx, cy`. */
+function cube(cx, cy, s) {
+    const half = s / 2;
+    return [
+        { d: `M${cx} ${cy} L${cx + s} ${cy + half} L${cx} ${cy + s} L${cx - s} ${cy + half} Z`, fill: 'shade', stroke: 'ink' },
+        { d: `M${cx - s} ${cy + half} L${cx} ${cy + s} L${cx} ${cy + s * 2} L${cx - s} ${cy + s * 1.5} Z`, fill: 'shade', stroke: 'ink' },
+        { d: `M${cx + s} ${cy + half} L${cx} ${cy + s} L${cx} ${cy + s * 2} L${cx + s} ${cy + s * 1.5} Z`, fill: 'shade', stroke: 'ink' },
+    ];
+}
+const ICONS = {
+    /** A spinning disk: the physical drive, not the filesystem on it. */
+    disk: {
+        grid: GRID,
+        paths: [
+            { d: 'M4 2 h16 a1.6 1.6 0 0 1 1.6 1.6 v16.8 a1.6 1.6 0 0 1 -1.6 1.6 h-16 a1.6 1.6 0 0 1 -1.6 -1.6 v-16.8 a1.6 1.6 0 0 1 1.6 -1.6 Z', fill: 'shade', stroke: 'ink' },
+            { d: circle(12, 10.6, 6.2), fill: 'void', stroke: 'ink' },
+            { d: circle(12, 10.6, 1.9), fill: 'ink' },
+            { d: 'M11.5 12.6 L12.9 13.4 L8.8 19.6 a1.25 1.25 0 0 1 -2.1 -1.35 Z', fill: 'ink' },
+        ],
+    },
+    /** A workstation: monitor, keyboard and tower. */
+    desktop: {
+        grid: GRID,
+        paths: [
+            { d: 'M1.2 2.6 h12.4 v9.2 h-12.4 Z', fill: 'shade', stroke: 'ink' },
+            { d: 'M6.3 11.8 h2.2 v1.7 h-2.2 Z', fill: 'ink' },
+            { d: 'M4.2 13.5 h6.4 v1.1 h-6.4 Z', fill: 'ink' },
+            { d: 'M1.2 16.4 h12.4 v3.2 h-12.4 Z', fill: 'shade', stroke: 'ink' },
+            { d: 'M2.6 17.6 h7.8 v0.9 h-7.8 Z', fill: 'ink' },
+            { d: 'M16.2 2.6 h6.6 v17 h-6.6 Z', fill: 'shade', stroke: 'ink' },
+            { d: circle(19.5, 5.2, 0.9), fill: 'ink' },
+            { d: 'M17.4 9.4 h4.2 v0.7 h-4.2 Z M17.4 11.4 h4.2 v0.7 h-4.2 Z M17.4 13.4 h4.2 v0.7 h-4.2 Z', fill: 'ink' },
+        ],
+    },
+    /** A portable machine. Open lid, so the screen is the page showing through. */
+    laptop: {
+        grid: GRID,
+        paths: [
+            { d: 'M4 3.6 h16 v11.4 h-16 Z', fill: 'void', stroke: 'ink' },
+            { d: 'M2.2 16 h19.6 l1.6 2.6 a0.7 0.7 0 0 1 -0.6 1.1 h-21.6 a0.7 0.7 0 0 1 -0.6 -1.1 Z', fill: 'ink' },
+            { d: 'M9.6 17.2 h4.8 v1 h-4.8 Z', fill: 'shade' },
+        ],
+    },
+    /** Something stored as a whole rather than run: an archive, a bucket, a sync root. */
+    package: {
+        grid: GRID,
+        paths: [
+            { d: 'M12 2.6 L22 7.4 L12 12.2 L2 7.4 Z', fill: 'shade', stroke: 'ink' },
+            { d: 'M2 7.4 L12 12.2 L12 21 L2 16.2 Z', fill: 'shade', stroke: 'ink' },
+            { d: 'M22 7.4 L12 12.2 L12 21 L22 16.2 Z', fill: 'shade', stroke: 'ink' },
+        ],
+    },
+    /**
+     * Several interchangeable units of the same kind, as a group. Three rather
+     * than any particular number: this is the symbol for "several", and at two
+     * line-heights square a literal count turns to mush. Where the count carries
+     * meaning — where one of them is the end of an arrow — they are nodes, and
+     * `shape: instance` is how you draw them.
+     */
+    cubes: {
+        grid: GRID,
+        paths: [...cube(6.6, 2.6, 4.4), ...cube(17.4, 2.6, 4.4), ...cube(12, 11.6, 4.4)],
+    },
+    /** One unit of the kind `cubes` shows several of. */
+    instance: {
+        grid: GRID,
+        paths: cube(12, 2.6, 8.4),
+    },
+    /** A store queried rather than read as files. */
+    database: {
+        grid: GRID,
+        paths: [
+            { d: 'M3 6.4 v11.2 a9 3.4 0 0 0 18 0 v-11.2 Z', fill: 'shade', stroke: 'ink' },
+            { d: 'M3 6.4 a9 3.4 0 0 1 18 0 a9 3.4 0 0 1 -18 0 Z', fill: 'shade', stroke: 'ink' },
+            { d: 'M3 11 a9 3.4 0 0 0 18 0', stroke: 'ink' },
+            { d: 'M3 15.6 a9 3.4 0 0 0 18 0', stroke: 'ink' },
+        ],
+    },
+};
+const ICON_NAMES = Object.keys(ICONS);
+/**
+ * The icon a node asks for, or nothing. Called by the resolver, which reserves
+ * the room, and by the renderer, which fills it, so the two cannot disagree
+ * about whether there is an icon at all.
+ *
+ * An unknown name is refused rather than dropped. That is the same rule
+ * `DIAGRAM_KEYS` follows and it is here for the same reason: a misspelt
+ * `icon: laptp` that quietly draws nothing is indistinguishable from the tool
+ * being broken, and an author will stare at the file looking for the mistake in
+ * the wrong place. Since the vocabulary is closed and short, the error can list
+ * the whole of it.
+ */
+/**
+ * The outlines a box can take. `box` is the plain rectangle and needs no word.
+ *
+ * Named for what a node *is*, never for the geometry, which is the same rule the
+ * icon names follow: `document` and not `folded-corner`. A shape carrying a
+ * conventional meaning is a second channel alongside colour, and a stronger one
+ * — a fill is whatever the author assigned and has to be learnt from the
+ * diagram, while a folded corner has meant "an artifact, not a process" in
+ * flowcharts for decades and reads with no legend at all.
+ */
+const BOX_SHAPES = ['document'];
+const PLAIN = { outline: 'box' };
+/**
+ * What a node is drawn as. Shared by the resolver, which sizes it, and the
+ * renderer, which draws it.
+ *
+ * The value is either a box outline or the name of a glyph. Those are the two
+ * things "what is this drawn as" can answer, and the author has no reason to
+ * care which category their answer fell into. The test that separates them is
+ * whether the node still sizes itself from its label: a `document` does, a
+ * glyph does not.
+ */
+function shapeFor(appearance, line) {
+    const named = appearance['shape'];
+    if (named === undefined)
+        return PLAIN;
+    if (named === 'box')
+        return PLAIN;
+    if (BOX_SHAPES.includes(named))
+        return { outline: named };
+    const glyph = ICONS[named];
+    if (glyph !== undefined)
+        return { outline: 'box', body: glyph };
+    throw new SourceError(`there is no shape called "${named}". The shapes are box, ${BOX_SHAPES.join(', ')}, ` +
+        `and any icon drawn as the node itself: ${ICON_NAMES.join(', ')}`, line);
+}
+function iconFor(appearance, line) {
+    const named = appearance['icon'];
+    if (named === undefined)
+        return undefined;
+    const icon = ICONS[named];
+    if (icon === undefined) {
+        throw new SourceError(`there is no icon called "${named}". The icons are ${ICON_NAMES.join(', ')}`, line);
+    }
+    return icon;
+}
+
+// ---- measure.js ----
+/**
+ * Text measurement, kept behind one interface on purpose.
+ *
+ * The parser and resolver are pure — text in, geometry out — and the only part
+ * of the system that needs to know about fonts is this. In Node there is no
+ * rendering engine to ask, so the default implementation assumes a monospace
+ * face, where every glyph has the same advance width and the answer is
+ * arithmetic. In a browser the same interface can be backed by the DOM, which
+ * measures exactly.
+ */
+/**
+ * A slash with whitespace on both sides marks a line break, so a label is
+ * really a short stack of lines. Each line is trimmed; empty ones are dropped.
+ *
+ * The whitespace is what makes the marker safe. Splitting on a bare `/` meant
+ * no label could contain one, so `TCP/IP` came out as two lines, and so did
+ * `16/9`, `I/O` and every path or URL. Requiring the spaces keeps the marker
+ * legible where it is meant — `"Computer 1 / Ubuntu"` — while a
+ * slash inside a word stays an ordinary character.
+ *
+ * That leaves the label that wants a spaced slash and no break — `Before / After`
+ * — which writes it `\/`. The lexer preserves that escape rather than resolving
+ * it, so the backslash is still here to suppress the split, and is dropped once
+ * the splitting is done.
+ */
+function splitLines(text) {
+    const lines = text
+        .split(/\s+\/\s+/)
+        .map((part) => part.trim().replace(/\\\//g, '/'))
+        .filter((part) => part.length > 0);
+    return lines.length > 0 ? lines : [''];
+}
+/**
+ * Every monospace face used here is assumed to advance 0.6 em per character.
+ * DejaVu Sans Mono and Menlo both sit at 0.602; Consolas is narrower at 0.55,
+ * so a diagram viewed with Consolas substituted in comes out uniformly tight
+ * rather than raggedly wrong.
+ */
+const DEFAULT_ADVANCE_RATIO = 0.6;
+const LINE_HEIGHT_RATIO = 1.35;
+/**
+ * Named families only, in order of likelihood, ending in the generic.
+ * Deliberately no `ui-monospace`: it is a CSS keyword many SVG renderers do
+ * not know, and it means "whatever this interface uses", which is not
+ * guaranteed to be monospace at all. Every width here is computed on the
+ * assumption that it is.
+ */
+const DEFAULT_STACK = '"DejaVu Sans Mono", "Menlo", "Consolas", "Liberation Mono", "Courier New", monospace';
+function monospaceMeasurer(fontFamily = DEFAULT_STACK, advanceRatio = DEFAULT_ADVANCE_RATIO) {
+    return {
+        fontFamily,
+        lineHeight(fontSize) {
+            return Math.round(fontSize * LINE_HEIGHT_RATIO);
+        },
+        measure(text, fontSize) {
+            const lines = splitLines(text);
+            const longest = lines.reduce((max, line) => Math.max(max, line.length), 0);
+            const lineHeight = Math.round(fontSize * LINE_HEIGHT_RATIO);
+            return {
+                width: Math.ceil(longest * fontSize * advanceRatio),
+                height: lines.length * lineHeight,
+                lines,
+            };
+        },
+    };
+}
+
+// ---- render.js ----
+/**
+ * Sampled out of `examples/reference/arch.png` rather than invented,
+ * so the benchmark render and the drawing it is measured against differ by
+ * geometry and typography alone. A container is a shade off the page and barely
+ * outlined; a leaf is the navy that carries the diagram's weight.
+ */
+const DARK_THEME = {
+    background: '#111111',
+    boxFill: '#191728',
+    boxStroke: '#4f5367',
+    containerFill: '#191920',
+    containerStroke: '#25242f',
+    text: '#d9d9d9',
+    mutedText: '#8b8b8b',
+    link: '#5c5c7c',
+    // Both sampled off the reference's machine glyphs. Note that the reference
+    // gives each icon its own hue — the drive is grey, the laptop periwinkle, the
+    // workstation violet — which is a drawing tool's per-shape default and not a
+    // system. One pair for the whole set is the deliberate difference: an icon
+    // should read as part of the diagram's palette, not as clip art dropped in.
+    iconInk: '#8d8d8e',
+    iconShade: '#3e3d58',
+};
+const CORNER = 8;
+/** Turn solved geometry into a standalone SVG document. */
+function render(layout, options = {}) {
+    const measurer = options.measurer ?? monospaceMeasurer();
+    const fontSize = options.fontSize ?? DEFAULT_FONT_SIZE;
+    // `diagram background:` is the author overruling the theme for this one
+    // drawing, so it is folded in here and everything downstream sees one theme.
+    const base = options.theme ?? DARK_THEME;
+    const stated = layout.diagram['background'];
+    const theme = stated === undefined ? base : { ...base, background: stated };
+    const body = [];
+    for (const root of layout.roots) {
+        body.push(drawNode(root, theme, measurer, fontSize));
+    }
+    // Endpoints are planned for every link at once, because where a link meets a
+    // side depends on what else meets that same side. Corridors come after, for
+    // the same reason in the other direction: which lane of a gap a link takes
+    // is ordered by where its ends turned out to be.
+    const ends = planEndpoints(layout.links);
+    const corridors = planCorridors(layout.links, ends, measurer, fontSize);
+    aimFreeEnds(layout.links, ends, corridors);
+    for (const link of layout.links) {
+        body.push(drawLink(link, ends.get(link), corridors.get(link), theme, measurer, fontSize));
+    }
+    const arrowColours = new Set(layout.links.map((link) => colourOf(link.appearance, theme.link)));
+    return [
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${layout.width}" height="${layout.height}" viewBox="0 0 ${layout.width} ${layout.height}" font-family=${quote(measurer.fontFamily)} font-size="${fontSize}px">`,
+        '  <defs>',
+        ...[...arrowColours].map((colour) => arrowMarker(colour)),
+        '  </defs>',
+        `  <rect width="100%" height="100%" fill="${theme.background}"/>`,
+        ...body,
+        '</svg>',
+        '',
+    ].join('\n');
+}
+// --- nodes -------------------------------------------------------------------
+function drawNode(node, theme, measurer, fontSize) {
+    // A note is set smaller than a box label by default, and `size:` overrides
+    // that on anything. Only this node's own text takes the size — children are
+    // drawn by their own call and carry whatever they say themselves.
+    const size = fontSizeFor(node.kind, node.appearance, fontSize, node.line);
+    const textHeight = measurer.lineHeight(size);
+    if (node.kind === 'note') {
+        return sized(textBlock(node.lines, node.x, node.y, node.width, textHeight, size, {
+            colour: colourOf(node.appearance, theme.text),
+            align: 'start',
+        }), size, fontSize);
+    }
+    const shape = shapeFor(node.appearance, node.line);
+    const labelStyle = labelStyleFor(node.label, node.line);
+    const glyphSide = ICON_LINES * textHeight;
+    if (shape.body !== undefined) {
+        // No outline, no fill, no padding — the node is the picture. The label, if
+        // there is one, sits under it and centred.
+        const drawn = [drawIcon(shape.body, node.x + (node.width - glyphSide) / 2, node.y, glyphSide, theme)];
+        if (node.lines.some((line) => line.length > 0)) {
+            drawn.push(sized(textBlock(node.lines, node.x, node.y + glyphSide + ICON_GAP, node.width, textHeight, size, {
+                colour: colourOf(node.appearance, theme.text),
+                subColour: subtextOf(node.appearance, theme),
+                align: 'middle',
+            }), size, fontSize));
+        }
+        return drawn.join('\n');
+    }
+    const parts = [];
+    const face = faceOf(node);
+    const container = node.children.length > 0;
+    const stroke = colourOf(node.appearance, container ? theme.containerStroke : theme.boxStroke);
+    const fill = fillOf(node.appearance, container ? theme.containerFill : theme.boxFill);
+    const subColour = subtextOf(node.appearance, theme);
+    // Deck copies sit behind the front face, furthest back drawn first.
+    for (let depth = node.deckLabels.length; depth >= 1; depth -= 1) {
+        const x = face.x - depth * DECK_STEP;
+        const y = face.y - depth * DECK_STEP;
+        parts.push(`  <path d="${outlinePath(shape.outline, x, y, face.width, face.height)}" fill="${theme.containerFill}" stroke="${stroke}"/>`);
+        const label = node.deckLabels[depth - 1];
+        if (label !== undefined) {
+            parts.push(sized(textBlock([label], x + PAD, y + PAD, face.width - PAD * 2, textHeight, size, {
+                colour: theme.text,
+                align: 'start',
+            }), size, fontSize));
+        }
+    }
+    parts.push(`  <path d="${outlinePath(shape.outline, face.x, face.y, face.width, face.height)}" fill="${fill}" stroke="${stroke}"/>`);
+    for (const extra of outlineDetail(shape.outline, face.x, face.y, face.width, face.height)) {
+        parts.push(`  <path d="${extra}" fill="none" stroke="${stroke}"/>`);
+    }
+    // The icon takes a column on the right and the label lays out in what is
+    // left, which is the room the resolver already reserved for exactly this.
+    const icon = iconFor(node.appearance, node.line);
+    const iconSide = icon === undefined ? 0 : glyphSide;
+    const hasLabel = node.lines.some((line) => line.length > 0);
+    const iconRoom = icon === undefined ? 0 : iconSide + (hasLabel ? ICON_GAP : 0);
+    if (!container) {
+        // A leaf centres its label in the box, both ways — in the room beside the
+        // icon rather than the whole box, so the two sit side by side.
+        const top = face.y + (face.height - node.lines.length * textHeight) / 2;
+        parts.push(sized(textBlock(node.lines, face.x, top, face.width - iconRoom, textHeight, size, {
+            colour: theme.text,
+            subColour,
+            align: 'middle',
+        }), size, fontSize));
+    }
+    else {
+        // The label and the icon share a band at one end of the box, and the
+        // resolver has already given the contents the other end. A heading is
+        // ranged left at the top; a caption is centred at the bottom.
+        const band = Math.max(node.lines.length * textHeight, iconSide);
+        const bandTop = labelStyle.at === 'top' ? face.y + PAD : face.y + face.height - PAD - band;
+        parts.push(sized(textBlock(node.lines, face.x + PAD, bandTop, face.width - PAD * 2 - iconRoom, textHeight, size, {
+            colour: theme.text,
+            subColour,
+            align: labelStyle.align,
+        }), size, fontSize));
+        for (const child of node.children) {
+            parts.push(drawNode(child, theme, measurer, fontSize));
+        }
+    }
+    if (icon !== undefined) {
+        // A container's icon rides in the label's band, at whichever end that is; a
+        // leaf's label is centred, so the icon centres with it. Both follow the
+        // label rather than being placed by a rule of their own, which is what
+        // keeps an icon reading as part of the title block and not as a sticker.
+        const left = face.x + face.width - PAD - iconSide;
+        const top = container
+            ? labelStyle.at === 'top'
+                ? face.y + PAD
+                : face.y + face.height - PAD - iconSide
+            : face.y + (face.height - iconSide) / 2;
+        parts.push(drawIcon(icon, left, top, iconSide, theme));
+    }
+    return parts.join('\n');
+}
+/**
+ * How far the dog-ear cuts into the top-right corner of a `document`.
+ *
+ * Twice the corner radius, so it is the same size on every box however wide.
+ * The reference sizes its fold as a fraction of the box, which is why the fold
+ * on those two wide `pg_dump` boxes almost disappears — the idea was right and
+ * only the scaling was wrong.
+ */
+const FOLD = CORNER * 2;
+/** The node's outline, as path data. */
+function outlinePath(shape, x, y, w, h) {
+    const r = CORNER;
+    if (shape === 'document') {
+        // Every corner rounded but the top-right one, which is cut away and folded.
+        return [
+            `M${round(x + r)} ${round(y)}`,
+            `H${round(x + w - FOLD)}`,
+            `L${round(x + w)} ${round(y + FOLD)}`,
+            `V${round(y + h - r)}`,
+            `a${r} ${r} 0 0 1 ${-r} ${r}`,
+            `H${round(x + r)}`,
+            `a${r} ${r} 0 0 1 ${-r} ${-r}`,
+            `V${round(y + r)}`,
+            `a${r} ${r} 0 0 1 ${r} ${-r}`,
+            'Z',
+        ].join(' ');
+    }
+    return [
+        `M${round(x + r)} ${round(y)}`,
+        `H${round(x + w - r)}`,
+        `a${r} ${r} 0 0 1 ${r} ${r}`,
+        `V${round(y + h - r)}`,
+        `a${r} ${r} 0 0 1 ${-r} ${r}`,
+        `H${round(x + r)}`,
+        `a${r} ${r} 0 0 1 ${-r} ${-r}`,
+        `V${round(y + r)}`,
+        `a${r} ${r} 0 0 1 ${r} ${-r}`,
+        'Z',
+    ].join(' ');
+}
+/** Lines drawn inside the outline: the flap of a fold, and nothing else so far. */
+function outlineDetail(shape, x, y, w, h) {
+    void h;
+    if (shape !== 'document')
+        return [];
+    return [
+        `M${round(x + w - FOLD)} ${round(y)} V${round(y + FOLD)} H${round(x + w)}`,
+    ];
+}
+/** One icon, scaled from its own grid onto a square of `side` at `x, y`. */
+function drawIcon(icon, x, y, side, theme) {
+    const scale = side / icon.grid;
+    const colour = (tone) => tone === 'ink' ? theme.iconInk : tone === 'shade' ? theme.iconShade : theme.background;
+    const paths = icon.paths.map((path) => {
+        const fill = path.fill === undefined ? 'none' : colour(path.fill);
+        const stroke = path.stroke === undefined
+            ? ''
+            : ` stroke="${colour(path.stroke)}" stroke-width="${ICON_STROKE}" stroke-linejoin="round"`;
+        return `    <path d="${path.d}" fill="${fill}"${stroke}/>`;
+    });
+    return [
+        `  <g transform="translate(${round(x)} ${round(y)}) scale(${round(scale * 1000) / 1000})">`,
+        ...paths,
+        '  </g>',
+    ].join('\n');
+}
+// --- links -------------------------------------------------------------------
+function drawLink(link, ends, corridor, theme, measurer, fontSize) {
+    const { start, end } = ends;
+    const colour = colourOf(link.appearance, theme.link);
+    const markerEnd = ` marker-end="url(#${markerId(colour)})"`;
+    const markerStart = link.both ? ` marker-start="url(#${markerId(colour)}-back)"` : '';
+    // A named side is a statement about how the line should leave or arrive, so
+    // it is drawn as a curve that actually does leave and arrive that way. With
+    // neither side named there is nothing to honour and the line stays straight.
+    const curved = start.side !== undefined || end.side !== undefined;
+    const parts = [];
+    let midX;
+    let midY;
+    if (corridor) {
+        const path = corridorPath(start, end, corridor);
+        parts.push(`  <path d="${path.d}" fill="none" stroke="${colour}" stroke-width="1.6"${markerEnd}${markerStart}/>`);
+        // The label goes on the straight run rather than at the midpoint of the
+        // whole path, so it sits in the gap the author asked the line to travel.
+        midX = path.mid.x;
+        midY = path.mid.y;
+    }
+    else if (curved) {
+        const reach = controlReach(start, end);
+        const c1 = { x: start.x + start.tx * reach, y: start.y + start.ty * reach };
+        const c2 = { x: end.x + end.tx * reach, y: end.y + end.ty * reach };
+        parts.push(`  <path d="M ${round(start.x)} ${round(start.y)} C ${round(c1.x)} ${round(c1.y)}, ${round(c2.x)} ${round(c2.y)}, ${round(end.x)} ${round(end.y)}" fill="none" stroke="${colour}" stroke-width="1.6"${markerEnd}${markerStart}/>`);
+        // The point halfway along a cubic, which is where the label belongs.
+        midX = (start.x + 3 * c1.x + 3 * c2.x + end.x) / 8;
+        midY = (start.y + 3 * c1.y + 3 * c2.y + end.y) / 8;
+    }
+    else {
+        parts.push(`  <line x1="${round(start.x)}" y1="${round(start.y)}" x2="${round(end.x)}" y2="${round(end.y)}" stroke="${colour}" stroke-width="1.6"${markerEnd}${markerStart}/>`);
+        midX = (start.x + end.x) / 2;
+        midY = (start.y + end.y) / 2;
+    }
+    if (link.label !== undefined) {
+        // A link label breaks on ` / ` exactly as a box label does, so a two-line
+        // caption on an arrow needs no vocabulary of its own. The block is centred
+        // on the midpoint, which keeps a one-line label where it has always been.
+        const size = fontSizeFor('link', link.appearance, fontSize, link.line);
+        const textHeight = measurer.lineHeight(size);
+        const { width, lines } = measurer.measure(link.label, size);
+        const height = lines.length * textHeight;
+        const top = midY - height / 2;
+        // The label knocks a hole in whatever it lands on rather than sitting in a
+        // chip of its own: an outlined box reads as a node, which is the one thing
+        // a label on a line is not.
+        parts.push(`  <rect x="${round(midX - width / 2 - 5)}" y="${round(top)}" width="${round(width + 10)}" height="${round(height)}" fill="${theme.background}"/>`);
+        parts.push(sized(textBlock(lines, midX - width / 2, top, width, textHeight, size, {
+            // A coloured link carries its meaning into its label; an uncoloured
+            // one leaves the words to read as ordinary text.
+            colour: colourOf(link.appearance, theme.text),
+            align: 'middle',
+        }), size, fontSize));
+    }
+    return parts.join('\n');
+}
+/** Walk out from the centre of a box toward a point, stopping at the border. */
+function edgePoint(box, toward) {
+    const centre = centreOf(box);
+    const dx = toward.x - centre.x;
+    const dy = toward.y - centre.y;
+    if (dx === 0 && dy === 0)
+        return centre;
+    const scaleX = dx === 0 ? Infinity : box.width / 2 / Math.abs(dx);
+    const scaleY = dy === 0 ? Infinity : box.height / 2 / Math.abs(dy);
+    const scale = Math.min(scaleX, scaleY);
+    return { x: centre.x + dx * scale, y: centre.y + dy * scale };
+}
+// --- where a link meets a box -------------------------------------------------
+const SIDES = ['top', 'bottom', 'left', 'right'];
+/**
+ * Work out where every link meets every box.
+ *
+ * An author names a *side* — `to: top` — and never a point on it. Alone on a
+ * side a link lands at its centre; sharing the side with others, the points
+ * spread so they do not sit on top of each other. Which one goes where is
+ * derived from where the far ends actually are, never chosen: of two links
+ * arriving at one top edge, the one coming from further left arrives further
+ * left. That is the same rule as box non-overlap — the tool separates things by
+ * default, and reads the direction off the solved layout rather than asking.
+ */
+function planEndpoints(links) {
+    const claims = new Map();
+    const named = new Map();
+    for (const link of links) {
+        named.set(link, {});
+        const fromSide = sideAttr(link, 'from');
+        const toSide = sideAttr(link, 'to');
+        if (fromSide) {
+            claim(claims, link.from, fromSide, { link, which: 'start', side: fromSide, toward: centreOf(faceOf(link.to)) });
+        }
+        if (toSide) {
+            claim(claims, link.to, toSide, { link, which: 'end', side: toSide, toward: centreOf(faceOf(link.from)) });
+        }
+    }
+    // Place every claimed side, spreading the points that share one.
+    for (const [node, bySide] of claims) {
+        const face = faceOf(node);
+        for (const [side, group] of bySide) {
+            const along = side === 'top' || side === 'bottom' ? 'x' : 'y';
+            const span = along === 'x' ? face.width : face.height;
+            const origin = along === 'x' ? face.x : face.y;
+            const ordered = [...group].sort((a, b) => a.toward[along] - b.toward[along]);
+            const usable = Math.max(0, span - ATTACH_MARGIN * 2);
+            const step = ordered.length > 1 ? Math.min(ATTACH_STEP, usable / (ordered.length - 1)) : 0;
+            const first = origin + span / 2 - (step * (ordered.length - 1)) / 2;
+            ordered.forEach((entry, index) => {
+                const at = first + index * step;
+                named.get(entry.link)[entry.which] = anchorOn(face, side, at);
+            });
+        }
+    }
+    // Fill in the ends the author said nothing about, now that the named ones
+    // are known: an unnamed end aims at wherever its partner ended up.
+    const ends = new Map();
+    for (const link of links) {
+        const partial = named.get(link);
+        const fromFace = faceOf(link.from);
+        const toFace = faceOf(link.to);
+        // With neither end named this is the straight line it always was, each end
+        // aiming at the other box's centre.
+        const start = partial.start ?? free(fromFace, partial.end ?? centreOf(toFace));
+        const end = partial.end ?? free(toFace, partial.start ?? centreOf(fromFace));
+        ends.set(link, { start, end });
+    }
+    return ends;
+}
+function claim(claims, node, side, entry) {
+    let bySide = claims.get(node);
+    if (!bySide) {
+        bySide = new Map();
+        claims.set(node, bySide);
+    }
+    const group = bySide.get(side);
+    if (group)
+        group.push(entry);
+    else
+        bySide.set(side, [entry]);
+}
+/** The point `at` along one side of a box, with the outward normal for that side. */
+function anchorOn(face, side, at) {
+    switch (side) {
+        case 'top':
+            return { x: at, y: face.y, tx: 0, ty: -1, side };
+        case 'bottom':
+            return { x: at, y: face.y + face.height, tx: 0, ty: 1, side };
+        case 'left':
+            return { x: face.x, y: at, tx: -1, ty: 0, side };
+        case 'right':
+            return { x: face.x + face.width, y: at, tx: 1, ty: 0, side };
+    }
+}
+/** An end with no side named: leave from the border, pointing at the far end. */
+function free(face, toward) {
+    const point = edgePoint(face, toward);
+    const centre = centreOf(face);
+    const dx = point.x - centre.x;
+    const dy = point.y - centre.y;
+    const length = Math.hypot(dx, dy) || 1;
+    return { x: point.x, y: point.y, tx: dx / length, ty: dy / length };
+}
+/** How far the control points sit off the ends. Proportional, but bounded. */
+function controlReach(start, end) {
+    const distance = Math.hypot(end.x - start.x, end.y - start.y);
+    return Math.max(24, Math.min(140, distance * 0.4));
+}
+/** The free interval between two boxes on one axis, or nothing if they overlap. */
+function clearance(aStart, aSize, bStart, bSize) {
+    if (aStart + aSize < bStart)
+        return { lo: aStart + aSize, hi: bStart };
+    if (bStart + bSize < aStart)
+        return { lo: bStart + bSize, hi: aStart };
+    return undefined;
+}
+/**
+ * Which gap `between a and b` means, and how far along it reaches.
+ *
+ * The axis is derived wherever the pair leaves only one answer, the same way a
+ * separation direction is: one node is above the other, or one is left of the
+ * other, and whichever it is says which axis the gap binds. Most pairs are like
+ * that, and for them the file says nothing about axes at all.
+ *
+ * A pair sitting diagonally has two gaps and needs the author to pick, which is
+ * what `wanted` carries. That is a tie-break rather than part of the statement:
+ * where it is not needed it may still be written, and is then checked rather
+ * than ignored, because a word that silently does nothing looks like a bug in
+ * the tool.
+ */
+function gapBetween(a, b, aName, bName, wanted, line) {
+    const pair = `"${aName}" and "${bName}"`;
+    const found = {
+        y: clearance(a.y, a.height, b.y, b.height),
+        x: clearance(a.x, a.width, b.x, b.width),
+    };
+    if (wanted !== undefined && found[wanted] === undefined) {
+        const other = wanted === 'y' ? 'x' : 'y';
+        throw new SourceError(found[other]
+            ? `${pair} have no gap between them ${describeAxis(wanted)} — they are apart ${describeAxis(other)}, so drop the word or say "${describeAxis(other)}"`
+            : `${pair} touch or overlap, so there is no gap between them to pass through`, line);
+    }
+    if (wanted === undefined && found.y && found.x) {
+        throw new SourceError(`${pair} are apart both vertically and horizontally, so I cannot tell which gap you mean — write "between ${aName} and ${bName} vertically" for the gap above and below them, or "horizontally" for the gap beside them`, line);
+    }
+    // Whichever was asked for, or whichever is the only one there is.
+    const axis = wanted ?? (found.y ? 'y' : 'x');
+    const gap = found[axis];
+    if (!gap) {
+        throw new SourceError(`${pair} touch or overlap, so there is no gap between them to pass through`, line);
+    }
+    // The corridor reaches as far as the pair does on the other axis: that is the
+    // stretch over which the line is actually passing them.
+    return {
+        axis,
+        ...gap,
+        across: axis === 'y'
+            ? [Math.min(a.x, b.x), Math.max(a.x + a.width, b.x + b.width)]
+            : [Math.min(a.y, b.y), Math.max(a.y + a.height, b.y + b.height)],
+    };
+}
+/**
+ * Route every link that named a gap.
+ *
+ * Links sharing one gap share its lanes, spread like attachments on a side and
+ * ordered the same derived way — by where their ends actually sit, so the two
+ * arriving at Dropbox's left edge in one order run through the corridor in that
+ * same order and never cross.
+ */
+function planCorridors(links, ends, measurer, fontSize) {
+    const plans = new Map();
+    const groups = new Map();
+    for (const link of links) {
+        if (!link.between)
+            continue;
+        const [first, second] = link.between.nodes;
+        const gap = gapBetween(faceOf(first), faceOf(second), first.name, second.name, link.between.axis, link.line);
+        // The pair names one gap however the author ordered them. The axis is in
+        // the key because a diagonal pair really does have two, and two links may
+        // legitimately name the same pair and take different ones.
+        const key = [gap.axis, ...[first.name, second.name].sort()].join(' ');
+        const group = groups.get(key);
+        if (group)
+            group.members.push(link);
+        else
+            groups.set(key, { ...gap, members: [link] });
+    }
+    for (const group of groups.values()) {
+        const along = (link) => {
+            const { start, end } = ends.get(link);
+            return (start[group.axis] + end[group.axis]) / 2;
+        };
+        const ordered = [...group.members].sort((a, b) => along(a) - along(b));
+        // Lanes are spread as attachments on a side are, including the squeeze when
+        // there is not enough room — see `planEndpoints`. The step is wider here,
+        // because a lane carries a whole label rather than the point of an arrow,
+        // and two lanes closer together than a label is deep would draw the labels
+        // over each other. Still derived, not chosen: it is the size of what is
+        // actually running along the corridor.
+        const span = group.hi - group.lo;
+        const usable = Math.max(0, span - ATTACH_MARGIN * 2);
+        const want = Math.max(ATTACH_STEP, ...ordered.map((link) => laneExtent(link, group.axis, measurer, fontSize)));
+        const step = ordered.length > 1 ? Math.min(want, usable / (ordered.length - 1)) : 0;
+        const firstLane = group.lo + span / 2 - (step * (ordered.length - 1)) / 2;
+        ordered.forEach((link, index) => {
+            const { start, end } = ends.get(link);
+            const run = group.axis === 'y' ? 'x' : 'y';
+            // The corridor binds only where the link is actually passing the pair, so
+            // its reach is the overlap of the pair's extent with the link's own.
+            const enterAt = Math.max(group.across[0], Math.min(start[run], end[run]));
+            const leaveAt = Math.min(group.across[1], Math.max(start[run], end[run]));
+            if (leaveAt <= enterAt) {
+                const [a, b] = link.between.nodes;
+                throw new SourceError(`this link never passes between "${a.name}" and "${b.name}"`, link.line);
+            }
+            const forward = end[run] >= start[run];
+            plans.set(link, {
+                axis: group.axis,
+                lane: firstLane + index * step,
+                enter: forward ? enterAt : leaveAt,
+                leave: forward ? leaveAt : enterAt,
+            });
+        });
+    }
+    return plans;
+}
+/**
+ * An end whose side the author did not name aims at the far box's centre, which
+ * is the wrong thing to aim at once the line has been told to go somewhere else
+ * on the way. Point those ends at the corridor instead.
+ */
+function aimFreeEnds(links, ends, corridors) {
+    for (const link of links) {
+        const plan = corridors.get(link);
+        if (!plan)
+            continue;
+        const current = ends.get(link);
+        const start = current.start.side === undefined
+            ? free(faceOf(link.from), corridorPoint(plan, plan.enter))
+            : current.start;
+        const end = current.end.side === undefined
+            ? free(faceOf(link.to), corridorPoint(plan, plan.leave))
+            : current.end;
+        ends.set(link, { start, end });
+    }
+}
+/**
+ * How much room a link's label takes across the corridor — its depth in a
+ * horizontal channel, its width in a vertical one. Zero for an unlabelled link,
+ * which needs no more than the arrow spacing.
+ *
+ * `labelExtent` measures the knockout along whichever axis it is handed, and the
+ * axis wanted here is the one the channel is measured on rather than the one the
+ * link runs along — a channel measured vertically carries links running
+ * horizontally, and what has to fit between two lanes of it is a label's depth.
+ */
+function laneExtent(link, axis, measurer, fontSize) {
+    if (link.label === undefined)
+        return 0;
+    return labelExtent(link.label, link.appearance, axis, measurer, fontSize, link.line);
+}
+function corridorPoint(plan, at) {
+    return plan.axis === 'y' ? { x: at, y: plan.lane } : { x: plan.lane, y: at };
+}
+/**
+ * The path a corridor link takes: a curve out of its start into the gap, the
+ * straight run along the gap, and a curve out of the gap to its end. It is
+ * three pieces rather than one cubic because a single curve has no way to stay
+ * inside an interval over part of its length — which is the whole claim the
+ * author is making.
+ */
+function corridorPath(start, end, plan) {
+    const p1 = corridorPoint(plan, plan.enter);
+    const p2 = corridorPoint(plan, plan.leave);
+    const forward = plan.leave >= plan.enter ? 1 : -1;
+    // Along the run the line travels one way, so that is its tangent at both ends
+    // of the straight stretch — it enters the gap already going where the gap goes.
+    const rt = plan.axis === 'y' ? { tx: forward, ty: 0 } : { tx: 0, ty: forward };
+    const r1 = corridorReach(start, p1, plan.axis);
+    const c1 = { x: start.x + start.tx * r1, y: start.y + start.ty * r1 };
+    const c2 = { x: p1.x - rt.tx * r1, y: p1.y - rt.ty * r1 };
+    const r2 = corridorReach(p2, end, plan.axis);
+    const c3 = { x: p2.x + rt.tx * r2, y: p2.y + rt.ty * r2 };
+    const c4 = { x: end.x + end.tx * r2, y: end.y + end.ty * r2 };
+    const d = [
+        `M ${round(start.x)} ${round(start.y)}`,
+        `C ${round(c1.x)} ${round(c1.y)}, ${round(c2.x)} ${round(c2.y)}, ${round(p1.x)} ${round(p1.y)}`,
+        `L ${round(p2.x)} ${round(p2.y)}`,
+        `C ${round(c3.x)} ${round(c3.y)}, ${round(c4.x)} ${round(c4.y)}, ${round(end.x)} ${round(end.y)}`,
+    ].join(' ');
+    return { d, mid: { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 } };
+}
+/**
+ * How far the handles reach on an approach curve. Bounded by half the distance
+ * available along the run as well as by the straight-line distance: both ends of
+ * this curve point along the run, so handles longer than that would reach past
+ * each other and bulge the line back the way it came.
+ */
+function corridorReach(from, to, axis) {
+    const run = Math.abs(axis === 'y' ? to.x - from.x : to.y - from.y);
+    const distance = Math.hypot(to.x - from.x, to.y - from.y);
+    return Math.min(140, Math.max(8, Math.min(distance * 0.4, run / 2)));
+}
+function sideAttr(link, key) {
+    const value = link.attrs[key];
+    if (value === undefined)
+        return undefined;
+    if (!SIDES.includes(value)) {
+        throw new SourceError(`"${key}: ${value}" is not a side — use ${SIDES.join(', ')}`, link.line);
+    }
+    return value;
+}
+function arrowMarker(colour) {
+    const id = markerId(colour);
+    return [
+        `    <marker id="${id}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">`,
+        `      <path d="M 0 0 L 10 5 L 0 10 z" fill="${colour}"/>`,
+        '    </marker>',
+        `    <marker id="${id}-back" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">`,
+        `      <path d="M 0 0 L 10 5 L 0 10 z" fill="${colour}"/>`,
+        '    </marker>',
+    ].join('\n');
+}
+function markerId(colour) {
+    return `arrow-${colour.replace(/[^a-zA-Z0-9]/g, '')}`;
+}
+/** The rectangle actually drawn. Differs from the node box only for a deck. */
+function faceOf(node) {
+    return {
+        x: node.x + node.inset,
+        y: node.y + node.inset,
+        width: node.width - node.inset,
+        height: node.height - node.inset,
+    };
+}
+function centreOf(box) {
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+}
+/**
+ * Wrap a block of text in its own size, but only when that differs from the
+ * document's — everything at the default size inherits it from the <svg>
+ * element, so an ordinary diagram's output is unchanged.
+ */
+function sized(block, size, fontSize) {
+    if (size === fontSize || block.length === 0)
+        return block;
+    return `  <g font-size="${size}px">\n${block}\n  </g>`;
+}
+function textBlock(lines, x, top, width, lineHeight, fontSize, style) {
+    const anchorX = style.align === 'middle' ? x + width / 2 : style.align === 'end' ? x + width : x;
+    return lines
+        .map((line, index) => {
+        if (line.length === 0)
+            return '';
+        const baseline = top + index * lineHeight + lineHeight / 2 + fontSize * 0.35;
+        // A label's first line is its name; anything after it is a qualifier, and
+        // `subtext:` is how a box says that qualifier should read as secondary.
+        const colour = index === 0 ? style.colour : style.subColour ?? style.colour;
+        return `  <text x="${round(anchorX)}" y="${round(baseline)}" fill="${colour}" text-anchor="${style.align}">${escapeXml(line)}</text>`;
+    })
+        .filter((element) => element.length > 0)
+        .join('\n');
+}
+/**
+ * A colour is written as the viewer will receive it — `#14532d`, or any CSS
+ * colour. The renderer keeps no list of colour words of its own, so a diagram
+ * is never limited to the ones somebody remembered to add here.
+ */
+function colourOf(appearance, fallback) {
+    return appearance['stroke'] ?? fallback;
+}
+/**
+ * The colour for every label line after the first, or undefined when the box
+ * said nothing and all its lines should read alike. `muted` is the one reserved
+ * word: it defers to the theme, so a label's qualifier stays readable when the
+ * theme changes. Anything else is a colour, same as `stroke` and `fill` take.
+ */
+function subtextOf(appearance, theme) {
+    const named = appearance['subtext'];
+    if (named === undefined)
+        return undefined;
+    if (named === 'muted')
+        return theme.mutedText;
+    return named;
+}
+function fillOf(appearance, fallback) {
+    return appearance['fill'] ?? fallback;
+}
+function round(value) {
+    return Math.round(value * 100) / 100;
+}
+/**
+ * Escapes what has to be escaped in element content, and no more. A double
+ * quote is legal there, and some SVG renderers mishandle `&quot;` in text.
+ */
+function escapeXml(text) {
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+function quote(value) {
+    return `"${value.replace(/"/g, "'")}"`;
+}
+
+// ---- constrain.js ----
+/** An exact distance, which is two inequalities pointing opposite ways. */
+function fix(from, to, distance, placement) {
+    return [
+        { from, to, weight: distance, ...(placement ? { placement } : {}) },
+        { from: to, to: from, weight: -distance, ...(placement ? { placement } : {}) },
+    ];
+}
+/**
+ * Solve, or report the placements that fight.
+ *
+ * Longest path from a virtual source joined to everything at zero, which is
+ * Bellman-Ford with the comparison flipped. A distance that keeps growing after
+ * one pass per node means the constraints run in a circle that demands ever
+ * more room, and that circle is exactly the set of placements to quote back.
+ */
+function tightest(count, constraints) {
+    const positions = new Array(count).fill(0);
+    const cameFrom = new Array(count).fill(undefined);
+    for (let pass = 0; pass < count; pass += 1) {
+        let moved = false;
+        for (const constraint of constraints) {
+            const candidate = positions[constraint.from] + constraint.weight;
+            if (candidate > positions[constraint.to] + 1e-9) {
+                positions[constraint.to] = candidate;
+                cameFrom[constraint.to] = constraint;
+                moved = true;
+            }
+        }
+        if (!moved)
+            return { positions };
+    }
+    // Still moving after a full pass per node, so some loop demands more room
+    // every time round it. Walk backwards to find it.
+    for (const constraint of constraints) {
+        if (positions[constraint.from] + constraint.weight > positions[constraint.to] + 1e-9) {
+            return { contradiction: { placements: loopFrom(constraint.to, cameFrom, count) } };
+        }
+    }
+    return { contradiction: { placements: [] } };
+}
+/**
+ * Which members can be driven apart from which, along one axis.
+ *
+ * A constraint says `pos[to] >= pos[from] + weight`, so it bounds `to` from
+ * below and leaves it free to move further away. Follow those edges and the
+ * question "may this one end up beyond that one?" becomes plain reachability:
+ * if `j` is reachable from `i` and `i` is not reachable from `j`, then the file
+ * lets the distance from `i` to `j` grow without limit and never lets it be
+ * closed from the other side. Pushing `j` past `i` is then the one separation
+ * the file allows, and no choice was made.
+ *
+ * Reachable both ways means the two are pinned at a fixed distance, so they
+ * cannot be separated along this axis at all. Reachable neither way means the
+ * file said nothing that orders them, which is the case the caller must refuse
+ * rather than guess at.
+ */
+function reachability(count, constraints) {
+    const reach = Array.from({ length: count }, () => new Array(count).fill(false));
+    for (const constraint of constraints)
+        reach[constraint.from][constraint.to] = true;
+    for (let via = 0; via < count; via += 1) {
+        for (let from = 0; from < count; from += 1) {
+            if (!reach[from][via])
+                continue;
+            for (let to = 0; to < count; to += 1) {
+                if (reach[via][to])
+                    reach[from][to] = true;
+            }
+        }
+    }
+    return reach;
+}
+/** The placements on the loop reached by following each position back to what set it. */
+function loopFrom(start, cameFrom, count) {
+    let at = start;
+    for (let step = 0; step < count; step += 1) {
+        const previous = cameFrom[at];
+        if (previous === undefined)
+            break;
+        at = previous.from;
+    }
+    const placements = [];
+    const seen = new Set();
+    let cursor = at;
+    while (!seen.has(cursor)) {
+        seen.add(cursor);
+        const previous = cameFrom[cursor];
+        if (previous === undefined)
+            break;
+        if (previous.placement)
+            placements.push(previous.placement);
+        cursor = previous.from;
+    }
+    return placements.reverse();
+}
+
+// ---- resolve.js ----
+/**
+ * Turn a parsed document into solved geometry.
+ *
+ * Three passes: build the containment tree, size every node bottom-up, then
+ * turn each node's placements into minimum distances and solve for the tightest
+ * arrangement that satisfies them. That last pass also adds the separations
+ * that keep boxes off each other, and solves again until none is left to add.
+ *
+ * It is a constraint solve, of the kind that computes rather than searches. It
+ * works out how far apart things are; nothing about which side of what a node
+ * sits on is ever decided here, because the author wrote it down.
+ */
+function resolve(doc, options = {}) {
+    const measurer = options.measurer ?? monospaceMeasurer();
+    const fontSize = options.fontSize ?? DEFAULT_FONT_SIZE;
+    const margin = options.margin ?? DEFAULT_MARGIN;
+    const styles = collectStyles(doc.statements);
+    const { nodes, byName, roots } = buildTree(doc.statements, styles);
+    applyDecks(doc.statements, byName);
+    // Links are resolved to nodes before anything is sized, because a labelled
+    // link claims room in the gap it crosses and so has to be in hand while the
+    // gaps are being worked out. Nothing here reads geometry.
+    const links = buildLinks(doc.statements, byName, styles);
+    const local = new Map();
+    for (const root of roots)
+        sizeNode(root, links, measurer, fontSize, local);
+    placeRoots(roots, byName, links, measurer, fontSize, local);
+    normalize(nodes, margin);
+    const extent = bounds(nodes);
+    return {
+        nodes,
+        roots,
+        links,
+        diagram: collectDiagram(doc.statements),
+        width: Math.ceil(extent.maxX + margin),
+        height: Math.ceil(extent.maxY + margin),
+    };
+}
+// --- pass one: the containment tree -----------------------------------------
+function collectStyles(statements) {
+    const styles = new Map();
+    for (const stmt of statements) {
+        if (stmt.kind !== 'style')
+            continue;
+        if (styles.has(stmt.name)) {
+            throw new SourceError(`style "${stmt.name}" is declared twice`, stmt.line);
+        }
+        styles.set(stmt.name, stmt.attrs);
+    }
+    return styles;
+}
+/** A file holds one diagram, so a second `diagram` statement is a mistake. */
+function collectDiagram(statements) {
+    let found;
+    for (const stmt of statements) {
+        if (stmt.kind !== 'diagram')
+            continue;
+        if (found)
+            throw new SourceError('the diagram is described twice', stmt.line);
+        found = stmt.attrs;
+    }
+    return found ?? {};
+}
+function buildTree(statements, styles) {
+    const nodes = [];
+    const byName = new Map();
+    const roots = [];
+    for (const stmt of statements) {
+        if (stmt.kind !== 'box' && stmt.kind !== 'note')
+            continue;
+        if (byName.has(stmt.name)) {
+            throw new SourceError(`"${stmt.name}" is declared twice`, stmt.line);
+        }
+        const node = {
+            name: stmt.name,
+            kind: stmt.kind,
+            text: stmt.text,
+            lines: linesFor(stmt.text, stmt.attrs, stmt.line),
+            children: [],
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
+            inset: 0,
+            deckLabels: [],
+            headerHeight: 0,
+            label: stmt.kind === 'box' ? stmt.label : {},
+            attrs: stmt.attrs,
+            appearance: appearanceOf(stmt.attrs, styles, stmt.line),
+            placements: stmt.placements,
+            line: stmt.line,
+        };
+        const cut = stmt.name.lastIndexOf('.');
+        if (cut === -1) {
+            roots.push(node);
+        }
+        else {
+            const parentName = stmt.name.slice(0, cut);
+            const parent = byName.get(parentName);
+            if (!parent) {
+                throw new SourceError(`"${stmt.name}" is inside "${parentName}", which is not declared yet`, stmt.line);
+            }
+            node.parent = parent;
+            parent.children.push(node);
+        }
+        nodes.push(node);
+        byName.set(stmt.name, node);
+    }
+    return { nodes, byName, roots };
+}
+function appearanceOf(attrs, styles, line) {
+    const named = attrs['style'];
+    if (named === undefined)
+        return { ...attrs };
+    const base = styles.get(named);
+    if (!base)
+        throw new SourceError(`no style named "${named}"`, line);
+    return { ...base, ...attrs };
+}
+function applyDecks(statements, byName) {
+    for (const stmt of statements) {
+        if (stmt.kind !== 'deck')
+            continue;
+        const node = byName.get(stmt.name);
+        if (!node)
+            throw new SourceError(`deck names "${stmt.name}", which does not exist`, stmt.line);
+        node.deckLabels = stmt.labels;
+    }
+}
+function buildLinks(statements, byName, styles) {
+    const links = [];
+    for (const stmt of statements) {
+        if (stmt.kind !== 'link')
+            continue;
+        const from = byName.get(stmt.from);
+        const to = byName.get(stmt.to);
+        if (!from)
+            throw new SourceError(`link from "${stmt.from}", which does not exist`, stmt.line);
+        if (!to)
+            throw new SourceError(`link to "${stmt.to}", which does not exist`, stmt.line);
+        const between = stmt.between && {
+            nodes: stmt.between.targets.map((name) => {
+                const node = byName.get(name);
+                if (!node) {
+                    throw new SourceError(`link passes between "${name}", which does not exist`, stmt.line);
+                }
+                return node;
+            }),
+            ...(stmt.between.axis !== undefined ? { axis: stmt.between.axis } : {}),
+        };
+        links.push({
+            from,
+            to,
+            both: stmt.both,
+            ...(stmt.label !== undefined ? { label: stmt.label } : {}),
+            ...(between ? { between } : {}),
+            attrs: stmt.attrs,
+            appearance: appearanceOf(stmt.attrs, styles, stmt.line),
+            line: stmt.line,
+        });
+    }
+    return links;
+}
+/**
+ * Give a node a width and height, sizing its children first. Also records each
+ * child's offset within this node, which pass three turns into absolute
+ * coordinates once this node itself is placed.
+ */
+function sizeNode(node, links, measurer, fontSize, local) {
+    for (const child of node.children)
+        sizeNode(child, links, measurer, fontSize, local);
+    // Text is measured at the size it will be drawn at — the size lives in
+    // `constants.ts` precisely so the resolver reserving the room and the
+    // renderer filling it cannot disagree about how much room there is.
+    const textSize = fontSizeFor(node.kind, node.appearance, fontSize, node.line);
+    const lineHeight = measurer.lineHeight(textSize);
+    // A node with empty text takes no room for it. This is what makes an
+    // invisible grouping container size to exactly its contents.
+    const hasLabel = node.lines.some((line) => line.length > 0);
+    const labelWidth = hasLabel ? widestLine(node.lines, measurer, textSize) : 0;
+    const labelHeight = hasLabel ? node.lines.length * lineHeight : 0;
+    if (node.kind === 'note') {
+        // A note is bare text, so it gets no padding and takes no children.
+        // Both are refused rather than ignored, for the reason an unknown diagram
+        // key is: a note is bare text with no box to decorate or replace, so either
+        // word would silently do nothing and look like the tool being broken.
+        for (const key of ['icon', 'shape']) {
+            if (node.appearance[key] !== undefined) {
+                throw new SourceError(`"${node.name}" is a note and has ${key}: ${node.appearance[key]}. A note is bare text, with no box to ${key === 'icon' ? 'decorate' : 'replace'}`, node.line);
+            }
+        }
+        node.width = labelWidth;
+        node.height = labelHeight;
+        return;
+    }
+    const shape = shapeFor(node.appearance, node.line);
+    const glyphSide = ICON_LINES * lineHeight;
+    if (shape.body !== undefined) {
+        // Drawn as a glyph, so there is no box to pad and the node's size is the
+        // picture's. A label goes under it rather than inside it, which is the
+        // arrangement that makes a row of these read as captioned things.
+        if (node.children.length > 0) {
+            throw new SourceError(`"${node.name}" is drawn as a glyph and has children. A glyph is not a box, so nothing can go inside it`, node.line);
+        }
+        node.width = Math.max(glyphSide, labelWidth);
+        node.height = glyphSide + (hasLabel ? ICON_GAP + labelHeight : 0);
+        return;
+    }
+    // An icon takes a column of its own on the right of whatever the box holds,
+    // so the label never runs underneath it and the box grows to fit both. That
+    // is why an icon is not a renderer-only concern: it is content taking room,
+    // like a label, and not appearance like `fill:`.
+    const icon = iconFor(node.appearance, node.line);
+    const iconSide = icon === undefined ? 0 : glyphSide;
+    const iconRoom = icon === undefined ? 0 : iconSide + (hasLabel ? ICON_GAP : 0);
+    if (node.children.length === 0) {
+        // A band only exists because contents have to sit clear of it. A leaf has
+        // none, so its label is centred in the box and there is nothing for `at` or
+        // `align` to move it relative to. Refused rather than silently dropped.
+        const stated = Object.keys(node.label);
+        if (stated.length > 0) {
+            throw new SourceError(`"${node.name}" holds nothing and its label carries ${stated.join(' and ')}. ` +
+                `A label sits at one end of a box so its contents can have the other; with no contents it is centred, and there is nothing to say`, node.line);
+        }
+        node.width = labelWidth + iconRoom + PAD * 2;
+        node.height = Math.max(labelHeight, iconSide) + PAD * 2;
+    }
+    else {
+        applyAlign(node);
+        const content = layoutChildren(node, links, measurer, fontSize, local);
+        const band = Math.max(labelHeight, iconSide);
+        // `headerHeight` is the band the label and icon take, whichever end of the
+        // box that band is at. Only the contents' offset depends on the side.
+        node.headerHeight = hasLabel || icon !== undefined ? band + HEADER_GAP : 0;
+        node.width = Math.max(labelWidth + iconRoom, content.width) + PAD * 2;
+        node.height = node.headerHeight + content.height + PAD * 2;
+        const above = labelStyleFor(node.label, node.line).at === 'top' ? node.headerHeight : 0;
+        for (const child of node.children) {
+            const offset = local.get(child);
+            offset.x += PAD;
+            offset.y += PAD + above;
+        }
+    }
+    if (node.deckLabels.length > 0) {
+        // The copies sit behind and above-left, so the whole node grows by the
+        // depth of the stack and its own face moves down and right by the same.
+        node.inset = node.deckLabels.length * DECK_STEP;
+        node.width += node.inset;
+        node.height += node.inset;
+        for (const child of node.children) {
+            const offset = local.get(child);
+            offset.x += node.inset;
+            offset.y += node.inset;
+        }
+    }
+}
+/**
+ * `align: widths` widens every direct child to the widest one's natural
+ * width, before layoutChildren sizes and positions anything from those
+ * widths. A container's own children are already sized by this point.
+ */
+function applyAlign(node) {
+    const value = node.attrs['align'];
+    if (value === undefined)
+        return;
+    if (value !== 'widths') {
+        throw new SourceError(`"${node.name}" has align: ${value}, which is not one of widths`, node.line);
+    }
+    const maxWidth = Math.max(...node.children.map((child) => child.width));
+    for (const child of node.children)
+        child.width = maxWidth;
+}
+/**
+ * Position a container's children relative to each other. Children that make
+ * no placement stack vertically in written order; the rest are solved against the
+ * siblings they name, by the same constraint pass that positions top-level
+ * nodes. A placement may only name a sibling — containment scopes the group.
+ */
+function layoutChildren(parent, links, measurer, fontSize, local) {
+    const siblings = new Map(parent.children.map((child) => [child.name, child]));
+    // Children that say nothing keep the written order, down the page and flush
+    // left. Written as constraints rather than a cursor so a placed sibling can
+    // push them along like anything else.
+    const stack = [];
+    const alignment = [];
+    const quiet = parent.children.filter((child) => child.placements.length === 0);
+    const indexOf = new Map(parent.children.map((child, index) => [child, index]));
+    quiet.forEach((child, position) => {
+        const previous = quiet[position - 1];
+        if (!previous)
+            return;
+        const before = indexOf.get(previous);
+        const after = indexOf.get(child);
+        stack.push({ from: before, to: after, weight: previous.height + CHILD_GAP });
+        alignment.push(...fix(before, after, 0));
+    });
+    const positions = positionGroup(parent.children, (placement, owner) => placement.targets.map((name) => {
+        const target = siblings.get(name);
+        if (!target) {
+            throw new SourceError(`"${owner.name}" is placed against "${name}", which is not one of its siblings`, placement.line);
+        }
+        return {
+            name,
+            index: indexOf.get(target),
+            offset: { x: 0, y: 0 },
+            width: target.width,
+            height: target.height,
+        };
+    }), { x: alignment, y: stack }, corridorsIn(links, (node) => liftTo(node, indexOf, local), measurer, fontSize));
+    for (const child of parent.children)
+        local.set(child, positions.get(child));
+    return extentOf(parent.children, local);
+}
+function extentOf(children, local) {
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const child of children) {
+        const offset = local.get(child);
+        minX = Math.min(minX, offset.x);
+        minY = Math.min(minY, offset.y);
+        maxX = Math.max(maxX, offset.x + child.width);
+        maxY = Math.max(maxY, offset.y + child.height);
+    }
+    for (const child of children) {
+        const offset = local.get(child);
+        offset.x -= minX;
+        offset.y -= minY;
+    }
+    return { width: maxX - minX, height: maxY - minY };
+}
+// --- pass three: solve for positions -----------------------------------------
+function placeRoots(roots, byName, links, measurer, fontSize, local) {
+    const anchors = roots.filter((root) => root.placements.length === 0);
+    if (anchors.length === 0) {
+        throw new SourceError('every node is placed relative to another, so nothing anchors the diagram', 1);
+    }
+    if (anchors.length > 1) {
+        const names = anchors.map((node) => `"${node.name}"`).join(', ');
+        throw new SourceError(`exactly one node may say nothing about where it goes, but ${anchors.length} do: ${names}`, anchors[1].line);
+    }
+    const indexOf = new Map(roots.map((root, index) => [root, index]));
+    // A placement may name something nested — `right of server.docker` places a top-level
+    // node against a box inside another. Sizes and offsets within a container are
+    // already settled, so a nested target is its root's position plus a constant.
+    const positions = positionGroup(roots, (placement, owner) => placement.targets.map((name) => {
+        const target = byName.get(name);
+        if (!target) {
+            throw new SourceError(`"${owner.name}" is placed against "${name}", which does not exist`, placement.line);
+        }
+        let root = target;
+        const offset = { x: 0, y: 0 };
+        while (root.parent) {
+            const step = local.get(root);
+            offset.x += step.x;
+            offset.y += step.y;
+            root = root.parent;
+        }
+        return { name, index: indexOf.get(root), offset, width: target.width, height: target.height };
+    }), { x: [], y: [] }, corridorsIn(links, (node) => liftTo(node, indexOf, local), measurer, fontSize));
+    for (const root of roots) {
+        const position = positions.get(root);
+        root.x = position.x;
+        root.y = position.y;
+        spreadToChildren(root, local);
+    }
+}
+/** Once a node has an absolute position, its whole subtree follows from the offsets. */
+function spreadToChildren(node, local) {
+    for (const child of node.children) {
+        const offset = local.get(child);
+        child.x = node.x + offset.x;
+        child.y = node.y + offset.y;
+        spreadToChildren(child, local);
+    }
+}
+const AXES = ['x', 'y'];
+const AXIS_WORD = { x: 'horizontally', y: 'vertically' };
+/**
+ * Where a node sits within the group being solved: which member holds it, and
+ * where inside that member. A link may name anything at any depth, so its ends
+ * are lifted to the members of whichever group is being solved — and a node
+ * outside that group has no answer, which is how a link is sorted into the one
+ * group where its two ends are different members.
+ */
+function liftTo(node, indexOf, local) {
+    let member = node;
+    const offset = { x: 0, y: 0 };
+    while (!indexOf.has(member)) {
+        const step = local.get(member);
+        if (!step || !member.parent)
+            return undefined;
+        offset.x += step.x;
+        offset.y += step.y;
+        member = member.parent;
+    }
+    return {
+        name: node.name,
+        index: indexOf.get(member),
+        offset,
+        width: node.width,
+        height: node.height,
+    };
+}
+/** The labelled links whose two ends are different members of this group. */
+function corridorsIn(links, locate, measurer, fontSize) {
+    const corridors = [];
+    for (const link of links) {
+        // An unlabelled link asks for nothing: every gap holds an arrowhead. And a
+        // link told to pass between two named things carries its label in *that*
+        // corridor rather than in the gap between its own ends, so widening this one
+        // would make room where the label never goes.
+        if (link.label === undefined || link.between)
+            continue;
+        const from = locate(link.from);
+        const to = locate(link.to);
+        if (!from || !to || from.index === to.index)
+            continue;
+        const extent = (axis) => labelExtent(link.label, link.appearance, axis, measurer, fontSize, link.line) +
+            LABEL_CLEARANCE * 2;
+        corridors.push({ link, from, to, need: { x: extent('x'), y: extent('y') } });
+    }
+    return corridors;
+}
+/**
+ * Position a set of nodes against each other from their placements.
+ *
+ * Every placement becomes a minimum distance, and the answer is the arrangement
+ * where nothing is further apart than its placements require — which is what an
+ * author does by hand when they push two things apart to fit something between
+ * them and then pull the slack back out.
+ *
+ * Because a gap is a floor rather than a fixed distance, a corridor widens to
+ * hold whatever is put in it and closes again when that is removed. No number
+ * anywhere has to be guessed, and nothing is ever tried and rejected.
+ */
+function positionGroup(members, locate, extra, corridors = []) {
+    const constraints = { x: [...extra.x], y: [...extra.y] };
+    const indexOf = new Map(members.map((member, index) => [member, index]));
+    const pending = [];
+    for (const node of members) {
+        if (node.placements.length === 0)
+            continue;
+        const me = indexOf.get(node);
+        // Checked here as well as in `gapFor`, so a misspelt node-wide gap is still
+        // caught on a node whose placements all name their own or are alignments.
+        namedGap(node, node.attrs['gap'], node.line);
+        const size = { x: node.width, y: node.height };
+        const located = node.placements.map((placement) => ({ placement, targets: locate(placement, node) }));
+        const spokenFor = { x: false, y: false };
+        for (const { placement } of located) {
+            if (placement.kind === 'align') {
+                spokenFor[placement.axis] = true;
+            }
+            else {
+                if (/left|right/.test(placement.direction))
+                    spokenFor.x = true;
+                if (/above|below/.test(placement.direction))
+                    spokenFor.y = true;
+            }
+        }
+        // Aligning to several targets means aligning to the box that just bounds
+        // them. That box is a constant only while its members hold still relative
+        // to one another; otherwise the alignment waits for the first solution.
+        const alignOn = (axis, edge, targets, placement) => {
+            const anchor = sharedMember(targets);
+            if (anchor === undefined) {
+                pending.push({ node, me, axis, edge, targets, placement });
+                return;
+            }
+            const span = spanOf(targets, axis, () => 0);
+            constraints[axis].push(...fix(anchor, me, alignedAt(edge, span, size[axis]), placement));
+        };
+        for (const { placement, targets } of located) {
+            if (placement.kind === 'align') {
+                alignOn(placement.axis, placement.edge, targets, placement);
+                continue;
+            }
+            // One constraint per target, so the node clears the furthest of them.
+            // Taking that maximum is what longest paths already does, which is why a
+            // direction against a whole region needs nothing added to the solver.
+            const { direction } = placement;
+            // A gap belongs to the relationship rather than to either box in it, so
+            // each placement may name its own and the node's `gap:` is only the
+            // default. That is what lets a node wedged between two things sit tight
+            // against one of them and wide of the other.
+            const gap = gapFor(node, placement);
+            for (const target of targets) {
+                if (direction.includes('right')) {
+                    constraints.x.push({
+                        from: target.index,
+                        to: me,
+                        weight: target.offset.x + target.width + gap,
+                        placement,
+                    });
+                }
+                if (direction.includes('left')) {
+                    constraints.x.push({
+                        from: me,
+                        to: target.index,
+                        weight: node.width + gap - target.offset.x,
+                        placement,
+                    });
+                }
+                if (direction.includes('below')) {
+                    constraints.y.push({
+                        from: target.index,
+                        to: me,
+                        weight: target.offset.y + target.height + gap,
+                        placement,
+                    });
+                }
+                if (direction.includes('above')) {
+                    constraints.y.push({
+                        from: me,
+                        to: target.index,
+                        weight: node.height + gap - target.offset.y,
+                        placement,
+                    });
+                }
+            }
+        }
+        // An axis nobody spoke to falls back to the centre line of whatever the
+        // node was placed against, which is why "right of docker" alone is a whole
+        // position. Two different targets would decide which row the node shares,
+        // so that is refused rather than guessed — but two targets named by one
+        // placement are a single region, and centring on it is unambiguous.
+        for (const axis of AXES) {
+            if (spokenFor[axis])
+                continue;
+            const offers = located.filter((entry) => entry.placement.kind === 'offset');
+            const first = offers[0];
+            if (!first) {
+                throw new SourceError(`"${node.name}" says nothing about where it sits ${AXIS_WORD[axis]}`, node.placements[0].line);
+            }
+            const named = (entry) => entry.placement.targets.join('\u0000');
+            const other = offers.find((entry) => named(entry) !== named(first));
+            if (other) {
+                throw new SourceError(`"${node.name}" does not say where it sits ${AXIS_WORD[axis]}: ` +
+                    `"${describePlacement(first.placement)}" and "${describePlacement(other.placement)}" ` +
+                    `would put it in different places`, other.placement.line);
+            }
+            alignOn(axis, 'centre', first.targets, first.placement);
+        }
+    }
+    const solved = { x: [], y: [] };
+    const solveAll = () => {
+        for (const axis of AXES) {
+            const outcome = tightest(members.length, constraints[axis]);
+            if ('contradiction' in outcome)
+                throw noRoom(outcome.contradiction, axis, members);
+            solved[axis] = outcome.positions;
+        }
+    };
+    solveAll();
+    room(corridors, constraints, solved, solveAll);
+    settle(pending, members, constraints, solved, solveAll);
+    snug(members, constraints, solved, solveAll);
+    separate(members, constraints, solved, solveAll);
+    confirm(pending, solved);
+    return new Map(members.map((member, index) => [
+        member,
+        { x: solved.x[index], y: solved.y[index] },
+    ]));
+}
+/** The member every target belongs to, or nothing if they are spread across several. */
+function sharedMember(targets) {
+    const first = targets[0].index;
+    return targets.every((target) => target.index === first) ? first : undefined;
+}
+/** The stretch of one axis that just covers every target. */
+function spanOf(targets, axis, base) {
+    let start = Infinity;
+    let end = -Infinity;
+    for (const target of targets) {
+        const at = base(target) + target.offset[axis];
+        start = Math.min(start, at);
+        end = Math.max(end, at + (axis === 'x' ? target.width : target.height));
+    }
+    return { start, size: end - start };
+}
+/** Where a node of this size sits so that the named edge of it meets the span's. */
+function alignedAt(edge, span, own) {
+    if (edge === 'centre')
+        return span.start + (span.size - own) / 2;
+    if (edge === 'top' || edge === 'left')
+        return span.start;
+    return span.start + span.size - own;
+}
+/**
+ * Widen a corridor to hold the label of the link crossing it.
+ *
+ * This is the one place a link reaches the constraint system, and it is the same
+ * measure-then-constrain move `settle` makes rather than links joining the graph
+ * outright: the first solution says which gap each label actually falls in, and
+ * from there the room it needs is an ordinary minimum distance like any other.
+ * Nothing is nudged and no layout is repaired — a constraint the file already
+ * implied is derived and the whole system is solved again.
+ *
+ * Which gap that is, is derived and never chosen. A pair clear of each other on
+ * exactly one axis has exactly one corridor between them, and the label is in
+ * it. A pair clear on *both* axes sits corner to corner, so the line runs
+ * diagonally through open space and there is no corridor to widen; a pair clear
+ * on neither overlaps, which is the separation pass's business and not this
+ * one's. Both are left alone, which is why this only ever moves boxes that a
+ * label is genuinely wedged between.
+ *
+ * A gap being a minimum does the rest. Where the corridor is already wide enough
+ * — because the author said `gap: wide`, or because something else is in there
+ * — the constraint is slack and nothing moves; delete the label and the corridor
+ * closes back to whatever the file asked for.
+ */
+function room(corridors, constraints, solved, solveAll) {
+    let added = false;
+    for (const { from, to, need } of corridors) {
+        const clear = (axis) => {
+            const at = (end) => solved[axis][end.index] + end.offset[axis];
+            const size = (end) => (axis === 'x' ? end.width : end.height);
+            if (at(to) - (at(from) + size(from)) > 1e-9)
+                return { before: from, after: to };
+            if (at(from) - (at(to) + size(to)) > 1e-9)
+                return { before: to, after: from };
+            return undefined;
+        };
+        const open = AXES.filter((axis) => clear(axis));
+        if (open.length !== 1)
+            continue;
+        const axis = open[0];
+        const { before, after } = clear(axis);
+        constraints[axis].push({
+            from: before.index,
+            to: after.index,
+            weight: before.offset[axis] +
+                (axis === 'x' ? before.width : before.height) +
+                need[axis] -
+                after.offset[axis],
+        });
+        added = true;
+    }
+    if (added)
+        solveAll();
+}
+/**
+ * Fix the alignments that had to wait, by measuring what they align to.
+ *
+ * The first solution says where every target actually landed, so the region
+ * they bound is now a number rather than an expression, and the alignment
+ * becomes an ordinary constraint at a fixed distance. Nothing already solved is
+ * moved by hand; a distance is read off and added, which is the same shape as
+ * the separation pass and not the repair pass this design refuses.
+ *
+ * That is exact so long as the region does not depend on the node being aligned
+ * to it. Where it does, measuring changes the thing measured and there is no
+ * order that settles, so the file is refused rather than iterated at. The test
+ * is the same reachability the separation pass uses.
+ */
+function settle(pending, members, constraints, solved, solveAll) {
+    if (pending.length === 0)
+        return;
+    for (const axis of AXES) {
+        const here = pending.filter((entry) => entry.axis === axis);
+        if (here.length === 0)
+            continue;
+        const reach = reachability(members.length, constraints[axis]);
+        for (const entry of here) {
+            for (const target of entry.targets) {
+                if (target.index !== entry.me && !reach[entry.me][target.index])
+                    continue;
+                throw new SourceError(`"${entry.node.name}" is ${describePlacement(entry.placement)}, but "${target.name}" ` +
+                    `is placed ${AXIS_WORD[axis]} against "${entry.node.name}" in turn, so there is no ` +
+                    `arrangement where each waits for the other`, entry.placement.line);
+            }
+            const span = spanOf(entry.targets, axis, (target) => solved[axis][target.index]);
+            const own = axis === 'x' ? entry.node.width : entry.node.height;
+            const anchor = entry.targets[0].index;
+            constraints[axis].push(...fix(anchor, entry.me, alignedAt(entry.edge, span, own) - solved[axis][anchor], entry.placement));
+        }
+    }
+    solveAll();
+}
+/**
+ * Check the measured alignments still hold.
+ *
+ * Separation runs afterwards and only ever adds, so it can push two targets
+ * apart and leave a region wider than it was when it was measured. Nothing here
+ * repairs that — the picture is reported as unbuildable, because silently
+ * drawing a node that is no longer level with what it names is the failure the
+ * diagnostics work exists to prevent.
+ */
+function confirm(pending, solved) {
+    for (const entry of pending) {
+        const { axis } = entry;
+        const span = spanOf(entry.targets, axis, (target) => solved[axis][target.index]);
+        const own = axis === 'x' ? entry.node.width : entry.node.height;
+        if (Math.abs(alignedAt(entry.edge, span, own) - solved[axis][entry.me]) <= 0.5)
+            continue;
+        throw new SourceError(`"${entry.node.name}" cannot be ${describePlacement(entry.placement)}: keeping boxes off ` +
+            `each other moved them apart after that region was measured`, entry.placement.line);
+    }
+}
+/**
+ * Pull in a node that nothing pushes back the other way.
+ *
+ * Every constraint reads "this one is at least so far along the axis from that
+ * one", and the solve puts each member at the smallest position its constraints
+ * allow. That is the tightest arrangement for anything with something behind
+ * it — but `left of X` and `above X` bound *X*, not the node that wrote them,
+ * so a node carrying only those has nothing behind it at all. It settles at the
+ * far edge of the drawing while the thing it names is carried away by the rest
+ * of the diagram, which is neither what the file says nor what the language
+ * promises: as close together as the placements allow.
+ *
+ * The remedy is to look the other way for exactly those members. A member with
+ * no incoming edge cannot be pushed by anything, so moving it along the axis
+ * disturbs nothing; the furthest it may travel is set by whichever of its own
+ * placements binds first, and pinning that one placement to an exact distance
+ * puts it there. Every other placement it wrote had more room to spare and is
+ * still satisfied.
+ *
+ * The pins are worked out against the first solution and applied together,
+ * which keeps them independent: a member with no incoming edge is never the
+ * target of another member's pin, because being a target is what an incoming
+ * edge is.
+ */
+function snug(members, constraints, solved, solveAll) {
+    const pins = [];
+    for (const axis of AXES) {
+        const pushed = new Array(members.length).fill(false);
+        for (const constraint of constraints[axis])
+            pushed[constraint.to] = true;
+        for (let index = 0; index < members.length; index += 1) {
+            if (pushed[index])
+                continue;
+            let binding;
+            let slack = Infinity;
+            for (const constraint of constraints[axis]) {
+                if (constraint.from !== index)
+                    continue;
+                const room = solved[axis][constraint.to] - solved[axis][index] - constraint.weight;
+                if (room < slack) {
+                    slack = room;
+                    binding = constraint;
+                }
+            }
+            // Nothing to travel toward, or already against it.
+            if (!binding || slack <= 1e-9)
+                continue;
+            pins.push({
+                axis,
+                constraint: {
+                    from: binding.to,
+                    to: index,
+                    weight: -binding.weight,
+                    ...(binding.placement ? { placement: binding.placement } : {}),
+                },
+            });
+        }
+    }
+    if (pins.length === 0)
+        return;
+    for (const pin of pins)
+        constraints[pin.axis].push(pin.constraint);
+    solveAll();
+}
+/**
+ * Push apart any two boxes that landed on top of each other.
+ *
+ * Two boxes not overlapping is a placement the author never has to write, but on
+ * its own it says nothing about *which way* to separate them — left, right,
+ * above and below all satisfy it, and choosing among four is the search this
+ * whole design refuses. So the direction is never chosen. It is read off the
+ * constraints already built from the file: if the file lets one box travel away
+ * from the other along an axis and offers no way back, that is the only
+ * separation consistent with what was written. Where nothing in the file orders
+ * a pair on either axis, this reports the pair instead of guessing.
+ *
+ * One case is genuinely free. When both axes already imply an order, either
+ * would do, and the tie is broken by separating along the axis where the two
+ * overlap least — the smallest movement, and the one a person makes by hand.
+ * That is the single place the tool decides something nobody wrote.
+ *
+ * The loop only ever adds constraints and re-solves the whole system, so no
+ * arrangement is ever tried and rejected and it settles without backtracking.
+ * A solved layout is never nudged in place; that is a different thing and it is
+ * the thing the design rules out.
+ *
+ * Members here are always siblings, or the roots of the diagram, so no member
+ * ever contains another and containment needs no exemption of its own.
+ */
+function separate(members, constraints, solved, solveAll) {
+    const eligible = members.map(allowsOverlap).map((allowed) => !allowed);
+    if (eligible.filter(Boolean).length < 2)
+        return;
+    // Adding only, so the number of separations is bounded; the cap is a
+    // backstop against a bug rather than an expected outcome.
+    for (let round = 0; round < members.length * members.length + 1; round += 1) {
+        let reach;
+        let added = false;
+        for (let i = 0; i < members.length; i += 1) {
+            if (!eligible[i])
+                continue;
+            for (let j = i + 1; j < members.length; j += 1) {
+                if (!eligible[j])
+                    continue;
+                const over = overlapOf(members, solved, i, j);
+                if (!over)
+                    continue;
+                reach ??= { x: reachability(members.length, constraints.x), y: reachability(members.length, constraints.y) };
+                const orders = {};
+                for (const axis of AXES) {
+                    const order = impliedOrder(reach[axis], i, j);
+                    if (order)
+                        orders[axis] = order;
+                }
+                const axis = pickAxis(orders, over);
+                if (!axis)
+                    throw unordered(members[i], members[j]);
+                const { before, after } = orders[axis];
+                const span = axis === 'x' ? members[before].width : members[before].height;
+                constraints[axis].push({ from: before, to: after, weight: span + SEPARATION_GAP });
+                reach = undefined;
+                added = true;
+            }
+        }
+        if (!added)
+            return;
+        solveAll();
+    }
+}
+/** How far two members share space on each axis, or nothing if they are clear of each other. */
+function overlapOf(members, solved, i, j) {
+    const shared = (axis) => {
+        const size = (index) => (axis === 'x' ? members[index].width : members[index].height);
+        const startI = solved[axis][i];
+        const startJ = solved[axis][j];
+        return Math.min(startI + size(i), startJ + size(j)) - Math.max(startI, startJ);
+    };
+    const x = shared('x');
+    const y = shared('y');
+    return x > 1e-9 && y > 1e-9 ? { x, y } : undefined;
+}
+/** Which of two members the file lets the other move past, if either. */
+function impliedOrder(reach, i, j) {
+    const forward = reach[i][j];
+    const backward = reach[j][i];
+    if (forward === backward)
+        return undefined;
+    return forward ? { before: i, after: j } : { before: j, after: i };
+}
+/** Of the axes that can separate a pair, the one where they overlap least. */
+function pickAxis(orders, over) {
+    const available = AXES.filter((axis) => orders[axis]);
+    if (available.length < 2)
+        return available[0];
+    return over.x <= over.y ? 'x' : 'y';
+}
+function allowsOverlap(node) {
+    const value = node.attrs['overlap'];
+    if (value === undefined)
+        return false;
+    if (value !== 'allow') {
+        throw new SourceError(`"${node.name}" has overlap: ${value}, which is not one of allow`, node.line);
+    }
+    return true;
+}
+function unordered(first, second) {
+    const [earlier, later] = first.line <= second.line ? [first, second] : [second, first];
+    return new SourceError(`"${earlier.name}" and "${later.name}" overlap, and nothing says which side of the ` +
+        `other either one sits on — place one against the other, or say overlap: allow`, later.line);
+}
+/** Report a set of placements that cannot all hold, in the words they were written in. */
+function noRoom(contradiction, axis, members) {
+    const { placements } = contradiction;
+    if (placements.length === 0) {
+        return new SourceError(`these placements run in a circle ${AXIS_WORD[axis]} and cannot all hold`, members[0]?.line ?? 1);
+    }
+    const quoted = placements.map((placement) => `"${describePlacement(placement)}"`).join(' and ');
+    return new SourceError(`${quoted} cannot all hold — they leave no room ${AXIS_WORD[axis]}`, placements[placements.length - 1].line);
+}
+/**
+ * How far this placement holds the node off its target. A placement may name
+ * its own gap; `gap:` on the node is the default for the ones that do not.
+ */
+function gapFor(node, placement) {
+    if (placement.gap === undefined)
+        return namedGap(node, node.attrs['gap'], node.line);
+    return namedGap(node, placement.gap, placement.line);
+}
+function namedGap(node, named, line) {
+    const gap = GAPS[named ?? 'normal'];
+    if (gap === undefined) {
+        const known = Object.keys(GAPS).join(', ');
+        throw new SourceError(`"${node.name}" asks for gap: ${named}, which is not one of ${known}`, line);
+    }
+    return gap;
+}
+// --- shared helpers ----------------------------------------------------------
+function widestLine(lines, measurer, fontSize) {
+    return lines.reduce((widest, line) => {
+        const { width } = measurer.measure(line, fontSize);
+        return Math.max(widest, width);
+    }, 0);
+}
+/**
+ * Split a label into the lines that get drawn. `/` always breaks a line. A
+ * `width` attribute additionally folds each of those at word boundaries, which
+ * is what stops a long note running across the whole diagram.
+ *
+ * The width is a character count rather than a distance. It says how much text
+ * fits on a line, not where anything sits, so it stays a property of the text
+ * and never becomes a coordinate in disguise.
+ */
+function linesFor(text, attrs, line) {
+    const stated = attrs['width'];
+    if (stated === undefined)
+        return splitLines(text);
+    const columns = Number(stated);
+    if (!Number.isInteger(columns) || columns < 1) {
+        throw new SourceError(`width must be a whole number of characters, not "${stated}"`, line);
+    }
+    return splitLines(text).flatMap((part) => wrap(part, columns));
+}
+/** Fold one line onto several at word boundaries, never exceeding `columns`. */
+function wrap(text, columns) {
+    const lines = [];
+    let current = '';
+    for (const word of text.split(/\s+/).filter(Boolean)) {
+        if (current.length === 0) {
+            current = word;
+        }
+        else if (current.length + 1 + word.length <= columns) {
+            current += ` ${word}`;
+        }
+        else {
+            lines.push(current);
+            current = word;
+        }
+    }
+    if (current.length > 0)
+        lines.push(current);
+    return lines.length > 0 ? lines : [''];
+}
+function bounds(nodes) {
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const node of nodes) {
+        minX = Math.min(minX, node.x);
+        minY = Math.min(minY, node.y);
+        maxX = Math.max(maxX, node.x + node.width);
+        maxY = Math.max(maxY, node.y + node.height);
+    }
+    return { minX, minY, maxX, maxY };
+}
+/** Shift everything so the diagram starts at the margin rather than wherever the anchor fell. */
+function normalize(nodes, margin) {
+    const { minX, minY } = bounds(nodes);
+    const dx = margin - minX;
+    const dy = margin - minY;
+    for (const node of nodes) {
+        node.x += dx;
+        node.y += dy;
+    }
+}
+
+// ---- index.js ----
+/** Source text in, SVG out. The whole pipeline in one call. */
+function compile(source, options = {}) {
+    return render(resolve(parse(source), options), options);
+}
+globalThis.reladraw = { compile, SourceError };
+})();
+</script>
+
+    <script>
+      (function () {
+        'use strict';
+
+        // Eight lines that make the argument: a gap is a minimum, so putting
+        // something between two boxes is what pushes them apart, and deleting it
+        // closes them back up. Nothing here is a coordinate.
+        var SEED = [
+          '// A gap is a minimum, not a measurement. The resolver',
+          '// is what holds these two apart — delete its line and',
+          '// watch them close back up. Nothing here is a coordinate.',
+          '',
+          'box parser "Parser"',
+          'box renderer "Renderer"  right of parser',
+          'box resolver "Resolver"  right of parser  left of renderer  level with parser',
+          '',
+          'link parser -> resolver    "statements"  from: right  to: left',
+          'link resolver -> renderer  "layout"      from: right  to: left',
+          '',
+        ].join('\n');
+
+        var source = document.getElementById('source');
+        var diagram = document.getElementById('diagram');
+        var error = document.getElementById('error');
+
+        function show(message, line) {
+          error.textContent = '';
+          if (message === null) {
+            diagram.classList.remove('stale');
+            return;
+          }
+          if (line !== undefined && line !== null) {
+            var where = document.createElement('b');
+            where.textContent = 'line ' + line + ': ';
+            error.appendChild(where);
+          }
+          error.appendChild(document.createTextNode(message));
+          // The last good diagram stays up, dimmed. Every half-typed line is a
+          // parse error, so blanking the pane would make it flicker on every
+          // keystroke and hide the thing being edited against.
+          diagram.classList.add('stale');
+        }
+
+        function draw() {
+          var svg;
+          try {
+            svg = reladraw.compile(source.value);
+          } catch (e) {
+            show(e.message, e instanceof reladraw.SourceError ? e.line : undefined);
+            return;
+          }
+          diagram.innerHTML = svg;
+          show(null);
+        }
+
+        source.value = SEED;
+        source.addEventListener('input', draw);
+        draw();
+      })();
+    </script>
+  </body>
+</html>
