@@ -39,6 +39,11 @@ Commands:
                                  docs/index.html. Re-run after any source
                                  change, or the hosted page demonstrates an
                                  older version of the language.
+  regress [ref]                 Render every example with the working tree and
+                                 with the source at <ref> (default HEAD) and
+                                 report which ones moved. The check to run after
+                                 any renderer or resolver change: what the change
+                                 does not concern should be byte-identical.
   boxes <file>                  Print the solved geometry of every node
   overlaps <file>               List box pairs that share space (exit 1 if any)
   screenshot <in.svg> <out.png> [WxH] [bg]
@@ -204,6 +209,37 @@ case "$cmd" in
     ;;
   overlaps)
     node tools/geometry.mjs overlaps "${1:?input .reladraw path required}"
+    ;;
+  regress)
+    # Render every example with the working tree and with the source at a git
+    # ref, then say which ones moved. Every change to the renderer or resolver
+    # is supposed to leave the examples it does not concern byte-identical, and
+    # that check needs a baseline built from the old source rather than from
+    # whatever happens to be sitting in examples/out.
+    ref="${1:-HEAD}"
+    work="$(mktemp -d -t reladraw-regress-XXXXXX)"
+    trap 'rm -rf "$work"' EXIT
+    mkdir -p "$work/base" "$work/head"
+    git archive "$ref" | tar -x -C "$work/base"
+    ln -s "$PWD/node_modules" "$work/base/node_modules"
+    (cd "$work/base" && npx tsc >/dev/null)
+
+    npx tsc >/dev/null
+    moved=0
+    for in in examples/*.reladraw; do
+      name="$(basename "$in" .reladraw)"
+      # Both compilers read the working tree's examples, so a difference is
+      # always the code and never the file.
+      node "$work/base/dist/cli.js" "$in" -o "$work/head/$name.base.svg" >/dev/null 2>&1 || true
+      node dist/cli.js "$in" -o "$work/head/$name.head.svg" >/dev/null 2>&1 || true
+      if cmp -s "$work/head/$name.base.svg" "$work/head/$name.head.svg"; then
+        echo "same  $name"
+      else
+        echo "MOVED $name"
+        moved=$((moved + 1))
+      fi
+    done
+    echo "$moved of $(ls examples/*.reladraw | wc -l | tr -d ' ') examples differ from $ref"
     ;;
   screenshot)
     in="${1:?input .svg path required}"

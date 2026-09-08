@@ -1,0 +1,60 @@
+// Several links between the same two sides run in nested lanes.
+//
+// Two links joining the bottom of one box to the left of another are not two
+// independent orderings, one per side. They are one order used twice: step
+// outward along the first edge and the same link must step outward along the
+// second, or the lines scissor across each other in the middle instead of
+// nesting. Ordering each side by where its far ends sit — the rule everywhere
+// else — has nothing to read here, because every link in the group has the
+// same far box.
+//
+// The lanes are as wide as the labels riding in them, so the labels come apart
+// with the lines and need no rule of their own.
+
+diagram background: #111111
+
+style box  fill: #191728  stroke: #4f5367
+
+// A reciprocal pair across a corner. The two edges are traversed in opposite
+// senses — further left along Gateway's bottom is further down Queue's left —
+// so the ranks reverse between the ends.
+box gateway "Gateway"  style: box
+box queue   "Queue"    below gateway  right of gateway (gap: wide)  style: box
+link gateway -> queue  "publishes messages"  from: bottom  to: left
+link queue -> gateway  "receives messages"   from: left    to: bottom
+
+// The same idea with the two edges facing each other, where the senses agree
+// and the ranks run the same way at both ends. Nothing crosses here either.
+box client "Client"  below queue (gap: wide)  left of queue  style: box
+box server "Server"  right of client (gap: wide)  level with client  style: box
+link client -> server  "request"   from: right  to: left
+link server -> client  "response"  from: left   to: right
+
+// Five lanes. A vertical run puts every label at the same height, so the only
+// way they clear each other is sideways, and the step is a whole label wide
+// rather than a line deep. These two boxes are wide enough to hold five of
+// those; narrower ones would run into the crowding `planEndpoints` falls back
+// to when a side is too short for the group, and would say nothing about it.
+box fan  "Fan of five, spread wide"  below client (gap: wide)  left of client  style: box
+box hub  "Hub of the same five"     below fan (gap: wide)  style: box
+link fan -> hub  "one"    from: bottom  to: top
+link fan -> hub  "two"    from: bottom  to: top
+link fan -> hub  "three"  from: bottom  to: top
+link fan -> hub  "four"   from: bottom  to: top
+link fan -> hub  "five"   from: bottom  to: top
+
+// Two links pointing the same way have no direction to be ordered by, so the
+// order they are written in is the only signal left and it is what decides
+// which lane each takes. Swap these two lines and the labels swap lanes.
+box left_wall  "Producer"  below hub (gap: wide)  left of hub  style: box
+box right_wall "Consumer"  right of left_wall (gap: wide)  level with left_wall  style: box
+link left_wall -> right_wall  "bulk"     from: right  to: left
+link left_wall -> right_wall  "control"  from: right  to: left
+
+// Sharing only one side is not a bundle: the far ends genuinely differ, so the
+// existing rule orders them and nothing here changes.
+box spoke "Spoke"  below right_wall (gap: wide)  style: box
+box up    "Up"     above spoke  right of spoke (gap: wide)  style: box
+box down  "Down"   below spoke  right of spoke (gap: wide)  style: box
+link spoke -> up    from: right  to: left
+link spoke -> down  from: right  to: left

@@ -95,7 +95,7 @@ export function render(layout: Layout, options: RenderOptions = {}): string {
   // side depends on what else meets that same side. Corridors come after, for
   // the same reason in the other direction: which lane of a gap a link takes
   // is ordered by where its ends turned out to be.
-  const ends = planEndpoints(layout.links);
+  const ends = planEndpoints(layout.links, measurer, fontSize);
   const corridors = planCorridors(layout.links, ends, measurer, fontSize);
   aimFreeEnds(layout.links, ends, corridors);
   for (const link of layout.links) {
@@ -550,6 +550,48 @@ interface Claim {
   side: Side;
   /** Where the far end of this link sits, which is what orders claims along the side. */
   toward: { x: number; y: number };
+  /**
+   * Where this claim sits in the lane order of its bundle, or undefined when
+   * the link is in none. `toward` cannot order links that go to the same place,
+   * and a bundle is exactly the case where they all do.
+   */
+  rank?: number;
+}
+
+/**
+ * The links running between one pair of sides.
+ *
+ * Two links joining the bottom of A to the left of B are not two independent
+ * orderings, one per side; they are one order used twice. Step outward along
+ * A's bottom edge and the same link must step outward along B's left edge, or
+ * the two lines scissor across each other instead of nesting. So a bundle
+ * carries a single lane index per link and applies it at both ends, with the
+ * sense of one end tied to the sense of the other.
+ *
+ * `planEndpoints` on its own cannot get this right, and the reason is worth
+ * keeping: it orders each side by where the far ends sit, which is the correct
+ * rule and a degenerate one here — every link in a bundle has the *same* far
+ * box, so that signal says nothing and the two sides end up ordered without
+ * reference to each other.
+ */
+interface Bundle {
+  /** The two (node, side) pairs the bundle runs between. */
+  ends: [BundleEnd, BundleEnd];
+  /** The links, in lane order: index 0 sits at one extreme of the group. */
+  lanes: LayoutLink[];
+  /**
+   * Whether a step along the first end's side is a step the same way along the
+   * second's. False is the common case for a corner-to-corner pair: further
+   * left along a bottom edge is further *down* the left edge it aims at.
+   */
+  aligned: boolean;
+  /** How far apart adjacent lanes sit, measured along either side. */
+  step: number;
+}
+
+interface BundleEnd {
+  node: LayoutNode;
+  side: Side;
 }
 
 /**
@@ -562,20 +604,40 @@ interface Claim {
  * arriving at one top edge, the one coming from further left arrives further
  * left. That is the same rule as box non-overlap — the tool separates things by
  * default, and reads the direction off the solved layout rather than asking.
+ *
+ * Where several links run between the *same* pair of sides that rule has
+ * nothing to read, and a `Bundle` supplies the order instead — see there.
  */
-function planEndpoints(links: LayoutLink[]): Map<LayoutLink, LinkEnds> {
+function planEndpoints(
+  links: LayoutLink[],
+  measurer: Measurer,
+  fontSize: number,
+): Map<LayoutLink, LinkEnds> {
   const claims = new Map<LayoutNode, Map<Side, Claim[]>>();
   const named = new Map<LayoutLink, { start?: Anchor; end?: Anchor }>();
+  const bundles = planBundles(links, measurer, fontSize);
 
   for (const link of links) {
     named.set(link, {});
     const fromSide = sideAttr(link, 'from');
     const toSide = sideAttr(link, 'to');
     if (fromSide) {
-      claim(claims, link.from, fromSide, { link, which: 'start', side: fromSide, toward: centreOf(faceOf(link.to)) });
+      claim(claims, link.from, fromSide, {
+        link,
+        which: 'start',
+        side: fromSide,
+        toward: centreOf(faceOf(link.to)),
+        rank: rankIn(bundles.get(link), link, link.from, fromSide),
+      });
     }
     if (toSide) {
-      claim(claims, link.to, toSide, { link, which: 'end', side: toSide, toward: centreOf(faceOf(link.from)) });
+      claim(claims, link.to, toSide, {
+        link,
+        which: 'end',
+        side: toSide,
+        toward: centreOf(faceOf(link.from)),
+        rank: rankIn(bundles.get(link), link, link.to, toSide),
+      });
     }
   }
 
@@ -587,9 +649,19 @@ function planEndpoints(links: LayoutLink[]): Map<LayoutLink, LinkEnds> {
       const span = along === 'x' ? face.width : face.height;
       const origin = along === 'x' ? face.x : face.y;
 
-      const ordered = [...group].sort((a, b) => a.toward[along] - b.toward[along]);
+      // Far ends first, as ever; a bundle's own lane order settles the links
+      // that share one, which are precisely the ones the first key cannot.
+      const ordered = [...group].sort(
+        (a, b) => a.toward[along] - b.toward[along] || (a.rank ?? 0) - (b.rank ?? 0),
+      );
+      // A bundle's lanes have to hold whole labels apart rather than the points
+      // of two arrows, so its step is the one that governs the side it lands on.
+      const wanted = Math.max(
+        ATTACH_STEP,
+        ...group.map((entry) => bundles.get(entry.link)?.step ?? 0),
+      );
       const usable = Math.max(0, span - ATTACH_MARGIN * 2);
-      const step = ordered.length > 1 ? Math.min(ATTACH_STEP, usable / (ordered.length - 1)) : 0;
+      const step = ordered.length > 1 ? Math.min(wanted, usable / (ordered.length - 1)) : 0;
       const first = origin + span / 2 - (step * (ordered.length - 1)) / 2;
 
       ordered.forEach((entry, index) => {
@@ -613,6 +685,154 @@ function planEndpoints(links: LayoutLink[]): Map<LayoutLink, LinkEnds> {
     ends.set(link, { start, end });
   }
   return ends;
+}
+
+/**
+ * Group the links that run between the same pair of sides, and work out the
+ * lane order and lane width each group needs.
+ *
+ * Only a link whose author named *both* sides can be in a bundle: a bundle is a
+ * statement about two specific edges, and an end with no side named has not
+ * picked one yet.
+ */
+function planBundles(
+  links: LayoutLink[],
+  measurer: Measurer,
+  fontSize: number,
+): Map<LayoutLink, Bundle> {
+  const ids = new Map<LayoutNode, number>();
+  const idOf = (node: LayoutNode): number => {
+    let id = ids.get(node);
+    if (id === undefined) {
+      id = ids.size;
+      ids.set(node, id);
+    }
+    return id;
+  };
+
+  const groups = new Map<string, { ends: [BundleEnd, BundleEnd]; links: LayoutLink[] }>();
+  for (const link of links) {
+    const fromSide = sideAttr(link, 'from');
+    const toSide = sideAttr(link, 'to');
+    if (!fromSide || !toSide || link.from === link.to) continue;
+
+    const a = { node: link.from, side: fromSide };
+    const b = { node: link.to, side: toSide };
+    const keyA = `${idOf(a.node)}:${a.side}`;
+    const keyB = `${idOf(b.node)}:${b.side}`;
+    // The pair is unordered — `a -> b` and `b -> a` join the same two edges —
+    // so the key is canonical and the ends are stored in that same order.
+    const swap = keyB < keyA;
+    const key = swap ? `${keyB}|${keyA}` : `${keyA}|${keyB}`;
+    const ends: [BundleEnd, BundleEnd] = swap ? [b, a] : [a, b];
+
+    const group = groups.get(key);
+    if (group) group.links.push(link);
+    else groups.set(key, { ends, links: [link] });
+  }
+
+  const bundles = new Map<LayoutLink, Bundle>();
+  for (const group of groups.values()) {
+    if (group.links.length < 2) continue;
+    const [first, second] = group.ends;
+    const t0 = tangentOf(first.side);
+    const t1 = tangentOf(second.side);
+    const from = sideCentre(first);
+    const to = sideCentre(second);
+    const run = { x: to.x - from.x, y: to.y - from.y };
+
+    // Nesting is a matter of which side of the line each end steps toward. Step
+    // both ends to the same side of the run and the whole line translates;
+    // step them to opposite sides and it pivots, which is a crossing.
+    const aligned = cross(run, t0) * cross(run, t1) >= 0;
+    const sense = aligned ? 1 : -1;
+
+    // Two links leaving in opposite directions are the ordinary case, and which
+    // lane each takes is then read off the diagram rather than off the order the
+    // author happened to type them in: a line keeps to one side of its own run.
+    // Links pointing the same way have no such signal and fall back to the file.
+    const order = new Map(group.links.map((link, index) => [link, index]));
+    const lanes = [...group.links].sort(
+      (a, b) =>
+        Number(a.from !== first.node) - Number(b.from !== first.node) ||
+        order.get(a)! - order.get(b)!,
+    );
+
+    // One lane apart moves a link's start by `step` along one side and its end
+    // by `step` along the other, so the midpoint of the line — which is where
+    // its label goes — moves by the average of the two.
+    const drift = { x: (t0.x + sense * t1.x) / 2, y: (t0.y + sense * t1.y) / 2 };
+    const bundle: Bundle = {
+      ends: group.ends,
+      lanes,
+      aligned,
+      step: Math.max(ATTACH_STEP, laneStep(lanes, drift, measurer, fontSize)),
+    };
+    for (const link of lanes) bundles.set(link, bundle);
+  }
+  return bundles;
+}
+
+/**
+ * How far apart adjacent lanes must sit for their labels to clear each other.
+ *
+ * The labels are knockout rectangles, so two of them clear when they are apart
+ * on *either* axis — hence the smaller of the two answers. `drift` is how far
+ * the midpoint travels per unit of step, and it is never zero: the two ends
+ * cancel only when both sides run the same way, and two such sides are always
+ * `aligned`, which adds rather than subtracts.
+ */
+function laneStep(
+  lanes: LayoutLink[],
+  drift: { x: number; y: number },
+  measurer: Measurer,
+  fontSize: number,
+): number {
+  const labelled = lanes.filter((link) => link.label !== undefined);
+  if (labelled.length < 2) return 0;
+
+  const need = (axis: Axis): number =>
+    Math.max(
+      ...labelled.map((link) =>
+        labelExtent(link.label!, link.appearance, axis, measurer, fontSize, link.line),
+      ),
+    );
+
+  const along = (axis: Axis, reach: number): number =>
+    reach === 0 ? Infinity : need(axis) / Math.abs(reach);
+  return Math.min(along('x', drift.x), along('y', drift.y));
+}
+
+/** Which lane of its bundle a link's end at this side takes, if it is in one. */
+function rankIn(
+  bundle: Bundle | undefined,
+  link: LayoutLink,
+  node: LayoutNode,
+  side: Side,
+): number | undefined {
+  if (!bundle) return undefined;
+  const lane = bundle.lanes.indexOf(link);
+  const [first, second] = bundle.ends;
+  if (node === first.node && side === first.side) return lane;
+  if (node === second.node && side === second.side) return bundle.aligned ? lane : -lane;
+  return undefined;
+}
+
+/** The unit vector along a side, pointing the way that coordinate increases. */
+function tangentOf(side: Side): { x: number; y: number } {
+  return side === 'top' || side === 'bottom' ? { x: 1, y: 0 } : { x: 0, y: 1 };
+}
+
+/** The midpoint of one side of a box. */
+function sideCentre(end: BundleEnd): { x: number; y: number } {
+  const face = faceOf(end.node);
+  const along = end.side === 'top' || end.side === 'bottom' ? face.width : face.height;
+  const origin = end.side === 'top' || end.side === 'bottom' ? face.x : face.y;
+  return anchorOn(face, end.side, origin + along / 2);
+}
+
+function cross(a: { x: number; y: number }, b: { x: number; y: number }): number {
+  return a.x * b.y - a.y * b.x;
 }
 
 function claim(

@@ -321,6 +321,21 @@ You name a side and never a point on it. Alone on a side, a link lands at its ce
 
 The space it leaves is deliberately small, and shrinks further if the side is too short to hold the whole group. On a side short enough, it shrinks to nothing and the attachments coincide — nothing warns you about that yet, so a small box with several links arriving on one edge is worth a look.
 
+#### Several links between the same two sides
+
+Links that run between the *same* pair of sides are a case of their own, because "where the far ends sit" cannot order them: every one of them goes to the same box.
+
+```
+link gateway -> queue  "publishes messages"  from: bottom  to: left
+link queue -> gateway  "receives messages"   from: left    to: bottom
+```
+
+Both of those join the bottom of `gateway` to the left of `queue`, so they run in nested lanes. Whichever lane a link takes on one edge, it takes the matching lane on the other — further left along `gateway`'s bottom is further down `queue`'s left — so the lines never cross each other. Any number of links between one pair of sides nests the same way.
+
+Which link takes the outer lane is derived where the diagram says anything: two links pointing opposite ways each keep to one side of their own run, so a reciprocal pair reads as a circulation and re-ordering the two lines changes nothing. Links pointing the *same* way give the tool nothing to read, and there the order you wrote them in is what decides.
+
+The lanes are as wide as the labels riding in them, so labels come apart with the lines. Note which way that pushes: on a horizontal run the labels stack, a line apart, but on a vertical run they all sit at the same height and have to clear each other sideways, so each lane is a whole label wide. Five labelled links down a narrow box will not fit, and will crowd in the same silence the paragraph above describes.
+
 ### Passing between two things
 
 `between <a> and <b>` says that the line travels down the gap between two named nodes.
@@ -461,6 +476,8 @@ Not omissions — defects, left here so nobody rediscovers them. Most were found
 That one was found by testing the lexer, not by rendering — and it could not have been found by rendering, because every label in the benchmark happens to use spaces around its separator. Worth knowing that the repository's own second test target is an OSI and **TCP/IP** diagram, so a picture the language was meant to be tested against could not have been written in it. A benchmark only exercises the cases it happens to contain.
 
 ~~A labelled link between two boxes at the default gap drew its label across both of them.~~ Fixed. The default gap is sized for boxes to breathe and a label is wider than that, so `link a -> b "statements"` on two adjacent boxes came out unreadable and nothing said so; the authoring workaround was to name a wider gap on a placement that had no reason to be wider. A labelled link now widens the corridor it crosses by what the label needs. Note what this is *not*: no coordinate, no repair of a solved layout, and nothing that finds a route — the corridor is derived from where the boxes landed and then becomes an ordinary minimum distance like any other.
+
+~~Two links between the same pair of sides were drawn on top of each other.~~ Fixed. Each side was ordered on its own, by where the far ends sat, and for links that share both ends that signal says nothing — so the two edges were ordered without reference to each other and the lines converged in the middle instead of nesting. The visible damage was to the labels: both landed at the same point and the second knocked a hole through the first, leaving one word of it. A group like this now takes one lane order used at both ends. See "Several links between the same two sides".
 
 ~~A link label ignored the line break.~~ Fixed. ` / ` split a node's label and was never applied to a link's, so the marker came out as a literal slash on an arrow and the benchmark's two-line captions had to be flattened to one. The measurer had always returned the split lines; the renderer was handing it the raw string and drawing that instead. The block now centres on the point the label already occupied, so a one-line label sits exactly where it did.
 
