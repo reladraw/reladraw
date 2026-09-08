@@ -1,0 +1,44 @@
+// A labelled link widens the gap it crosses.
+//
+// Putting something between two things is what pushes them apart, and a label
+// drawn in a corridor is something in that corridor. The benchmark exercises
+// none of this — every labelled link there either names a corridor of its own
+// or already had room — so this file carries the cases: a gap opened by a
+// label, the same gap left alone when the label goes, a vertical run where a
+// label is only a line deep, a corridor already wider than it needs, and the
+// diagonal pair that has no corridor at all.
+
+diagram background: #111111
+
+style box  fill: #191728  stroke: #4f5367
+
+// Nothing here says how far apart these two sit. The default gap is sized for
+// two boxes to breathe rather than to hold a word, so the label opens it.
+box parser   "Parser"                     style: box
+box resolver "Resolver"  right of parser  style: box
+link parser -> resolver  "statements"  from: right  to: left
+
+// The same two placements with nothing written on the link, which is the
+// comparison: delete the label above and the row above closes to this one.
+box sink  "Sink"   below parser              gap: wide  style: box
+box quiet "Quiet"  right of sink  level with sink       style: box
+link sink -> quiet  from: right  to: left
+
+// A vertical run, where the room is measured along the corridor and so is the
+// label's depth rather than its width. A long label crossing a vertical gap
+// therefore opens it by one line and hangs out either side.
+box writer "Writer"  right of resolver  gap: wide  style: box
+box disk   "Disk"    below writer                  style: box
+link writer -> disk  "flushed to disk"  from: bottom  to: top
+
+// Already wider than the label needs, so nothing here moves at all. A gap is a
+// minimum, and this one is a bigger minimum than the label asks for.
+box roomy "Roomy"        below sink                                 style: box
+box spare "Plenty spare"  right of roomy (gap: wide)  level with roomy  style: box
+link roomy -> spare  "fits"  from: right  to: left
+
+// Corner to corner: the line runs diagonally through open space, so there is no
+// one corridor the label sits in and nothing is widened for it.
+box high "High"  right of writer  gap: wide  style: box
+box low  "Low"   below high  right of high  style: box
+link high -> low  "diagonal"

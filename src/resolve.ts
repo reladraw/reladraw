@@ -9,9 +9,11 @@ import {
   HEADER_GAP,
   ICON_GAP,
   ICON_LINES,
+  LABEL_CLEARANCE,
   PAD,
   SEPARATION_GAP,
   fontSizeFor,
+  labelExtent,
   labelStyleFor,
 } from './constants.js';
 import { fix, reachability, tightest, type Constraint, type Contradiction } from './constrain.js';
@@ -48,13 +50,17 @@ export function resolve(doc: Document, options: ResolveOptions = {}): Layout {
   const { nodes, byName, roots } = buildTree(doc.statements, styles);
   applyDecks(doc.statements, byName);
 
-  const local = new Map<LayoutNode, { x: number; y: number }>();
-  for (const root of roots) sizeNode(root, measurer, fontSize, local);
+  // Links are resolved to nodes before anything is sized, because a labelled
+  // link claims room in the gap it crosses and so has to be in hand while the
+  // gaps are being worked out. Nothing here reads geometry.
+  const links = buildLinks(doc.statements, byName, styles);
 
-  placeRoots(roots, byName, local);
+  const local = new Map<LayoutNode, { x: number; y: number }>();
+  for (const root of roots) sizeNode(root, links, measurer, fontSize, local);
+
+  placeRoots(roots, byName, links, measurer, fontSize, local);
   normalize(nodes, margin);
 
-  const links = buildLinks(doc.statements, byName, styles);
   const extent = bounds(nodes);
 
   return {
@@ -209,8 +215,14 @@ type Local = Map<LayoutNode, { x: number; y: number }>;
  * child's offset within this node, which pass three turns into absolute
  * coordinates once this node itself is placed.
  */
-function sizeNode(node: LayoutNode, measurer: Measurer, fontSize: number, local: Local): void {
-  for (const child of node.children) sizeNode(child, measurer, fontSize, local);
+function sizeNode(
+  node: LayoutNode,
+  links: LayoutLink[],
+  measurer: Measurer,
+  fontSize: number,
+  local: Local,
+): void {
+  for (const child of node.children) sizeNode(child, links, measurer, fontSize, local);
 
   // Text is measured at the size it will be drawn at — the size lives in
   // `constants.ts` precisely so the resolver reserving the room and the
@@ -283,7 +295,7 @@ function sizeNode(node: LayoutNode, measurer: Measurer, fontSize: number, local:
     node.height = Math.max(labelHeight, iconSide) + PAD * 2;
   } else {
     applyAlign(node);
-    const content = layoutChildren(node, local);
+    const content = layoutChildren(node, links, measurer, fontSize, local);
     const band = Math.max(labelHeight, iconSide);
     // `headerHeight` is the band the label and icon take, whichever end of the
     // box that band is at. Only the contents' offset depends on the side.
@@ -334,7 +346,13 @@ function applyAlign(node: LayoutNode): void {
  * siblings they name, by the same constraint pass that positions top-level
  * nodes. A placement may only name a sibling — containment scopes the group.
  */
-function layoutChildren(parent: LayoutNode, local: Local): { width: number; height: number } {
+function layoutChildren(
+  parent: LayoutNode,
+  links: LayoutLink[],
+  measurer: Measurer,
+  fontSize: number,
+  local: Local,
+): { width: number; height: number } {
   const siblings = new Map(parent.children.map((child) => [child.name, child]));
 
   // Children that say nothing keep the written order, down the page and flush
@@ -373,6 +391,7 @@ function layoutChildren(parent: LayoutNode, local: Local): { width: number; heig
         };
       }),
     { x: alignment, y: stack },
+    corridorsIn(links, (node) => liftTo(node, indexOf, local), measurer, fontSize),
   );
 
   for (const child of parent.children) local.set(child, positions.get(child)!);
@@ -404,7 +423,14 @@ function extentOf(children: LayoutNode[], local: Local): { width: number; height
 
 // --- pass three: solve for positions -----------------------------------------
 
-function placeRoots(roots: LayoutNode[], byName: Map<string, LayoutNode>, local: Local): void {
+function placeRoots(
+  roots: LayoutNode[],
+  byName: Map<string, LayoutNode>,
+  links: LayoutLink[],
+  measurer: Measurer,
+  fontSize: number,
+  local: Local,
+): void {
   const anchors = roots.filter((root) => root.placements.length === 0);
   if (anchors.length === 0) {
     throw new SourceError('every node is placed relative to another, so nothing anchors the diagram', 1);
@@ -444,6 +470,7 @@ function placeRoots(roots: LayoutNode[], byName: Map<string, LayoutNode>, local:
         return { name, index: indexOf.get(root)!, offset, width: target.width, height: target.height };
       }),
     { x: [], y: [] },
+    corridorsIn(links, (node) => liftTo(node, indexOf, local), measurer, fontSize),
   );
 
   for (const root of roots) {
@@ -484,6 +511,82 @@ interface Target {
 }
 
 /**
+ * A labelled link's claim on the gap between its two ends.
+ *
+ * A link is not a placement and never says where anything goes. But its label is
+ * drawn in the gap it crosses, and a gap sized for two boxes to breathe is not a
+ * gap sized to hold a word — which is how a diagram that says nothing wrong ends
+ * up with `rclone` written across the box it points at. So a labelled link is
+ * treated the way anything else put between two things is: it widens the space
+ * between them by exactly what it needs, and closes it again when the label goes.
+ *
+ * The room is worked out per axis here, before anything is solved, because which
+ * axis the label ends up crossing is not known until the boxes have landed once.
+ */
+interface Corridor {
+  link: LayoutLink;
+  from: Target;
+  to: Target;
+  /** Room the label needs in a gap on each axis, clearance included. */
+  need: Record<Axis, number>;
+}
+
+/**
+ * Where a node sits within the group being solved: which member holds it, and
+ * where inside that member. A link may name anything at any depth, so its ends
+ * are lifted to the members of whichever group is being solved — and a node
+ * outside that group has no answer, which is how a link is sorted into the one
+ * group where its two ends are different members.
+ */
+function liftTo(
+  node: LayoutNode,
+  indexOf: Map<LayoutNode, number>,
+  local: Local,
+): Target | undefined {
+  let member = node;
+  const offset = { x: 0, y: 0 };
+  while (!indexOf.has(member)) {
+    const step = local.get(member);
+    if (!step || !member.parent) return undefined;
+    offset.x += step.x;
+    offset.y += step.y;
+    member = member.parent;
+  }
+  return {
+    name: node.name,
+    index: indexOf.get(member)!,
+    offset,
+    width: node.width,
+    height: node.height,
+  };
+}
+
+/** The labelled links whose two ends are different members of this group. */
+function corridorsIn(
+  links: LayoutLink[],
+  locate: (node: LayoutNode) => Target | undefined,
+  measurer: Measurer,
+  fontSize: number,
+): Corridor[] {
+  const corridors: Corridor[] = [];
+  for (const link of links) {
+    // An unlabelled link asks for nothing: every gap holds an arrowhead. And a
+    // link told to pass between two named things carries its label in *that*
+    // corridor rather than in the gap between its own ends, so widening this one
+    // would make room where the label never goes.
+    if (link.label === undefined || link.between) continue;
+    const from = locate(link.from);
+    const to = locate(link.to);
+    if (!from || !to || from.index === to.index) continue;
+    const extent = (axis: Axis): number =>
+      labelExtent(link.label!, link.appearance, axis, measurer, fontSize, link.line) +
+      LABEL_CLEARANCE * 2;
+    corridors.push({ link, from, to, need: { x: extent('x'), y: extent('y') } });
+  }
+  return corridors;
+}
+
+/**
  * An alignment whose target region cannot be measured yet.
  *
  * Naming several targets aligns a node to the box that just bounds them, and
@@ -518,6 +621,7 @@ function positionGroup(
   members: LayoutNode[],
   locate: (placement: Placement, owner: LayoutNode) => Target[],
   extra: { x: Constraint[]; y: Constraint[] },
+  corridors: Corridor[] = [],
 ): Map<LayoutNode, { x: number; y: number }> {
   const constraints: Record<Axis, Constraint[]> = { x: [...extra.x], y: [...extra.y] };
   const indexOf = new Map(members.map((member, index) => [member, index]));
@@ -644,6 +748,7 @@ function positionGroup(
   };
 
   solveAll();
+  room(corridors, constraints, solved, solveAll);
   settle(pending, members, constraints, solved, solveAll);
   snug(members, constraints, solved, solveAll);
   separate(members, constraints, solved, solveAll);
@@ -684,6 +789,66 @@ function alignedAt(edge: Edge, span: { start: number; size: number }, own: numbe
   if (edge === 'centre') return span.start + (span.size - own) / 2;
   if (edge === 'top' || edge === 'left') return span.start;
   return span.start + span.size - own;
+}
+
+/**
+ * Widen a corridor to hold the label of the link crossing it.
+ *
+ * This is the one place a link reaches the constraint system, and it is the same
+ * measure-then-constrain move `settle` makes rather than links joining the graph
+ * outright: the first solution says which gap each label actually falls in, and
+ * from there the room it needs is an ordinary minimum distance like any other.
+ * Nothing is nudged and no layout is repaired — a constraint the file already
+ * implied is derived and the whole system is solved again.
+ *
+ * Which gap that is, is derived and never chosen. A pair clear of each other on
+ * exactly one axis has exactly one corridor between them, and the label is in
+ * it. A pair clear on *both* axes sits corner to corner, so the line runs
+ * diagonally through open space and there is no corridor to widen; a pair clear
+ * on neither overlaps, which is the separation pass's business and not this
+ * one's. Both are left alone, which is why this only ever moves boxes that a
+ * label is genuinely wedged between.
+ *
+ * A gap being a minimum does the rest. Where the corridor is already wide enough
+ * — because the author said `gap: wide`, or because something else is in there
+ * — the constraint is slack and nothing moves; delete the label and the corridor
+ * closes back to whatever the file asked for.
+ */
+function room(
+  corridors: Corridor[],
+  constraints: Record<Axis, Constraint[]>,
+  solved: Record<Axis, number[]>,
+  solveAll: () => void,
+): void {
+  let added = false;
+
+  for (const { from, to, need } of corridors) {
+    const clear = (axis: Axis): { before: Target; after: Target } | undefined => {
+      const at = (end: Target): number => solved[axis][end.index]! + end.offset[axis];
+      const size = (end: Target): number => (axis === 'x' ? end.width : end.height);
+      if (at(to) - (at(from) + size(from)) > 1e-9) return { before: from, after: to };
+      if (at(from) - (at(to) + size(to)) > 1e-9) return { before: to, after: from };
+      return undefined;
+    };
+
+    const open = AXES.filter((axis) => clear(axis));
+    if (open.length !== 1) continue;
+    const axis = open[0]!;
+    const { before, after } = clear(axis)!;
+
+    constraints[axis].push({
+      from: before.index,
+      to: after.index,
+      weight:
+        before.offset[axis] +
+        (axis === 'x' ? before.width : before.height) +
+        need[axis] -
+        after.offset[axis],
+    });
+    added = true;
+  }
+
+  if (added) solveAll();
 }
 
 /**

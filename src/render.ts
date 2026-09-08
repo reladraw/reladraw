@@ -7,6 +7,7 @@ import {
   ICON_LINES,
   PAD,
   fontSizeFor,
+  labelExtent,
   labelStyleFor,
 } from './constants.js';
 import type { Axis } from './ast.js';
@@ -718,7 +719,7 @@ function planCorridors(
     const usable = Math.max(0, span - ATTACH_MARGIN * 2);
     const want = Math.max(
       ATTACH_STEP,
-      ...ordered.map((link) => labelExtent(link, group.axis, measurer, fontSize)),
+      ...ordered.map((link) => laneExtent(link, group.axis, measurer, fontSize)),
     );
     const step = ordered.length > 1 ? Math.min(want, usable / (ordered.length - 1)) : 0;
     const firstLane = group.lo + span / 2 - (step * (ordered.length - 1)) / 2;
@@ -780,19 +781,20 @@ function aimFreeEnds(
  * How much room a link's label takes across the corridor — its depth in a
  * horizontal channel, its width in a vertical one. Zero for an unlabelled link,
  * which needs no more than the arrow spacing.
+ *
+ * `labelExtent` measures the knockout along whichever axis it is handed, and the
+ * axis wanted here is the one the channel is measured on rather than the one the
+ * link runs along — a channel measured vertically carries links running
+ * horizontally, and what has to fit between two lanes of it is a label's depth.
  */
-function labelExtent(
+function laneExtent(
   link: LayoutLink,
   axis: Axis,
   measurer: Measurer,
   fontSize: number,
 ): number {
   if (link.label === undefined) return 0;
-  const size = fontSizeFor('link', link.appearance, fontSize, link.line);
-  const { width, lines } = measurer.measure(link.label, size);
-  // The knockout rectangle `drawLink` puts behind a label is the label plus 5
-  // either side, so that, not the glyphs, is what must not overlap.
-  return axis === 'y' ? lines.length * measurer.lineHeight(size) : width + 10;
+  return labelExtent(link.label, link.appearance, axis, measurer, fontSize, link.line);
 }
 
 function corridorPoint(plan: Corridor, at: number): Point {

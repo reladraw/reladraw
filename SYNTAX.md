@@ -276,9 +276,25 @@ link <from> -> <to> ["<label>"] [between <a> and <b> [vertically|horizontally]] 
 link <from> <-> <to> ["<label>"] [between <a> and <b> [vertically|horizontally]] [attributes]
 ```
 
-Endpoints may be nested (`computer1.files`). Links have no bearing on placement — they are drawn after every node has a position, and routing is the renderer's problem.
+Endpoints may be nested (`computer1.files`). A link never says where a box goes and routing is the renderer's problem, with one exception: a labelled link claims room in the gap it crosses, which is the next section.
 
 A link's label breaks on ` / ` exactly as a node's does, and the block centres on the point the label would otherwise have occupied, so ``"run `deploy` / shell command"`` stacks its two lines around the midpoint of the line rather than running off along it. `width:` is a node attribute and does not apply — a link label folds where you say and nowhere else.
+
+### A label makes room for itself
+
+Putting something between two boxes is what pushes them apart, and a label drawn in a corridor is something in that corridor. So a labelled link widens the gap it crosses by what its label needs, and by no more than that.
+
+```
+box parser "Parser"
+box resolver "Resolver"  right of parser
+link parser -> resolver  "statements"  from: right  to: left
+```
+
+Nothing there says how far apart those two boxes are. The default gap is sized for two boxes to breathe rather than to hold a word, so without this the label would be drawn across both of them. Delete the label and the gap closes back to the default. Write `gap: wide` on that placement and nothing further happens, because the minimum you asked for is already the larger of the two — a gap is a minimum, and a label is one more thing bidding into it.
+
+Which gap the label lands in is derived, never stated. Two boxes clear of each other on exactly one axis have exactly one corridor between them, and that is the one that widens. Two sitting corner to corner have no single corridor, because the line runs diagonally through open space, so nothing is widened for them. The room is measured along the run: a link travelling horizontally needs the label's width, one travelling vertically needs only its depth, so a long label across a vertical gap opens it by a single line and hangs out either side.
+
+An unlabelled link asks for nothing, since every gap is wide enough for an arrowhead. A link carrying a `between` clause asks for nothing here either — its label rides in the channel it named rather than in the gap between its own two ends, and what that does *not* do yet is at the end of the next section but one.
 
 ### Which side a link leaves and arrives on
 
@@ -318,7 +334,7 @@ Leave it out on a diagonal pair and the error asks for it, in your own node name
 
 Several links may share one channel, and they take a lane each. As with attachments on a side, which link gets which lane is derived from where their ends sit, so lines through a channel come out in the order their ends are in and do not cross. The lanes are spaced by what is actually running along them: a label's depth where a labelled link runs, an arrow's width where none does.
 
-Nothing here moves a box. A channel is measured off the layout you described, so if you name a gap too narrow for the lines you put through it, they crowd together — the tool does not widen the gap to fit them. That is deliberate for now, but only for now: making room for something by saying that something goes there is exactly how gaps between *boxes* work, and a link that can push its way through is the natural other half of this. It is not built.
+A named channel does not widen. It is measured off the layout you described, so if you name a gap too narrow for the lines you put through it they crowd together rather than pushing the two boxes apart. That is the difference between this and a label making room for itself, above: there, the corridor is the gap between the link's own two ends, and opening it moves them apart exactly as anything else put between them would. Here the pair is named by a link merely passing through, and nothing yet lets a link bid into a gap it is only a visitor in. It is the remaining half and it is not built.
 
 ## Notes
 
@@ -407,7 +423,7 @@ Designed, decided, and absent from the code. Written down so the next version ha
 
 **An icon outside the built-in six.** The set is closed, and a diagram wanting a glyph that is not in it has nowhere to go. The two shapes this could take are a declaration in the file, `icon <name> "<path data>"` beside `style`, and `icon: ./thing.svg` inlined by the tool at render time. Either keeps the output standalone, which is the constraint any answer has to meet.
 
-**A channel cannot make room for itself.** Lines through a gap too narrow for them crowd together silently, in exactly the way attachments on a too-short side do. The other half — a link that pushes the two boxes apart, the way putting a node between two things does — is designed and absent. It is the first time an arrow would move a box, so it wants the measure-then-constrain treatment that region alignments already get, rather than links joining the constraint system outright.
+**A named channel cannot make room for itself.** Lines through a `between` gap too narrow for them crowd together silently, in exactly the way attachments on a too-short side do. A labelled link *does* now open the gap between its own two ends — see "A label makes room for itself" — and it does so by the measure-then-constrain route that region alignments already use, which is the route this wants too. What is missing is the harder case: several links sharing a channel between two nodes neither of them is an end of, where the room needed is the whole stack of lanes rather than one label.
 
 ## Known to be wrong
 
@@ -432,6 +448,8 @@ Not omissions — defects, left here so nobody rediscovers them. Most were found
 ~~A label cannot contain a slash.~~ Fixed in two parts: the line-break marker now needs whitespace on both sides, so `TCP/IP`, `16/9`, `I/O` and every path and URL survive untouched, and `\/` escapes the marker for a label that wants a spaced slash and no break, such as `Before \/ After`.
 
 That one was found by testing the lexer, not by rendering — and it could not have been found by rendering, because every label in the benchmark happens to use spaces around its separator. Worth knowing that the repository's own second test target is an OSI and **TCP/IP** diagram, so a picture the language was meant to be tested against could not have been written in it. A benchmark only exercises the cases it happens to contain.
+
+~~A labelled link between two boxes at the default gap drew its label across both of them.~~ Fixed. The default gap is sized for boxes to breathe and a label is wider than that, so `link a -> b "statements"` on two adjacent boxes came out unreadable and nothing said so; the authoring workaround was to name a wider gap on a placement that had no reason to be wider. A labelled link now widens the corridor it crosses by what the label needs. Note what this is *not*: no coordinate, no repair of a solved layout, and nothing that finds a route — the corridor is derived from where the boxes landed and then becomes an ordinary minimum distance like any other.
 
 ~~A link label ignored the line break.~~ Fixed. ` / ` split a node's label and was never applied to a link's, so the marker came out as a literal slash on an arrow and the benchmark's two-line captions had to be flattened to one. The measurer had always returned the split lines; the renderer was handing it the raw string and drawing that instead. The block now centres on the point the label already occupied, so a one-line label sits exactly where it did.
 

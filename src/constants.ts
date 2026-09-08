@@ -1,6 +1,7 @@
 /** Spacing and text sizes shared by the resolver and the renderer, so the two cannot drift. */
 import type { Attrs } from './ast.js';
 import { SourceError } from './errors.js';
+import type { Measurer } from './measure.js';
 
 /** Inside a box, between its border and its contents. */
 export const PAD = 14;
@@ -46,6 +47,41 @@ export const SEPARATION_GAP = GAPS['tight']!;
 export const ATTACH_STEP = 16;
 /** Kept clear at each end of a side, so an attachment never sits on a corner. */
 export const ATTACH_MARGIN = 10;
+
+/**
+ * Between a link's label and the boxes at either end of the corridor it crosses.
+ * Small, like `SEPARATION_GAP` and `ATTACH_MARGIN`, and for the same reason: the
+ * tool is making room for something the author never measured, so the space
+ * should read as "the label is not touching that" and never as a distance anyone
+ * asked for. Say `gap:` if you want the corridor wider than its contents.
+ */
+export const LABEL_CLEARANCE = 10;
+
+/**
+ * How much room a link's label takes along one axis.
+ *
+ * The knockout rectangle drawn behind a label is the text plus five either side,
+ * so that rectangle, not the glyphs, is what must not overlap anything.
+ *
+ * Shared by the resolver, which widens a corridor to hold a label, and the
+ * renderer, which spaces the lanes of a channel by it, so the two cannot
+ * disagree about how much room a label needs. The two ask different questions of
+ * it and both are right: the resolver measures *along* the run, so a link
+ * travelling horizontally needs the label's width; the renderer measures *across*
+ * the channel, so a link travelling horizontally down one needs its height.
+ */
+export function labelExtent(
+  label: string,
+  appearance: Attrs,
+  axis: 'x' | 'y',
+  measurer: Measurer,
+  fontSize: number,
+  line: number,
+): number {
+  const size = fontSizeFor('link', appearance, fontSize, line);
+  const { width, lines } = measurer.measure(label, size);
+  return axis === 'x' ? width + 10 : lines.length * measurer.lineHeight(size);
+}
 
 /**
  * An icon is two lines of the label tall, and that ratio is what makes it a
