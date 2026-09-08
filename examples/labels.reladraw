@@ -27,9 +27,12 @@ link sink -> quiet  from: right  to: left
 // A vertical run, where the room is measured along the corridor and so is the
 // label's depth rather than its width. A long label crossing a vertical gap
 // therefore opens it by one line and hangs out either side.
+//
+// Written with `<-`, which is the same link as `writer -> disk` and draws the
+// same picture — it just puts the box this line is about at the front.
 box writer "Writer"  right of resolver (gap: wide)  style: box
 box disk   "Disk"    below writer                  style: box
-link writer -> disk  "flushed to disk"  from: bottom  to: top
+link disk <- writer  "flushed to disk"  from: bottom  to: top
 
 // Already wider than the label needs, so nothing here moves at all. A gap is a
 // minimum, and this one is a bigger minimum than the label asks for.

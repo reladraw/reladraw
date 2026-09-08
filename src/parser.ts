@@ -180,19 +180,26 @@ function parseNote(head: Token[], attrs: Attrs, line: number): NoteStmt {
 }
 
 /**
- * `link <from> -> <to> ["<label>"] [between <a> and <b>]`, or `<->` for a
- * two-headed arrow.
+ * `link <from> -> <to> ["<label>"] [between <a> and <b>]`, with `<->` for a
+ * two-headed arrow and `<-` for one pointing the other way.
+ *
+ * `a <- b` is exactly `b -> a` and carries no meaning of its own downstream.
+ * What it buys is the ordering: the name written first is the one the line is
+ * about, and plenty of links have the target as their subject.
  */
+const ARROWS = ['->', '<->', '<-'];
+
 function parseLink(head: Token[], attrs: Attrs, line: number): LinkStmt {
-  const from = requireName(head[1], 'link', line);
+  const left = requireName(head[1], 'link', line);
   const arrow = head[2];
-  if (!arrow || arrow.quoted || (arrow.text !== '->' && arrow.text !== '<->')) {
-    throw new SourceError('a link needs "->" or "<->" between its endpoints', line);
+  if (!arrow || arrow.quoted || !ARROWS.includes(arrow.text)) {
+    throw new SourceError('a link needs "->", "<-" or "<->" between its endpoints', line);
   }
-  const toToken = head[3];
-  if (!toToken || toToken.quoted) {
+  const rightToken = head[3];
+  if (!rightToken || rightToken.quoted) {
     throw new SourceError('a link needs a node on the right of the arrow', line);
   }
+  const back = arrow.text === '<-';
 
   let at = 4;
   const labelToken = head[at]?.quoted ? head[at] : undefined;
@@ -231,8 +238,8 @@ function parseLink(head: Token[], attrs: Attrs, line: number): LinkStmt {
 
   return {
     kind: 'link',
-    from,
-    to: toToken.text,
+    from: back ? rightToken.text : left,
+    to: back ? left : rightToken.text,
     both: arrow.text === '<->',
     ...(labelToken ? { label: labelToken.text } : {}),
     ...(between ? { between } : {}),

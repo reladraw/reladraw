@@ -107,7 +107,8 @@ export const PATTERNS = {
   // rest of the file on every keystroke.
   string: '"(?:\\\\.|[^"\\\\])*"?',
   keyword: `(?:${alternation(STATEMENT_KEYWORDS)})\\b`,
-  arrow: '<->|->',
+  // `<->` first, or `<-` would match its opening half and leave a stray `>`.
+  arrow: '<->|->|<-',
   attribute: '[A-Za-z][A-Za-z0-9_-]*:',
   colour: '#[0-9A-Fa-f]{3,8}\\b',
   relation: `(?:${alternation(RELATION_WORDS)})\\b`,

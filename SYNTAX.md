@@ -297,8 +297,11 @@ Separation leaves a tight gap, deliberately small — enough to read as two boxe
 
 ```
 link <from> -> <to> ["<label>"] [between <a> and <b> [vertically|horizontally]] [attributes]
+link <to> <- <from> ["<label>"] [between <a> and <b> [vertically|horizontally]] [attributes]
 link <from> <-> <to> ["<label>"] [between <a> and <b> [vertically|horizontally]] [attributes]
 ```
+
+`a <- b` is exactly `b -> a` — same arrow, same picture. What changes is which name you write first, and that is worth having: the first name reads as the subject of the line, and plenty of links are about the thing the arrow points at rather than the thing it leaves. `from:` and `to:` follow the arrow, not the writing order, so they still name the tail and the head.
 
 Endpoints may be nested (`computer1.files`). A link never says where a box goes and routing is the renderer's problem, with one exception: a labelled link claims room in the gap it crosses, which is the next section.
 
