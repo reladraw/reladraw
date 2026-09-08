@@ -64,6 +64,15 @@ export const DARK_THEME: Theme = {
 };
 
 const CORNER = 8;
+const LINE_WIDTH = 1.6;
+
+/** A rectangle of the drawing, in the same absolute coordinates as the nodes. */
+interface Extent {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
 
 /** Turn solved geometry into a standalone SVG document. */
 export function render(layout: Layout, options: RenderOptions = {}): string {
@@ -79,6 +88,8 @@ export function render(layout: Layout, options: RenderOptions = {}): string {
   for (const root of layout.roots) {
     body.push(drawNode(root, theme, measurer, fontSize));
   }
+  // Everything the boxes cover. Links are added to it as they are drawn.
+  let ink: Extent = { minX: 0, minY: 0, maxX: layout.width, maxY: layout.height };
   // Endpoints are planned for every link at once, because where a link meets a
   // side depends on what else meets that same side. Corridors come after, for
   // the same reason in the other direction: which lane of a gap a link takes
@@ -87,17 +98,30 @@ export function render(layout: Layout, options: RenderOptions = {}): string {
   const corridors = planCorridors(layout.links, ends, measurer, fontSize);
   aimFreeEnds(layout.links, ends, corridors);
   for (const link of layout.links) {
-    body.push(drawLink(link, ends.get(link)!, corridors.get(link), theme, measurer, fontSize));
+    const drawn = drawLink(link, ends.get(link)!, corridors.get(link), theme, measurer, fontSize);
+    body.push(drawn.svg);
+    ink = union(ink, grow(drawn.ink, layout.margin));
   }
+
+  // A link's geometry is measured rather than solved for, so the resolver sized
+  // the canvas from the boxes alone. A curve out of a `top` side, or a label
+  // riding above one, lands outside that — so the page grows to hold it and the
+  // origin moves with it, rather than the drawing being quietly clipped.
+  const canvas = {
+    x: Math.floor(ink.minX),
+    y: Math.floor(ink.minY),
+    width: Math.ceil(ink.maxX) - Math.floor(ink.minX),
+    height: Math.ceil(ink.maxY) - Math.floor(ink.minY),
+  };
 
   const arrowColours = new Set(layout.links.map((link) => colourOf(link.appearance, theme.link)));
 
   return [
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${layout.width}" height="${layout.height}" viewBox="0 0 ${layout.width} ${layout.height}" font-family=${quote(measurer.fontFamily)} font-size="${fontSize}px">`,
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}" viewBox="${canvas.x} ${canvas.y} ${canvas.width} ${canvas.height}" font-family=${quote(measurer.fontFamily)} font-size="${fontSize}px">`,
     '  <defs>',
     ...[...arrowColours].map((colour) => arrowMarker(colour)),
     '  </defs>',
-    `  <rect width="100%" height="100%" fill="${theme.background}"/>`,
+    `  <rect x="${canvas.x}" y="${canvas.y}" width="${canvas.width}" height="${canvas.height}" fill="${theme.background}"/>`,
     ...body,
     '</svg>',
     '',
@@ -332,7 +356,7 @@ function drawLink(
   theme: Theme,
   measurer: Measurer,
   fontSize: number,
-): string {
+): { svg: string; ink: Extent } {
   const { start, end } = ends;
   const colour = colourOf(link.appearance, theme.link);
 
@@ -344,13 +368,18 @@ function drawLink(
   // neither side named there is nothing to honour and the line stays straight.
   const curved = start.side !== undefined || end.side !== undefined;
   const parts: string[] = [];
+  // What the line actually covers, so the canvas can be sized to hold it. A
+  // curve leaving a `top` side rides above every box in the drawing, and the
+  // node bounds know nothing about it.
+  let ink = extentOfPoints([start, end]);
   let midX: number;
   let midY: number;
 
   if (corridor) {
     const path = corridorPath(start, end, corridor);
+    ink = union(ink, path.ink);
     parts.push(
-      `  <path d="${path.d}" fill="none" stroke="${colour}" stroke-width="1.6"${markerEnd}${markerStart}/>`,
+      `  <path d="${path.d}" fill="none" stroke="${colour}" stroke-width="${LINE_WIDTH}"${markerEnd}${markerStart}/>`,
     );
     // The label goes on the straight run rather than at the midpoint of the
     // whole path, so it sits in the gap the author asked the line to travel.
@@ -361,14 +390,15 @@ function drawLink(
     const c1 = { x: start.x + start.tx * reach, y: start.y + start.ty * reach };
     const c2 = { x: end.x + end.tx * reach, y: end.y + end.ty * reach };
     parts.push(
-      `  <path d="M ${round(start.x)} ${round(start.y)} C ${round(c1.x)} ${round(c1.y)}, ${round(c2.x)} ${round(c2.y)}, ${round(end.x)} ${round(end.y)}" fill="none" stroke="${colour}" stroke-width="1.6"${markerEnd}${markerStart}/>`,
+      `  <path d="M ${round(start.x)} ${round(start.y)} C ${round(c1.x)} ${round(c1.y)}, ${round(c2.x)} ${round(c2.y)}, ${round(end.x)} ${round(end.y)}" fill="none" stroke="${colour}" stroke-width="${LINE_WIDTH}"${markerEnd}${markerStart}/>`,
     );
+    ink = union(ink, cubicExtent(start, c1, c2, end));
     // The point halfway along a cubic, which is where the label belongs.
     midX = (start.x + 3 * c1.x + 3 * c2.x + end.x) / 8;
     midY = (start.y + 3 * c1.y + 3 * c2.y + end.y) / 8;
   } else {
     parts.push(
-      `  <line x1="${round(start.x)}" y1="${round(start.y)}" x2="${round(end.x)}" y2="${round(end.y)}" stroke="${colour}" stroke-width="1.6"${markerEnd}${markerStart}/>`,
+      `  <line x1="${round(start.x)}" y1="${round(start.y)}" x2="${round(end.x)}" y2="${round(end.y)}" stroke="${colour}" stroke-width="${LINE_WIDTH}"${markerEnd}${markerStart}/>`,
     );
     midX = (start.x + end.x) / 2;
     midY = (start.y + end.y) / 2;
@@ -389,6 +419,12 @@ function drawLink(
     parts.push(
       `  <rect x="${round(midX - width / 2 - 5)}" y="${round(top)}" width="${round(width + 10)}" height="${round(height)}" fill="${theme.background}"/>`,
     );
+    ink = union(ink, {
+      minX: midX - width / 2 - 5,
+      minY: top,
+      maxX: midX + width / 2 + 5,
+      maxY: top + height,
+    });
     parts.push(
       sized(
         textBlock(lines, midX - width / 2, top, width, textHeight, size, {
@@ -403,7 +439,72 @@ function drawLink(
     );
   }
 
-  return parts.join('\n');
+  // The stroke straddles the path, so half of it lies outside the geometry.
+  return { svg: parts.join('\n'), ink: grow(ink, LINE_WIDTH / 2) };
+}
+
+function union(a: Extent, b: Extent): Extent {
+  return {
+    minX: Math.min(a.minX, b.minX),
+    minY: Math.min(a.minY, b.minY),
+    maxX: Math.max(a.maxX, b.maxX),
+    maxY: Math.max(a.maxY, b.maxY),
+  };
+}
+
+function grow(extent: Extent, by: number): Extent {
+  return {
+    minX: extent.minX - by,
+    minY: extent.minY - by,
+    maxX: extent.maxX + by,
+    maxY: extent.maxY + by,
+  };
+}
+
+function extentOfPoints(points: Point[]): Extent {
+  return {
+    minX: Math.min(...points.map((p) => p.x)),
+    minY: Math.min(...points.map((p) => p.y)),
+    maxX: Math.max(...points.map((p) => p.x)),
+    maxY: Math.max(...points.map((p) => p.y)),
+  };
+}
+
+/**
+ * What a cubic actually covers, which is not what its control points cover. A
+ * handle reaching 140 pixels up carries the curve only about three quarters of
+ * that, and sizing the page off the handles would leave a visible band of empty
+ * canvas above every curved link. Solved rather than sampled: the extremes are
+ * the ends plus wherever the derivative — a quadratic — crosses zero.
+ */
+function cubicExtent(p0: Point, c1: Point, c2: Point, p3: Point): Extent {
+  const span = (a: number, b: number, c: number, d: number): [number, number] => {
+    const values = [a, d];
+    // The derivative of the cubic, written as a quadratic in t.
+    const qa = 3 * (-a + 3 * b - 3 * c + d);
+    const qb = 6 * (a - 2 * b + c);
+    const qc = 3 * (b - a);
+    const roots: number[] = [];
+    if (Math.abs(qa) < 1e-9) {
+      if (Math.abs(qb) > 1e-9) roots.push(-qc / qb);
+    } else {
+      const disc = qb * qb - 4 * qa * qc;
+      if (disc >= 0) {
+        const root = Math.sqrt(disc);
+        roots.push((-qb + root) / (2 * qa), (-qb - root) / (2 * qa));
+      }
+    }
+    for (const t of roots) {
+      if (t <= 0 || t >= 1) continue;
+      const u = 1 - t;
+      values.push(u * u * u * a + 3 * u * u * t * b + 3 * u * t * t * c + t * t * t * d);
+    }
+    return [Math.min(...values), Math.max(...values)];
+  };
+
+  const [minX, maxX] = span(p0.x, c1.x, c2.x, p3.x);
+  const [minY, maxY] = span(p0.y, c1.y, c2.y, p3.y);
+  return { minX, minY, maxX, maxY };
 }
 
 /** Walk out from the centre of a box toward a point, stopping at the border. */
@@ -808,7 +909,11 @@ function corridorPoint(plan: Corridor, at: number): Point {
  * inside an interval over part of its length — which is the whole claim the
  * author is making.
  */
-function corridorPath(start: Anchor, end: Anchor, plan: Corridor): { d: string; mid: Point } {
+function corridorPath(
+  start: Anchor,
+  end: Anchor,
+  plan: Corridor,
+): { d: string; mid: Point; ink: Extent } {
   const p1 = corridorPoint(plan, plan.enter);
   const p2 = corridorPoint(plan, plan.leave);
   const forward = plan.leave >= plan.enter ? 1 : -1;
@@ -831,7 +936,12 @@ function corridorPath(start: Anchor, end: Anchor, plan: Corridor): { d: string; 
     `C ${round(c3.x)} ${round(c3.y)}, ${round(c4.x)} ${round(c4.y)}, ${round(end.x)} ${round(end.y)}`,
   ].join(' ');
 
-  return { d, mid: { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 } };
+  const ink = union(
+    cubicExtent(start, c1, c2, p1),
+    cubicExtent(p2, c3, c4, end),
+  );
+
+  return { d, mid: { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 }, ink };
 }
 
 /**

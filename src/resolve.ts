@@ -70,6 +70,7 @@ export function resolve(doc: Document, options: ResolveOptions = {}): Layout {
     diagram: collectDiagram(doc.statements),
     width: Math.ceil(extent.maxX + margin),
     height: Math.ceil(extent.maxY + margin),
+    margin,
   };
 }
 

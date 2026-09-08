@@ -79,4 +79,10 @@ export interface Layout {
   diagram: Attrs;
   width: number;
   height: number;
+  /**
+   * The clear band left around the drawing. Kept so the renderer can hold the
+   * same band open around a link that leaves the boxes' bounds — a curve out of
+   * a `top` side does exactly that, and the canvas has to grow to hold it.
+   */
+  margin: number;
 }
