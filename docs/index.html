@@ -23,6 +23,18 @@
         --muted: #8b8b8b;
         --warn: #d2904e;
         --diagram: #111111;
+        /* Syntax colours. Keywords and the placement vocabulary are the two
+           things worth picking out of a line: what kind of statement this is,
+           and what it says about where the thing goes. Everything a diagram
+           names — its own node names — stays in the plain ink, because those
+           are the words the reader is already looking for. */
+        --syn-comment: #6a6a78;
+        --syn-string: #9ec99a;
+        --syn-keyword: #82aaf0;
+        --syn-name: #b8c9e8;
+        --syn-relation: #c79bdc;
+        --syn-attribute: #6fb3ac;
+        --syn-value: #d3a05f;
         --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace;
       }
 
@@ -167,26 +179,156 @@
         color: var(--muted);
       }
 
-      textarea {
+      /* The editor is two layers: a coloured <pre> and a transparent textarea
+         exactly on top of it. Every typographic property that can move a
+         character has to be identical on both, or the colouring drifts out of
+         register with the text the reader is typing — which is why they are
+         styled together here rather than separately. */
+      .editor {
+        position: relative;
         flex: 1;
         min-height: 0;
-        resize: none;
-        border: 0;
-        outline: 0;
-        padding: 16px 18px;
         background: var(--panel);
-        color: var(--ink);
+      }
+
+      .editor > * {
+        position: absolute;
+        inset: 0;
+        margin: 0;
+        border: 0;
+        padding: 16px 18px;
         font: 13px/1.65 var(--mono);
         tab-size: 2;
         /* Statements are long by design — a corridor of placements on one line
            is the normal shape. Wrapping keeps them all visible in a narrow pane
-           rather than hiding half of each behind a horizontal scrollbar. */
+           rather than hiding half of each behind a horizontal scrollbar. It is
+           also the thing that makes the two layers hard: they must break in the
+           same places, so they get the same width and the same break rules. */
         white-space: pre-wrap;
+        overflow-wrap: break-word;
+        word-break: normal;
+      }
+
+      #highlight {
+        overflow: hidden;
+        color: var(--ink);
+        pointer-events: none;
+      }
+
+      textarea {
+        resize: none;
+        outline: 0;
+        background: transparent;
+        /* Transparent ink, visible caret: the glyphs the reader sees are the
+           <pre>'s, and the textarea is only the thing that owns the cursor. */
+        color: transparent;
+        caret-color: var(--ink);
         overflow-y: auto;
       }
 
       textarea::selection {
         background: #3a3a4c;
+      }
+
+      .t-comment {
+        color: var(--syn-comment);
+      }
+      .t-string {
+        color: var(--syn-string);
+      }
+      .t-keyword {
+        color: var(--syn-keyword);
+      }
+      /* Colour and no weight. A bolder face is the obvious way to pick a
+         declared name out of a line, and it is the one thing that could make
+         the two layers disagree about how wide a character is — the <pre> is
+         what you see, the textarea is where the cursor is, and a synthesised
+         bold that widens by a fraction puts them out of step. */
+      .t-name {
+        color: var(--syn-name);
+      }
+      .t-relation {
+        color: var(--syn-relation);
+      }
+      .t-attribute {
+        color: var(--syn-attribute);
+      }
+      .t-value {
+        color: var(--syn-value);
+      }
+      .t-colour {
+        color: var(--syn-value);
+      }
+      .t-arrow {
+        color: var(--syn-relation);
+      }
+      .t-bracket {
+        color: var(--syn-comment);
+      }
+
+      /* The cheatsheet. Closed it is one line; open it takes height off the
+         editor rather than off the diagram, because it is answering a question
+         about what to type. */
+      details {
+        border-top: 1px solid var(--edge);
+        background: var(--panel);
+        flex: none;
+        max-height: 46%;
+        overflow: auto;
+      }
+
+      summary {
+        padding: 8px 18px;
+        cursor: pointer;
+        color: var(--muted);
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        user-select: none;
+      }
+
+      summary:hover {
+        color: var(--ink);
+      }
+
+      details dl {
+        margin: 0;
+        padding: 0 18px 14px;
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        gap: 4px 14px;
+        font-size: 12px;
+      }
+
+      details dt {
+        color: var(--muted);
+        white-space: nowrap;
+      }
+
+      details dd {
+        margin: 0;
+        color: var(--ink);
+        line-height: 1.7;
+      }
+
+      details code {
+        color: var(--ink);
+        white-space: nowrap;
+        background: #1e1e26;
+        border-radius: 3px;
+        padding: 1px 5px;
+        margin-right: 3px;
+        display: inline-block;
+      }
+
+      details b {
+        color: var(--syn-relation);
+        font-weight: 400;
+      }
+
+      details i {
+        color: var(--muted);
+        font-style: normal;
       }
 
       #diagram {
@@ -273,7 +415,84 @@
     <main>
       <section>
         <div class="bar"><h2>Source</h2></div>
-        <textarea id="source" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+        <div class="editor">
+          <pre id="highlight" aria-hidden="true"></pre>
+          <textarea id="source" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+        </div>
+        <details>
+          <summary>Cheatsheet</summary>
+          <dl>
+            <dt>Statements</dt>
+            <dd>
+              <code>box <i>name</i> "text" <i>[placements]</i> <i>[key: value …]</i></code><br />
+              <code>note <i>name</i> "text" <i>placements</i></code><br />
+              <code>link <i>a</i> -&gt; <i>b</i> <i>["label"]</i> <i>[key: value …]</i></code>
+              &nbsp;<i>(<code>&lt;-&gt;</code> for both ends)</i><br />
+              <code>deck <i>name</i> "label" <i>["label" …]</i></code><br />
+              <code>style <i>name</i> <i>key: value …</i></code><br />
+              <code>diagram background: #111111</code>
+            </dd>
+
+            <dt>Containment</dt>
+            <dd><code>box server.docker "Docker"</code> — a dotted name is a child. Declare the parent first.</dd>
+
+            <dt>Placement</dt>
+            <dd>
+              <code><b>above</b> X</code> <code><b>below</b> X</code>
+              <code><b>left of</b> X</code> <code><b>right of</b> X</code>
+              <code><b>above-left of</b> X</code> … <code><b>below-right of</b> X</code><br />
+              <code><b>level with</b> X</code> — share a centre line;
+              <code><b>top</b>|<b>bottom</b>|<b>left</b>|<b>right</b> <b>level with</b> X</code> shares that edge.<br />
+              <code>right of A <b>and</b> B</code> — against the box that just bounds them both.<br />
+              <i>A node takes as many placements as it needs. One on its own binds both axes.</i>
+            </dd>
+
+            <dt>Gaps</dt>
+            <dd>
+              <code>right of X <b>(gap: wide)</b></code> on the placement, or
+              <code>gap: tight</code> on the node as its default.
+              One of <code>none</code> <code>tight</code> <code>normal</code> <code>wide</code>,
+              and every one is a <i>minimum</i>.
+            </dd>
+
+            <dt>Appearance</dt>
+            <dd>
+              <code>style: <i>name</i></code>
+              <code>fill: #191728</code>
+              <code>stroke: none</code>
+              <code>subtext: muted</code><br />
+              <code>size: small|normal|large</code>
+              <code>width: 24</code> <i>(characters, wraps the label)</i>
+              <code>align: widths</code>
+              <code>overlap: allow</code>
+            </dd>
+
+            <dt>Icons</dt>
+            <dd>
+              <code>icon: <i>name</i></code> beside the label,
+              <code>shape: <i>name</i></code> instead of the box.
+              Names: <code>disk</code> <code>desktop</code> <code>laptop</code>
+              <code>package</code> <code>cubes</code> <code>instance</code>
+              <code>database</code>, plus <code>box</code> and <code>document</code> for shapes.
+            </dd>
+
+            <dt>Labels</dt>
+            <dd>
+              <code>"Docker" (at: bottom, align: centre)</code> on a container's label.
+              <code>" / "</code> in any text is a line break; <code>\/</code> is a literal slash.
+            </dd>
+
+            <dt>Links</dt>
+            <dd>
+              <code>from: right</code> <code>to: left</code> name a side and curve the line.<br />
+              <code><b>between</b> a <b>and</b> b</code> sends it down the gap between two nodes,
+              with <code>vertically</code> or <code>horizontally</code> if they sit diagonally.
+            </dd>
+
+            <dt>Comments</dt>
+            <dd><code>// to the end of the line</code>, anywhere, including after a statement.</dd>
+          </dl>
+        </details>
         <div id="error" role="status" aria-live="polite"></div>
       </section>
       <section>
@@ -3315,12 +3534,231 @@ function normalize(nodes, margin) {
     }
 }
 
+// ---- grammar.js ----
+/**
+ * The language's *lexical* vocabulary, and a scanner that classifies one line of
+ * source into coloured spans.
+ *
+ * This is deliberately separate from `parser.ts`, and it is not a second parser.
+ * The parser answers "what does this file mean" and refuses anything it cannot
+ * answer for; a highlighter has to colour a half-typed line without complaint,
+ * so it answers only "what kind of word is this" and never fails. Every rule
+ * below is a regex applied to a single line, in priority order, with one bit of
+ * carried state (whether anything has been seen on the line yet, and whether the
+ * previous token was an attribute key).
+ *
+ * **That restriction is the point, and it is what makes this reusable.** An
+ * Emacs `font-lock-keywords` list, a Vim `syntax match` file and a TextMate
+ * grammar are all exactly this: an ordered list of single-line regexes with a
+ * face attached. So the vocabulary here — which is the half that goes stale, and
+ * which is imported from `ast.ts`, `constants.ts` and `icons.ts` rather than
+ * retyped — can be emitted into any of those without this file being ported.
+ * The scanner is the JavaScript consumer of the same spec, and the playground is
+ * its only caller.
+ *
+ * Nothing in the language spans lines: `//` runs to the end of one, a string
+ * closes on one, and there are no blocks. That is the property those editor
+ * formats need and the reason a `.reladraw` grammar is small in all of them.
+ */
+
+/**
+ * The words a statement may open with. `parseStatement` in `parser.ts` is the
+ * authority — its switch is what actually accepts them — and this list mirrors
+ * it. A word missing here is a word that draws in the plain colour, which is a
+ * dull page rather than a wrong one.
+ */
+const STATEMENT_KEYWORDS = ['box', 'note', 'link', 'deck', 'style', 'diagram'];
+/** Statements whose second word declares a name. `diagram` has none. */
+const DECLARES_NAME = ['box', 'note', 'deck', 'style'];
+/**
+ * Every word that says something about where a thing goes. Assembled from the
+ * lists the parser itself reads, so a direction or a passage axis added there
+ * colours here without anybody remembering to come back.
+ */
+const RELATION_WORDS = [
+    ...DIRECTIONS,
+    ...EDGES,
+    ...Object.keys(PASSAGE_AXES),
+    // The connecting words. `of` is optional after a direction, `and` joins
+    // targets, `between` opens a passage, `level with` is the alignment.
+    'of',
+    'and',
+    'level',
+    'with',
+    'between',
+];
+/** Longest first, so `above-left` is not read as `above` followed by `-left`. */
+function alternation(words) {
+    return [...new Set(words)].sort((a, b) => b.length - a.length).join('|');
+}
+/**
+ * The patterns, as source strings, so a generator can emit them into another
+ * editor's grammar without reaching into a compiled RegExp. Each is written to
+ * match at the point the scanner has reached; the scanner adds the sticky flag.
+ *
+ * A name may contain dots (containment) and hyphens, which is why the word
+ * pattern is what it is rather than `\w+`.
+ */
+const PATTERNS = {
+    comment: '\\/\\/.*',
+    // The closing quote is optional: every string is unterminated for as long as
+    // it is being typed, and a highlighter that waits for the quote repaints the
+    // rest of the file on every keystroke.
+    string: '"(?:\\\\.|[^"\\\\])*"?',
+    keyword: `(?:${alternation(STATEMENT_KEYWORDS)})\\b`,
+    arrow: '<->|->',
+    attribute: '[A-Za-z][A-Za-z0-9_-]*:',
+    colour: '#[0-9A-Fa-f]{3,8}\\b',
+    relation: `(?:${alternation(RELATION_WORDS)})\\b`,
+    bracket: '[()]',
+    // Matches what `tokenizeLine` treats as one bare token, and the awkwardness is
+    // load-bearing rather than accidental. A `(` counts as punctuation only where
+    // a token starts, so `rgb(20,20,20)` is one word — hence the first character
+    // being spelled differently from the rest. A lone `/` is ordinary and only a
+    // doubled one opens a comment, which is what the lookahead is for.
+    word: '(?:[^\\s()"\\/]|\\/(?!\\/))(?:[^\\s"\\/]|\\/(?!\\/))*',
+    /**
+     * The same, inside an open bracket, where `)` closes the group instead of
+     * being an ordinary character. An editor grammar that cannot count brackets
+     * should use this one throughout: mistaking `rgb(20,20,20)` for three tokens
+     * is a smaller wrong than swallowing the `)` that ends `(gap: tight)`.
+     */
+    wordInGroup: '(?:[^\\s()"\\/]|\\/(?!\\/))(?:[^\\s)"\\/]|\\/(?!\\/))*',
+};
+/**
+ * The rules that are pure regex, in priority order. Three things are missing and
+ * each for a reason: a comment wins over all of them and is tried first, a
+ * bracket is punctuation only at certain depths so the scanner counts them
+ * itself, and the catch-all word rule varies with that same depth and is
+ * appended per call.
+ */
+const RULES = [
+    { kind: 'string', re: sticky(PATTERNS.string) },
+    { kind: 'arrow', re: sticky(PATTERNS.arrow) },
+    // Before `relation`, because the trailing colon is what tells `left: …` from
+    // the `left` of a placement, and after `arrow` so `->` is never a word.
+    { kind: 'attribute', re: sticky(PATTERNS.attribute) },
+    { kind: 'colour', re: sticky(PATTERNS.colour) },
+    { kind: 'relation', re: sticky(PATTERNS.relation) },
+];
+const SPACE = sticky('[ \\t]+');
+const COMMENT = sticky(PATTERNS.comment);
+const KEYWORD = sticky(PATTERNS.keyword);
+const WORD = sticky(PATTERNS.word);
+const WORD_IN_GROUP = sticky(PATTERNS.wordInGroup);
+function sticky(source) {
+    return new RegExp(source, 'y');
+}
+function match(re, line, at) {
+    re.lastIndex = at;
+    const found = re.exec(line);
+    return found ? found[0] : null;
+}
+/**
+ * Classify one line. Always returns spans covering it end to end, in order, so a
+ * caller can rebuild the text by concatenation and can trust that nothing was
+ * dropped — which is what a highlighter drawn *behind* a textarea needs, since
+ * a lost character would slide every following one out of register.
+ */
+function highlightLine(line) {
+    const spans = [];
+    let at = 0;
+    /** Nothing but whitespace seen yet, so the next word is the statement keyword. */
+    let opening = true;
+    /** The last thing emitted was a `key:`, so the next word is its value. */
+    let expectingValue = false;
+    /** How many brackets are open, which is what makes a `)` punctuation. */
+    let depth = 0;
+    const push = (kind, end) => {
+        spans.push({ kind, start: at, end });
+        at = end;
+    };
+    while (at < line.length) {
+        const gap = match(SPACE, line, at);
+        if (gap !== null) {
+            push('plain', at + gap.length);
+            continue;
+        }
+        // A comment wins everywhere, including in the middle of a statement.
+        const comment = match(COMMENT, line, at);
+        if (comment !== null) {
+            push('comment', at + comment.length);
+            continue;
+        }
+        if (opening) {
+            opening = false;
+            const keyword = match(KEYWORD, line, at);
+            if (keyword !== null) {
+                push('keyword', at + keyword.length);
+                if (DECLARES_NAME.includes(keyword)) {
+                    const space = match(SPACE, line, at);
+                    if (space !== null) {
+                        push('plain', at + space.length);
+                        const name = match(WORD, line, at);
+                        // `style backup  stroke: …` declares a name; `box  fill: red` is a
+                        // half-typed line whose second word is already an attribute, and
+                        // colouring that as a name would be a lie about what it is.
+                        if (name !== null && !name.endsWith(':'))
+                            push('name', at + name.length);
+                    }
+                }
+                continue;
+            }
+        }
+        // Brackets before the rest, and only where they are really punctuation: an
+        // opening one wherever a token starts, a closing one only while a group is
+        // open. That is `tokenizeLine`'s rule, and it is what keeps an unquoted
+        // `rgb(20,20,20)` a single word rather than three.
+        const ch = line[at];
+        if (ch === '(') {
+            depth += 1;
+            expectingValue = false;
+            push('bracket', at + 1);
+            continue;
+        }
+        if (ch === ')' && depth > 0) {
+            depth -= 1;
+            expectingValue = false;
+            push('bracket', at + 1);
+            continue;
+        }
+        let matched = false;
+        for (const rule of [...RULES, { kind: 'plain', re: depth > 0 ? WORD_IN_GROUP : WORD }]) {
+            const text = match(rule.re, line, at);
+            if (text === null)
+                continue;
+            // An attribute's value is whatever single token follows it, whatever it
+            // would otherwise have been called: `to: right` is a value, not a
+            // direction, and `style: wide` is a style name, not a gap.
+            const kind = expectingValue && rule.kind !== 'string' && rule.kind !== 'colour' && rule.kind !== 'bracket'
+                ? 'value'
+                : rule.kind;
+            expectingValue = rule.kind === 'attribute';
+            push(kind, at + text.length);
+            matched = true;
+            break;
+        }
+        // Nothing in `RULES` can fail on a non-space character, but a scanner that
+        // could loop forever is not worth the saved line.
+        if (!matched)
+            push('plain', at + 1);
+    }
+    return spans;
+}
+/** Every line of a source file, classified. Line endings are not included. */
+function highlight(source) {
+    return source.split(/\r?\n/).map(highlightLine);
+}
+
+// ---- model.js ----
+
+
 // ---- index.js ----
 /** Source text in, SVG out. The whole pipeline in one call. */
 function compile(source, options = {}) {
     return render(resolve(parse(source), options), options);
 }
-globalThis.reladraw = { compile, SourceError };
+globalThis.reladraw = { compile, SourceError, highlightLine };
 })();
 </script>
 
@@ -3353,6 +3791,7 @@ globalThis.reladraw = { compile, SourceError };
         var EXAMPLES = [{ name: 'start', source: SEED }].concat(globalThis.reladrawExamples || []);
 
         var source = document.getElementById('source');
+        var highlight = document.getElementById('highlight');
         var diagram = document.getElementById('diagram');
         var error = document.getElementById('error');
         var examples = document.getElementById('examples');
@@ -3414,6 +3853,52 @@ globalThis.reladraw = { compile, SourceError };
           return SEED;
         }
 
+        /* ---- the coloured layer under the textarea ---- */
+
+        function escape(text) {
+          return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        // The scanner covers every line end to end, so this rebuilds the source
+        // exactly and only wraps some of it in spans. A character lost here
+        // would slide the rest of the line sideways under the cursor, which is
+        // why `./dev.sh tokens` checks the covering rather than the colours.
+        function paint() {
+          var text = source.value;
+          var out = '';
+          try {
+            var lines = text.split(/\r?\n/);
+            for (var i = 0; i < lines.length; i++) {
+              var line = lines[i];
+              var spans = reladraw.highlightLine(line);
+              for (var j = 0; j < spans.length; j++) {
+                var span = spans[j];
+                var piece = escape(line.slice(span.start, span.end));
+                out += span.kind === 'plain' ? piece : '<span class="t-' + span.kind + '">' + piece + '</span>';
+              }
+              out += '\n';
+            }
+          } catch (e) {
+            // Colouring is decoration; the editor has to keep working without it.
+            out = escape(text) + '\n';
+          }
+          highlight.innerHTML = out;
+          // A textarea's scrollbar comes out of its own width, so the two layers
+          // would otherwise wrap in different places the moment the source is
+          // long enough to scroll. clientWidth is the width the text actually
+          // gets, and the <pre> is given the same one.
+          highlight.style.width = source.clientWidth + 'px';
+          highlight.scrollTop = source.scrollTop;
+          highlight.scrollLeft = source.scrollLeft;
+        }
+
+        source.addEventListener('scroll', function () {
+          highlight.scrollTop = source.scrollTop;
+          highlight.scrollLeft = source.scrollLeft;
+        });
+
+        window.addEventListener('resize', paint);
+
         /* ---- drawing ---- */
 
         function show(message, line) {
@@ -3440,6 +3925,9 @@ globalThis.reladraw = { compile, SourceError };
         }
 
         function draw() {
+          // Before the compile, not after: a half-typed line is a parse error
+          // and its colouring still has to follow the cursor.
+          paint();
           var svg;
           try {
             svg = reladraw.compile(source.value);

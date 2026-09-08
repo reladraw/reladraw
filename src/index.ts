@@ -1,6 +1,7 @@
 export * from './ast.js';
 export * from './constants.js';
 export * from './errors.js';
+export * from './grammar.js';
 export * from './measure.js';
 export * from './model.js';
 export { parse } from './parser.js';

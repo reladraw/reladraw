@@ -22,8 +22,11 @@ const examples = join(root, 'examples');
 const template = join(root, 'tools', 'playground.html');
 const target = join(root, 'docs', 'index.html');
 
-/** What the page is allowed to reach: the pipeline, plus what it needs to report an error. */
-const EXPOSED = ['compile', 'SourceError'];
+/**
+ * What the page is allowed to reach: the pipeline, what it needs to report an
+ * error, and the line scanner behind the editor's syntax colouring.
+ */
+const EXPOSED = ['compile', 'SourceError', 'highlightLine'];
 
 // The examples the page offers, in the order the buttons appear. Every construct
 // in the language is demonstrated by one of these files and by nothing else the
@@ -46,7 +49,7 @@ const OFFERED = [
 ];
 
 const IMPORT = /^import\s+[\s\S]*?\s+from\s+'([^']+)';$/gm;
-const REEXPORT = /^export\s+(?:\*|\{[\s\S]*?\})\s+from\s+'[^']+';$/gm;
+const REEXPORT = /^export\s+(?:\*|\{[\s\S]*?\})\s+from\s+'([^']+)';$/gm;
 const EMPTY_EXPORT = /^export\s*\{\s*\};$/gm;
 const DECLARATION = /^export\s+(?:async\s+)?(function|const|let|var|class)\s+([A-Za-z0-9_$]+)/gm;
 
@@ -64,7 +67,11 @@ function order(entry) {
     if (open.has(name)) throw new Error(`import cycle at ${name} — flat concatenation cannot express it`);
     open.add(name);
     const source = read(name);
-    for (const match of source.matchAll(IMPORT)) {
+    // Re-exports count as edges too. index.js reaches most of the library
+    // through `export * from`, and a module that nothing else happens to import
+    // would otherwise be left out of the bundle with no complaint until the
+    // page called something that was not there.
+    for (const match of [...source.matchAll(IMPORT), ...source.matchAll(REEXPORT)]) {
       visit(match[1].replace(/^\.\//, ''));
     }
     open.delete(name);

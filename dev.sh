@@ -39,10 +39,14 @@ Commands:
                                  docs/index.html. Re-run after any source
                                  change, or the hosted page demonstrates an
                                  older version of the language.
-  page [out.png] [WxH]          Screenshot the built playground page. `page dom`
-                                 prints the DOM after its scripts have run,
-                                 which is how you check the page assembled
-                                 itself without opening a browser. Run
+  page [out.png] [WxH] [fragment]
+                                 Screenshot the built playground page. `page dom
+                                 [fragment]` prints the DOM after its scripts
+                                 have run, which is how you check the page
+                                 assembled itself without opening a browser.
+                                 The optional fragment is a shared link's
+                                 base64url source — the way to load a long file
+                                 into the editor without clicking. Run
                                  `playground` first — this looks at what is on
                                  disk, not at the template.
   regress [ref]                 Render every example with the working tree and
@@ -52,6 +56,11 @@ Commands:
                                  does not concern should be byte-identical.
   boxes <file>                  Print the solved geometry of every node
   overlaps <file>               List box pairs that share space (exit 1 if any)
+  tokens <file>                 Print how the syntax scanner classifies each
+                                 line, and check the spans cover it exactly.
+                                 The playground draws its colouring behind a
+                                 transparent textarea, so a dropped character
+                                 slides the whole line out of register.
   screenshot <in.svg> <out.png> [WxH] [bg]
                                  Headless Chrome screenshot of an SVG. Prefer
                                  `look` unless you need a specific size.
@@ -225,7 +234,13 @@ case "$cmd" in
         --virtual-time-budget=2000 --dump-dom "$url" 2>/dev/null
     else
       out="${1:-$(mktemp -t reladraw-page-XXXXXX.png)}"
-      screenshot "$PWD/docs/index.html" "$out" "${2:-1600x1000}" "0d0d10"
+      # A fragment here too, for the same reason the DOM mode takes one, and for
+      # one more: the editor's syntax colouring is drawn behind the textarea, so
+      # the thing to look at is a long file in a narrow pane, and the fragment is
+      # how you get a long file into the page without clicking anything.
+      # A file:// URL rather than a path, for the reason the DOM mode gives:
+      # given a bare path Chrome escapes the '#' and the fragment never arrives.
+      screenshot "file://$PWD/docs/index.html${3:+#$3}" "$out" "${2:-1600x1000}" "0d0d10"
       echo "$out"
     fi
     ;;
@@ -234,6 +249,9 @@ case "$cmd" in
     ;;
   overlaps)
     node tools/geometry.mjs overlaps "${1:?input .reladraw path required}"
+    ;;
+  tokens)
+    node tools/tokens.mjs "${1:?input .reladraw path required}"
     ;;
   regress)
     # Render every example with the working tree and with the source at a git
