@@ -1,10 +1,12 @@
 import {
+  ARROW_MARKER_WIDTH,
   ATTACH_MARGIN,
   ATTACH_STEP,
   DECK_STEP,
   DEFAULT_FONT_SIZE,
   ICON_GAP,
   ICON_LINES,
+  LINE_WIDTH,
   PAD,
   fontSizeFor,
   labelExtent,
@@ -64,7 +66,6 @@ export const DARK_THEME: Theme = {
 };
 
 const CORNER = 8;
-const LINE_WIDTH = 1.6;
 
 /** A rectangle of the drawing, in the same absolute coordinates as the nodes. */
 interface Extent {
@@ -971,10 +972,10 @@ function sideAttr(link: LayoutLink, key: 'from' | 'to'): Side | undefined {
 function arrowMarker(colour: string): string {
   const id = markerId(colour);
   return [
-    `    <marker id="${id}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">`,
+    `    <marker id="${id}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="${ARROW_MARKER_WIDTH}" markerHeight="${ARROW_MARKER_WIDTH}" orient="auto-start-reverse">`,
     `      <path d="M 0 0 L 10 5 L 0 10 z" fill="${colour}"/>`,
     '    </marker>',
-    `    <marker id="${id}-back" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">`,
+    `    <marker id="${id}-back" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="${ARROW_MARKER_WIDTH}" markerHeight="${ARROW_MARKER_WIDTH}" orient="auto-start-reverse">`,
     `      <path d="M 0 0 L 10 5 L 0 10 z" fill="${colour}"/>`,
     '    </marker>',
   ].join('\n');

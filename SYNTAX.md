@@ -293,7 +293,7 @@ A link's label breaks on ` / ` exactly as a node's does, and the block centres o
 
 ### A label makes room for itself
 
-Putting something between two boxes is what pushes them apart, and a label drawn in a corridor is something in that corridor. So a labelled link widens the gap it crosses by what its label needs, and by no more than that.
+Putting something between two boxes is what pushes them apart, and a label drawn in a corridor is something in that corridor. So a labelled link widens the gap it crosses by what its label needs — the label, a run of line either side of it, and the arrowhead that covers part of that run — and by no more than that.
 
 ```
 box parser "Parser"

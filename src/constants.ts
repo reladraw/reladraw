@@ -48,14 +48,35 @@ export const ATTACH_STEP = 16;
 /** Kept clear at each end of a side, so an attachment never sits on a corner. */
 export const ATTACH_MARGIN = 10;
 
+/** How wide a link's line is drawn. */
+export const LINE_WIDTH = 1.6;
 /**
- * Between a link's label and the boxes at either end of the corridor it crosses.
- * Small, like `SEPARATION_GAP` and `ATTACH_MARGIN`, and for the same reason: the
- * tool is making room for something the author never measured, so the space
- * should read as "the label is not touching that" and never as a distance anyone
- * asked for. Say `gap:` if you want the corridor wider than its contents.
+ * The arrowhead's length, in the `markerUnits="strokeWidth"` the marker is
+ * declared in, so its drawn length is this times `LINE_WIDTH`.
  */
-export const LABEL_CLEARANCE = 10;
+export const ARROW_MARKER_WIDTH = 7;
+/**
+ * How much of the line an arrowhead covers. Derived rather than written down,
+ * because the resolver reserves it and the renderer draws it, and a number
+ * agreed by coincidence is a number that drifts.
+ */
+export const ARROW_LENGTH = ARROW_MARKER_WIDTH * LINE_WIDTH;
+
+/**
+ * Line left showing between a link's label and the box at that end of the
+ * corridor it crosses.
+ *
+ * Unlike `SEPARATION_GAP` and `ATTACH_MARGIN` this is not "small on purpose".
+ * Those two keep two things from touching, and the least distance that reads as
+ * "not touching" is the right one. This one has something to show: a label sits
+ * in a knockout that erases the line behind it, so whatever is left either side
+ * is the entire evidence that the label belongs to a link at all. At ten pixels
+ * it did not read as a line — the seed diagram in the playground drew as a word
+ * with a dash beside it — so it is the length of a run of line, not a margin.
+ *
+ * Say `gap:` if you want the corridor wider than its contents.
+ */
+export const LABEL_CLEARANCE = 20;
 
 /**
  * How much room a link's label takes along one axis.

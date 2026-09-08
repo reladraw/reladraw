@@ -1,6 +1,7 @@
 import type { Attrs, Axis, Edge, OffsetPlacement, Placement, Document, Stmt } from './ast.js';
 import { describePlacement } from './ast.js';
 import {
+  ARROW_LENGTH,
   CHILD_GAP,
   DECK_STEP,
   DEFAULT_FONT_SIZE,
@@ -590,9 +591,14 @@ function corridorsIn(
     const from = locate(link.from);
     const to = locate(link.to);
     if (!from || !to || from.index === to.index) continue;
+    // The clearance is doubled because the label is drawn at the *midpoint* of
+    // the line, so the room it needs is symmetric about that point whatever sits
+    // at either end. The arrowhead is charged on both sides for the same reason:
+    // it covers `ARROW_LENGTH` of the line it arrives on, and reserving that at
+    // one end only would move the midpoint rather than lengthen the run.
     const extent = (axis: Axis): number =>
       labelExtent(link.label!, link.appearance, axis, measurer, fontSize, link.line) +
-      LABEL_CLEARANCE * 2;
+      (LABEL_CLEARANCE + ARROW_LENGTH) * 2;
     corridors.push({ link, from, to, need: { x: extent('x'), y: extent('y') } });
   }
   return corridors;
