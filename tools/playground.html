@@ -1,9 +1,9 @@
 <!doctype html>
 <!--
   Source for the playground page. This is the file to edit; docs/index.html is
-  generated from it by `./dev.sh playground`, which replaces the bundle marker
-  below with the whole compiled library inlined into a <script>. Do not edit
-  docs/index.html — the next build overwrites it.
+  generated from it by `./dev.sh playground`, which replaces the two markers
+  below with the compiled library and the example sources, both inlined. Do not
+  edit docs/index.html — the next build overwrites it.
 -->
 <html lang="en">
   <head>
@@ -83,6 +83,48 @@
         border-bottom-color: var(--muted);
       }
 
+      /* The examples strip spans the page rather than sitting in the editor
+         pane, so a dozen of them stay on one row instead of wrapping into a
+         column beside a narrow textarea. */
+      #examples {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+        padding: 8px 18px;
+        border-bottom: 1px solid var(--edge);
+        background: var(--panel);
+      }
+
+      #examples span {
+        color: var(--muted);
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        margin-right: 6px;
+      }
+
+      button {
+        font: 12px/1 var(--mono);
+        color: var(--muted);
+        background: transparent;
+        border: 1px solid var(--edge);
+        border-radius: 3px;
+        padding: 5px 9px;
+        cursor: pointer;
+      }
+
+      button:hover {
+        color: var(--ink);
+        border-color: var(--muted);
+      }
+
+      button[aria-pressed='true'] {
+        color: var(--ink);
+        border-color: var(--muted);
+        background: #22222c;
+      }
+
       main {
         flex: 1;
         min-height: 0;
@@ -101,15 +143,28 @@
         border-left: 1px solid var(--edge);
       }
 
+      .bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 18px;
+        min-height: 34px;
+        border-bottom: 1px solid var(--edge);
+      }
+
+      .bar div {
+        margin-left: auto;
+        display: flex;
+        gap: 6px;
+      }
+
       h2 {
         margin: 0;
-        padding: 8px 18px;
         font-size: 11px;
         font-weight: 600;
         letter-spacing: 0.12em;
         text-transform: uppercase;
         color: var(--muted);
-        border-bottom: 1px solid var(--edge);
       }
 
       textarea {
@@ -151,6 +206,18 @@
         height: auto;
       }
 
+      /* Actual size: the drawing keeps its own dimensions and the pane scrolls.
+         A diagram the size of the benchmark is a thumbnail otherwise. */
+      #diagram.actual {
+        align-items: flex-start;
+        justify-content: flex-start;
+      }
+
+      #diagram.actual svg {
+        max-width: none;
+        flex: none;
+      }
+
       #diagram.stale {
         opacity: 0.35;
       }
@@ -168,9 +235,14 @@
         display: none;
       }
 
+      #error.locatable {
+        cursor: pointer;
+      }
+
       #error b {
         font-weight: 600;
         color: var(--warn);
+        border-bottom: 1px solid currentColor;
       }
 
       @media (max-width: 760px) {
@@ -196,18 +268,28 @@
       </nav>
     </header>
 
+    <div id="examples"><span>Examples</span></div>
+
     <main>
       <section>
-        <h2>Source</h2>
+        <div class="bar"><h2>Source</h2></div>
         <textarea id="source" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
         <div id="error" role="status" aria-live="polite"></div>
       </section>
       <section>
-        <h2>Diagram</h2>
+        <div class="bar">
+          <h2>Diagram</h2>
+          <div>
+            <button id="zoom" type="button" aria-pressed="false">Actual size</button>
+            <button id="copy" type="button">Copy SVG</button>
+            <button id="download" type="button">Download</button>
+          </div>
+        </div>
         <div id="diagram"></div>
       </section>
     </main>
 
+    <!-- RELADRAW_EXAMPLES -->
     <!-- RELADRAW_BUNDLE -->
 
     <script>
@@ -231,20 +313,92 @@
           '',
         ].join('\n');
 
+        var STORE = 'reladraw.source';
+
+        // The seed leads, then whatever `./dev.sh playground` inlined from
+        // examples/. The template on its own has neither the library nor the
+        // examples, so it is never opened directly.
+        var EXAMPLES = [{ name: 'start', source: SEED }].concat(globalThis.reladrawExamples || []);
+
         var source = document.getElementById('source');
         var diagram = document.getElementById('diagram');
         var error = document.getElementById('error');
+        var examples = document.getElementById('examples');
+        var zoom = document.getElementById('zoom');
+        var copy = document.getElementById('copy');
+        var download = document.getElementById('download');
+
+        var drawn = '';
+        var errorLine = null;
+
+        /* ---- the source in the URL, so a diagram is a link ---- */
+
+        function encode(text) {
+          var bytes = new TextEncoder().encode(text);
+          var binary = '';
+          for (var i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+          return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        }
+
+        function decode(fragment) {
+          var padded = fragment.replace(/-/g, '+').replace(/_/g, '/');
+          while (padded.length % 4) padded += '=';
+          var binary = atob(padded);
+          var bytes = new Uint8Array(binary.length);
+          for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          return new TextDecoder().decode(bytes);
+        }
+
+        function stow() {
+          // replaceState rather than location.hash: one entry per keystroke
+          // would make the back button useless.
+          try {
+            history.replaceState(null, '', '#' + encode(source.value));
+          } catch (e) {
+            /* an over-long URL is not worth failing the page for */
+          }
+          try {
+            localStorage.setItem(STORE, source.value);
+          } catch (e) {
+            /* private browsing, or storage refused; the page still works */
+          }
+        }
+
+        function opening() {
+          var fragment = location.hash.slice(1);
+          if (fragment) {
+            try {
+              return decode(fragment);
+            } catch (e) {
+              /* a mangled link falls through to what was last edited */
+            }
+          }
+          try {
+            var kept = localStorage.getItem(STORE);
+            if (kept !== null) return kept;
+          } catch (e) {
+            /* as above */
+          }
+          return SEED;
+        }
+
+        /* ---- drawing ---- */
 
         function show(message, line) {
           error.textContent = '';
+          error.classList.remove('locatable');
+          errorLine = null;
           if (message === null) {
             diagram.classList.remove('stale');
             return;
           }
           if (line !== undefined && line !== null) {
+            errorLine = line;
+            error.classList.add('locatable');
             var where = document.createElement('b');
-            where.textContent = 'line ' + line + ': ';
+            where.textContent = 'line ' + line;
             error.appendChild(where);
+            error.appendChild(document.createTextNode(': '));
           }
           error.appendChild(document.createTextNode(message));
           // The last good diagram stays up, dimmed. Every half-typed line is a
@@ -261,12 +415,153 @@
             show(e.message, e instanceof reladraw.SourceError ? e.line : undefined);
             return;
           }
+          drawn = svg;
           diagram.innerHTML = svg;
           show(null);
         }
 
-        source.value = SEED;
-        source.addEventListener('input', draw);
+        function mark(name) {
+          for (var i = 0; i < examples.children.length; i++) {
+            var button = examples.children[i];
+            if (button.tagName === 'BUTTON') {
+              button.setAttribute('aria-pressed', String(button.textContent === name));
+            }
+          }
+        }
+
+        function named(text) {
+          for (var i = 0; i < EXAMPLES.length; i++) {
+            if (EXAMPLES[i].source === text) return EXAMPLES[i].name;
+          }
+          return null;
+        }
+
+        function load(text, name) {
+          source.value = text;
+          mark(name);
+          draw();
+          stow();
+        }
+
+        /* ---- the example strip ---- */
+
+        EXAMPLES.forEach(function (example) {
+          var button = document.createElement('button');
+          button.type = 'button';
+          button.textContent = example.name;
+          button.setAttribute('aria-pressed', 'false');
+          button.addEventListener('click', function () {
+            load(example.source, example.name);
+            source.focus();
+            source.setSelectionRange(0, 0);
+            source.scrollTop = 0;
+          });
+          examples.appendChild(button);
+        });
+
+        /* ---- getting the drawing out ---- */
+
+        function flash(button, word) {
+          var was = button.textContent;
+          button.textContent = word;
+          setTimeout(function () {
+            button.textContent = was;
+          }, 1200);
+        }
+
+        // navigator.clipboard does not exist outside a secure context, and this
+        // page is meant to be double-clickable from disk as well as hosted, so
+        // the old selection route is a real fallback rather than legacy cruft.
+        function toClipboard(text) {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            return navigator.clipboard.writeText(text);
+          }
+          return new Promise(function (ok, fail) {
+            var scratch = document.createElement('textarea');
+            scratch.value = text;
+            scratch.style.position = 'fixed';
+            scratch.style.opacity = '0';
+            document.body.appendChild(scratch);
+            scratch.select();
+            var done = document.execCommand('copy');
+            document.body.removeChild(scratch);
+            done ? ok() : fail();
+          });
+        }
+
+        copy.addEventListener('click', function () {
+          if (!drawn) return;
+          toClipboard(drawn).then(
+            function () {
+              flash(copy, 'Copied');
+            },
+            function () {
+              flash(copy, 'Blocked');
+            },
+          );
+        });
+
+        download.addEventListener('click', function () {
+          if (!drawn) return;
+          var url = URL.createObjectURL(new Blob([drawn], { type: 'image/svg+xml' }));
+          var link = document.createElement('a');
+          link.href = url;
+          link.download = 'diagram.svg';
+          link.click();
+          // A tick, so the navigation has the URL before it is taken back.
+          setTimeout(function () {
+            URL.revokeObjectURL(url);
+          }, 0);
+        });
+
+        zoom.addEventListener('click', function () {
+          var actual = diagram.classList.toggle('actual');
+          zoom.setAttribute('aria-pressed', String(actual));
+          zoom.textContent = actual ? 'Fit' : 'Actual size';
+        });
+
+        /* ---- the error names a line, so clicking it goes there ---- */
+
+        error.addEventListener('click', function () {
+          if (errorLine === null) return;
+          var lines = source.value.split('\n');
+          var start = 0;
+          for (var i = 0; i < errorLine - 1 && i < lines.length; i++) start += lines[i].length + 1;
+          var end = start + (lines[errorLine - 1] || '').length;
+          source.focus();
+          source.setSelectionRange(start, end);
+          // Chrome does not scroll a selection made from outside the field into
+          // view, so the line can be selected and still be off-screen. Leaving
+          // and re-entering is what makes it scroll.
+          source.blur();
+          source.focus();
+        });
+
+        var pending = null;
+        source.addEventListener('input', function () {
+          draw();
+          mark(named(source.value));
+          // The URL and the stored copy trail the typing rather than following
+          // every keystroke: neither is looked at until the page is left.
+          if (pending) clearTimeout(pending);
+          pending = setTimeout(stow, 400);
+        });
+
+        window.addEventListener('hashchange', function () {
+          var fragment = location.hash.slice(1);
+          if (!fragment) return;
+          try {
+            var text = decode(fragment);
+            if (text !== source.value) load(text, named(text));
+          } catch (e) {
+            /* not ours */
+          }
+        });
+
+        // No stow() on the way in: an untouched visit keeps a clean URL, and the
+        // page only starts writing one once there is an edit worth sharing.
+        source.value = opening();
+        mark(named(source.value));
         draw();
       })();
     </script>

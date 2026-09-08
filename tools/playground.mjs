@@ -18,11 +18,32 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolvePath(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = join(root, 'dist');
+const examples = join(root, 'examples');
 const template = join(root, 'tools', 'playground.html');
 const target = join(root, 'docs', 'index.html');
 
 /** What the page is allowed to reach: the pipeline, plus what it needs to report an error. */
 const EXPOSED = ['compile', 'SourceError'];
+
+// The examples the page offers, in the order the buttons appear. Every construct
+// in the language is demonstrated by one of these files and by nothing else the
+// page can reach, so leaving them out makes the playground a five-line demo. The
+// list is stated rather than globbed: the order is the point (the benchmark
+// first, then placement, appearance, links), and a new file under examples/ is
+// not automatically something a stranger should be handed.
+const OFFERED = [
+  'arch',
+  'regions',
+  'gaps',
+  'snug',
+  'separation',
+  'shapes',
+  'icons',
+  'labels',
+  'lanes',
+  'corridors',
+  'overhang',
+];
 
 const IMPORT = /^import\s+[\s\S]*?\s+from\s+'([^']+)';$/gm;
 const REEXPORT = /^export\s+(?:\*|\{[\s\S]*?\})\s+from\s+'[^']+';$/gm;
@@ -94,15 +115,32 @@ const bundle = [
   '})();',
 ].join('\n');
 
-const page = readFileSync(template, 'utf8');
-const marker = '<!-- RELADRAW_BUNDLE -->';
-if (!page.includes(marker)) throw new Error(`${template} has no ${marker} to replace`);
+const catalogue = OFFERED.map((name) => ({
+  name,
+  source: readFileSync(join(examples, `${name}.reladraw`), 'utf8'),
+}));
 
-// A literal </script> anywhere in the library would close the tag early. Nothing
-// emits one today; escaping it costs nothing and removes the whole class.
+const page = readFileSync(template, 'utf8');
+
+function fill(text, marker, replacement) {
+  if (!text.includes(marker)) throw new Error(`${template} has no ${marker} to replace`);
+  // A literal </script> in the inlined text would close the tag early. Nothing
+  // emits one today; escaping it costs nothing and removes the whole class.
+  return text.replace(marker, `<script>\n${replacement.replace(/<\/script/gi, '<\\/script')}\n</script>`);
+}
+
+const catalogueScript = `globalThis.reladrawExamples = ${JSON.stringify(catalogue)};`;
+
 writeFileSync(
   target,
-  page.replace(marker, `<script>\n${bundle.replace(/<\/script/gi, '<\\/script')}\n</script>`),
+  fill(
+    fill(page, '<!-- RELADRAW_EXAMPLES -->', catalogueScript),
+    '<!-- RELADRAW_BUNDLE -->',
+    bundle,
+  ),
 );
 
-console.log(`${target}  (${modules.length} modules, ${bundle.length} bytes inlined)`);
+console.log(
+  `${target}  (${modules.length} modules, ${bundle.length} bytes inlined; ` +
+    `${catalogue.length} examples, ${catalogueScript.length} bytes)`,
+);

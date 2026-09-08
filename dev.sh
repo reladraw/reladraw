@@ -39,6 +39,12 @@ Commands:
                                  docs/index.html. Re-run after any source
                                  change, or the hosted page demonstrates an
                                  older version of the language.
+  page [out.png] [WxH]          Screenshot the built playground page. `page dom`
+                                 prints the DOM after its scripts have run,
+                                 which is how you check the page assembled
+                                 itself without opening a browser. Run
+                                 `playground` first — this looks at what is on
+                                 disk, not at the template.
   regress [ref]                 Render every example with the working tree and
                                  with the source at <ref> (default HEAD) and
                                  report which ones moved. The check to run after
@@ -203,6 +209,25 @@ case "$cmd" in
     # docs/index.html is generated: the page from tools/playground.html with the
     # whole compiled library inlined, so it needs no server and no bundler.
     node tools/playground.mjs
+    ;;
+  page)
+    # The same headless Chrome the SVG screenshots go through, pointed at the
+    # page rather than at a drawing. The DOM mode exists because most of what
+    # can go wrong in the playground is a script that never ran: the picture
+    # looks plausible and the buttons are simply absent.
+    if [ "${1:-}" = "dom" ]; then
+      # An optional fragment, so the shared-link path can be exercised too:
+      # ./dev.sh page dom "$(printf '%s' "$src" | base64 -w0 | tr '+/' '-_')"
+      # A file:// URL, not a path: given a bare path Chrome escapes the '#' to
+      # %23 and the fragment is never seen by the page.
+      url="file://$PWD/docs/index.html${2:+#$2}"
+      "$(chrome_bin)" --headless --disable-gpu --no-sandbox \
+        --virtual-time-budget=2000 --dump-dom "$url" 2>/dev/null
+    else
+      out="${1:-$(mktemp -t reladraw-page-XXXXXX.png)}"
+      screenshot "$PWD/docs/index.html" "$out" "${2:-1600x1000}" "0d0d10"
+      echo "$out"
+    fi
     ;;
   boxes)
     node tools/geometry.mjs boxes "${1:?input .reladraw path required}"
