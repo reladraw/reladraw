@@ -29,7 +29,7 @@ link left_wall -> wedge  from: right  to: left
 link wedge -> right_wall  from: right  to: left
 
 // A node's `gap:` reaches the placements written *against* it as well as its
-// own. `island` names nothing and states wide; both neighbours are held off at
+// own. `island` names nothing and states wide; both neighbors are held off at
 // that distance, which is what lets an author push a box away from what is
 // crowding it without first working out which line happens to mention which.
 //

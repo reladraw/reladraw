@@ -88,8 +88,8 @@ export const LABEL_CLEARANCE = 20;
  * renderer, which spaces the lanes of a channel by it, so the two cannot
  * disagree about how much room a label needs. The two ask different questions of
  * it and both are right: the resolver measures *along* the run, so a link
- * travelling horizontally needs the label's width; the renderer measures *across*
- * the channel, so a link travelling horizontally down one needs its height.
+ * traveling horizontally needs the label's width; the renderer measures *across*
+ * the channel, so a link traveling horizontally down one needs its height.
  */
 export function labelExtent(
   label: string,
@@ -141,7 +141,7 @@ export const TEXT_SIZES: Record<string, number> = {
  * the diagram rather than being part of it, and at the size of a box label an
  * aside reads as a statement — so `note` starts small and says so by being a
  * note. This is a default and not a ceiling: `size:` overrides it, the same way
- * `fill:` overrides the theme's colour.
+ * `fill:` overrides the theme's color.
  */
 const DEFAULT_TEXT_SIZE: Record<string, string> = { note: 'small' };
 
@@ -179,20 +179,19 @@ export const DEFAULT_MARGIN = 40;
  * rather than process" and a reader decodes it, while "lower down" means only
  * lower down.
  *
- * A leaf has no band — its label is centred in the box — so neither says
+ * A leaf has no band — its label is centered in the box — so neither says
  * anything about one.
  */
 export const LABEL_ENDS = ['top', 'bottom'] as const;
 export type LabelEnd = (typeof LABEL_ENDS)[number];
 
 /**
- * Author's word to the SVG's. Both spellings of the middle one are taken: this
- * is a vocabulary an author types from memory, and being right about the
- * arrangement and wrong about a dialect is not a mistake worth an error.
+ * Author's word to the SVG's. One spelling of each, per the rule that refuses
+ * synonyms for `box` and `link`: an alias is a variant a reader has to learn,
+ * and every document and example has to pick one of them anyway.
  */
 const LABEL_ALIGNMENTS: Record<string, 'start' | 'middle' | 'end'> = {
   left: 'start',
-  centre: 'middle',
   center: 'middle',
   right: 'end',
 };
@@ -216,7 +215,7 @@ export function labelStyleFor(label: Attrs, line: number): LabelStyle {
   }
   const align = label['align'];
   if (align !== undefined && LABEL_ALIGNMENTS[align] === undefined) {
-    throw new SourceError(`a label's align takes left, centre or right, not "${align}"`, line);
+    throw new SourceError(`a label's align takes left, center or right, not "${align}"`, line);
   }
   return {
     at: (at as LabelEnd | undefined) ?? 'top',

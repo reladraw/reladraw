@@ -22,9 +22,9 @@
 import { SourceError } from './errors.js';
 
 /**
- * Icons carry three tones rather than colours. `ink` is the drawn line, `shade`
+ * Icons carry three tones rather than colors. `ink` is the drawn line, `shade`
  * the body it encloses, and `void` is the page showing through — the same
- * knockout a link label already uses. Naming tones instead of colours is what
+ * knockout a link label already uses. Naming tones instead of colors is what
  * lets one glyph sit correctly on a dark theme and a light one.
  */
 export type IconTone = 'ink' | 'shade' | 'void';
@@ -50,7 +50,7 @@ function circle(cx: number, cy: number, r: number): string {
   return `M${cx - r} ${cy} a${r} ${r} 0 1 0 ${r * 2} 0 a${r} ${r} 0 1 0 ${-r * 2} 0 Z`;
 }
 
-/** The three visible faces of an isometric cube, top face centred on `cx, cy`. */
+/** The three visible faces of an isometric cube, top face centered on `cx, cy`. */
 function cube(cx: number, cy: number, s: number): IconPath[] {
   const half = s / 2;
   return [
@@ -156,7 +156,7 @@ export const ICON_NAMES = Object.keys(ICONS);
  *
  * Named for what a node *is*, never for the geometry, which is the same rule the
  * icon names follow: `document` and not `folded-corner`. A shape carrying a
- * conventional meaning is a second channel alongside colour, and a stronger one
+ * conventional meaning is a second channel alongside color, and a stronger one
  * — a fill is whatever the author assigned and has to be learnt from the
  * diagram, while a folded corner has meant "an artifact, not a process" in
  * flowcharts for decades and reads with no legend at all.

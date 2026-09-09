@@ -1,7 +1,7 @@
 // Several links between the same two boxes with no side named anywhere.
 //
 // An unnamed end names no side to be spread along: it aims at the far box's
-// centre and attaches wherever that ray crosses the border, so every link
+// center and attaches wherever that ray crosses the border, so every link
 // between one pair produces the same ray and they are drawn on top of each
 // other — one visible line, every label stacked on one point.
 //
@@ -41,7 +41,7 @@ link near -> far  "one"
 link near -> far  "two"
 
 // A lone unnamed link is in no group and is untouched: it still attaches where
-// the centre-to-centre ray crosses the border.
+// the center-to-center ray crosses the border.
 box solo  "Solo"   below near (gap: wide)  style: box
 box alone "Alone"  right of solo (gap: wide)  level with solo  style: box
 link solo -> alone  "by itself"

@@ -51,7 +51,7 @@ export function resolve(doc: Document, options: ResolveOptions = {}): Layout {
   const { nodes, byName, roots } = buildTree(doc.statements, styles);
   applyDecks(doc.statements, byName);
 
-  // Links are resolved to nodes before anything is sized, because a labelled
+  // Links are resolved to nodes before anything is sized, because a labeled
   // link claims room in the gap it crosses and so has to be in hand while the
   // gaps are being worked out. Nothing here reads geometry.
   const links = buildLinks(doc.statements, byName, styles);
@@ -283,13 +283,13 @@ function sizeNode(
 
   if (node.children.length === 0) {
     // A band only exists because contents have to sit clear of it. A leaf has
-    // none, so its label is centred in the box and there is nothing for `at` or
+    // none, so its label is centered in the box and there is nothing for `at` or
     // `align` to move it relative to. Refused rather than silently dropped.
     const stated = Object.keys(node.label);
     if (stated.length > 0) {
       throw new SourceError(
         `"${node.name}" holds nothing and its label carries ${stated.join(' and ')}. ` +
-          `A label sits at one end of a box so its contents can have the other; with no contents it is centred, and there is nothing to say`,
+          `A label sits at one end of a box so its contents can have the other; with no contents it is centered, and there is nothing to say`,
         node.line,
       );
     }
@@ -523,12 +523,12 @@ interface Target {
 }
 
 /**
- * A labelled link's claim on the gap between its two ends.
+ * A labeled link's claim on the gap between its two ends.
  *
  * A link is not a placement and never says where anything goes. But its label is
  * drawn in the gap it crosses, and a gap sized for two boxes to breathe is not a
  * gap sized to hold a word — which is how a diagram that says nothing wrong ends
- * up with `rclone` written across the box it points at. So a labelled link is
+ * up with `rclone` written across the box it points at. So a labeled link is
  * treated the way anything else put between two things is: it widens the space
  * between them by exactly what it needs, and closes it again when the label goes.
  *
@@ -574,7 +574,7 @@ function liftTo(
   };
 }
 
-/** The labelled links whose two ends are different members of this group. */
+/** The labeled links whose two ends are different members of this group. */
 function corridorsIn(
   links: LayoutLink[],
   locate: (node: LayoutNode) => Target | undefined,
@@ -583,7 +583,7 @@ function corridorsIn(
 ): Corridor[] {
   const corridors: Corridor[] = [];
   for (const link of links) {
-    // An unlabelled link asks for nothing: every gap holds an arrowhead. And a
+    // An unlabeled link asks for nothing: every gap holds an arrowhead. And a
     // link told to pass between two named things carries its label in *that*
     // corridor rather than in the gap between its own ends, so widening this one
     // would make room where the label never goes.
@@ -728,11 +728,11 @@ function positionGroup(
       }
     }
 
-    // An axis nobody spoke to falls back to the centre line of whatever the
+    // An axis nobody spoke to falls back to the center line of whatever the
     // node was placed against, which is why "right of docker" alone is a whole
     // position. Two different targets would decide which row the node shares,
     // so that is refused rather than guessed — but two targets named by one
-    // placement are a single region, and centring on it is unambiguous.
+    // placement are a single region, and centering on it is unambiguous.
     for (const axis of AXES) {
       if (spokenFor[axis]) continue;
       const offers = located.filter((entry) => entry.placement.kind === 'offset');
@@ -753,7 +753,7 @@ function positionGroup(
           other.placement.line,
         );
       }
-      alignOn(axis, 'centre', first.targets, first.placement);
+      alignOn(axis, 'center', first.targets, first.placement);
     }
   }
 
@@ -805,7 +805,7 @@ function spanOf(
 
 /** Where a node of this size sits so that the named edge of it meets the span's. */
 function alignedAt(edge: Edge, span: { start: number; size: number }, own: number): number {
-  if (edge === 'centre') return span.start + (span.size - own) / 2;
+  if (edge === 'center') return span.start + (span.size - own) / 2;
   if (edge === 'top' || edge === 'left') return span.start;
   return span.start + span.size - own;
 }

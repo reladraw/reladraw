@@ -34,13 +34,13 @@ Pull requests are read, and I am grateful for them, but they are not being
 merged right now. This is not a closed-to-outsiders project and the reason is
 narrow. Under Apache-2.0, a contribution arrives licensed on the same terms as
 everything else here — you keep your copyright, and I would never ask you to
-sign it away. But that also means the project's licence could then only ever
+sign it away. But that also means the project's license could then only ever
 stay Apache-2.0, and I am not yet ready to close off dual-licensing. A
-licence-grant CLA is the normal way to keep that open, and there is not one yet
+license-grant CLA is the normal way to keep that open, and there is not one yet
 because there has been nobody to sign it.
 
 So if you have written something you want in, say so in the issue. When there is
-code that genuinely belongs in the project, that is when a licence-grant CLA gets
+code that genuinely belongs in the project, that is when a license-grant CLA gets
 set up — and that is a good problem to have, not a rejection.
 
 In the meantime: the problem you hit is more valuable to this project than the

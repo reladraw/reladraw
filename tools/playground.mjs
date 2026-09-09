@@ -24,7 +24,7 @@ const target = join(root, 'docs', 'index.html');
 
 /**
  * What the page is allowed to reach: the pipeline, what it needs to report an
- * error, and the line scanner behind the editor's syntax colouring.
+ * error, and the line scanner behind the editor's syntax coloring.
  */
 const EXPOSED = ['compile', 'SourceError', 'highlightLine'];
 

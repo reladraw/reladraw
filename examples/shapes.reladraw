@@ -6,7 +6,7 @@
 // whether the node still sizes itself from its label.
 //
 // The benchmark exercises `document` on two wide boxes and `instance` on five
-// unlabelled ones. What is here instead: the fold at several box widths, a
+// unlabeled ones. What is here instead: the fold at several box widths, a
 // glyph body with a label under it, and a shape carried by a style.
 
 diagram  background: #111111
@@ -28,7 +28,7 @@ box services.web    "web"                          shape: instance
 box services.api    "api"     right of services.web  gap: tight  shape: instance
 box services.worker "worker"  right of services.api  gap: tight  shape: instance
 
-// Unlabelled, so the node is exactly the glyph. These are the shape the
+// Unlabeled, so the node is exactly the glyph. These are the shape the
 // benchmark's Docker cubes take.
 box bare1 ""  below services (gap: normal)  shape: instance
 box bare2 ""  below bare1     gap: tight  shape: instance
@@ -45,12 +45,12 @@ box store ""  below bare2 (gap: normal)  shape: database
 box drive ""  right of store  gap: tight  shape: disk
 
 // A label's own modifiers ride in brackets on the label. `at: bottom` puts it
-// under the contents, `align: centre` centres it, and neither implies the other.
+// under the contents, `align: center` centers it, and neither implies the other.
 //
-// The lower row is centred between the upper pair with no construct for it: a
-// lone directional placement binds the other axis to its target's centre, and
+// The lower row is centered between the upper pair with no construct for it: a
+// lone directional placement binds the other axis to its target's center, and
 // naming two targets makes that target the region bounding both.
-box pool "Worker pool" (at: bottom, align: centre)  right of store and drive (gap: wide)  level with store, drive 
+box pool "Worker pool" (at: bottom, align: center)  right of store and drive (gap: wide)  level with store, drive 
 box pool.one    ""  shape: instance
 box pool.two    ""  right of pool.one  gap: tight  shape: instance
 box pool.three  ""  below pool.one and pool.two  gap: tight  shape: instance

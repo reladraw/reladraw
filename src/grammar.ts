@@ -1,10 +1,10 @@
 /**
  * The language's *lexical* vocabulary, and a scanner that classifies one line of
- * source into coloured spans.
+ * source into colored spans.
  *
  * This is deliberately separate from `parser.ts`, and it is not a second parser.
  * The parser answers "what does this file mean" and refuses anything it cannot
- * answer for; a highlighter has to colour a half-typed line without complaint,
+ * answer for; a highlighter has to color a half-typed line without complaint,
  * so it answers only "what kind of word is this" and never fails. Every rule
  * below is a regex applied to a single line, in priority order, with one bit of
  * carried state (whether anything has been seen on the line yet, and whether the
@@ -26,7 +26,7 @@
 
 import { DIRECTIONS, EDGES, PASSAGE_AXES } from './ast.js';
 
-/** What a span of source is, for colouring. */
+/** What a span of source is, for coloring. */
 export type TokenKind =
   /** `// to the end of the line` */
   | 'comment'
@@ -45,7 +45,7 @@ export type TokenKind =
   /** The single word an attribute takes. */
   | 'value'
   /** `#14532d`, wherever it appears. */
-  | 'colour'
+  | 'color'
   /** `(` and `)` around a placement's or a label's modifiers. */
   | 'bracket'
   /** Everything else: node names being referred to, and whitespace. */
@@ -61,7 +61,7 @@ export interface Span {
 /**
  * The words a statement may open with. `parseStatement` in `parser.ts` is the
  * authority — its switch is what actually accepts them — and this list mirrors
- * it. A word missing here is a word that draws in the plain colour, which is a
+ * it. A word missing here is a word that draws in the plain color, which is a
  * dull page rather than a wrong one.
  */
 export const STATEMENT_KEYWORDS = ['box', 'note', 'link', 'deck', 'style', 'diagram'] as const;
@@ -72,7 +72,7 @@ const DECLARES_NAME = ['box', 'note', 'deck', 'style'];
 /**
  * Every word that says something about where a thing goes. Assembled from the
  * lists the parser itself reads, so a direction or a passage axis added there
- * colours here without anybody remembering to come back.
+ * colors here without anybody remembering to come back.
  */
 export const RELATION_WORDS: string[] = [
   ...DIRECTIONS,
@@ -110,7 +110,7 @@ export const PATTERNS = {
   // `<->` first, or `<-` would match its opening half and leave a stray `>`.
   arrow: '<->|->|<-',
   attribute: '[A-Za-z][A-Za-z0-9_-]*:',
-  colour: '#[0-9A-Fa-f]{3,8}\\b',
+  color: '#[0-9A-Fa-f]{3,8}\\b',
   relation: `(?:${alternation(RELATION_WORDS)})\\b`,
   bracket: '[()]',
   // Matches what `tokenizeLine` treats as one bare token, and the awkwardness is
@@ -141,7 +141,7 @@ const RULES: Array<{ kind: TokenKind; re: RegExp }> = [
   // Before `relation`, because the trailing colon is what tells `left: …` from
   // the `left` of a placement, and after `arrow` so `->` is never a word.
   { kind: 'attribute', re: sticky(PATTERNS.attribute) },
-  { kind: 'colour', re: sticky(PATTERNS.colour) },
+  { kind: 'color', re: sticky(PATTERNS.color) },
   { kind: 'relation', re: sticky(PATTERNS.relation) },
 ];
 
@@ -208,7 +208,7 @@ export function highlightLine(line: string): Span[] {
             const name = match(WORD, line, at);
             // `style backup  stroke: …` declares a name; `box  fill: red` is a
             // half-typed line whose second word is already an attribute, and
-            // colouring that as a name would be a lie about what it is.
+            // coloring that as a name would be a lie about what it is.
             if (name !== null && !name.endsWith(':')) push('name', at + name.length);
           }
         }
@@ -242,7 +242,7 @@ export function highlightLine(line: string): Span[] {
       // would otherwise have been called: `to: right` is a value, not a
       // direction, and `style: wide` is a style name, not a gap.
       const kind =
-        expectingValue && rule.kind !== 'string' && rule.kind !== 'colour' && rule.kind !== 'bracket'
+        expectingValue && rule.kind !== 'string' && rule.kind !== 'color' && rule.kind !== 'bracket'
           ? 'value'
           : rule.kind;
       expectingValue = rule.kind === 'attribute';

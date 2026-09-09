@@ -12,7 +12,7 @@ export interface Token {
  * runs to the end of the line, so a comment may trail a statement.
  *
  * A lone `/` is an ordinary character, which keeps a path or a ratio writable
- * unquoted. `#` is ordinary too: it opens a hex colour, which is why comments
+ * unquoted. `#` is ordinary too: it opens a hex color, which is why comments
  * are spelled `//` rather than the `#` an earlier version used.
  *
  * Parentheses group the modifiers on a placement — `left of hub (gap: wide)` —

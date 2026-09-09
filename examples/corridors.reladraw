@@ -30,7 +30,7 @@ link lower -> east  "under"  between north and south  from: right  to: left
 // line runs down it. Nothing had to say which axis was meant either time.
 //
 // This link names no sides, which is the other case: an end the author left
-// open would otherwise aim at the far box's centre, and it aims at the channel
+// open would otherwise aim at the far box's center, and it aims at the channel
 // instead — so the line leaves `bow` already heading for the gap.
 
 box bow        "Bow"        below lower  gap: wide
@@ -40,7 +40,7 @@ box stern      "Stern"      below port   gap: wide
 
 link bow -> stern  "down"  between port and starboard
 
-// --- travelling the other way ------------------------------------------------
+// --- traveling the other way ------------------------------------------------
 // The run is read in the direction the link actually goes, so a channel works
 // the same backwards. This one carries no label, so its lane needs only the
 // spacing two arrows need.

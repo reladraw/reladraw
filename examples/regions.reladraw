@@ -10,7 +10,7 @@
 // the region, which is the whole point of naming a region rather than a box.
 //
 // An alignment uses the region as a position, and "top level with" takes an
-// edge of it rather than its centre line. The three stacked boxes are not
+// edge of it rather than its center line. The three stacked boxes are not
 // inside a container, so the region they bound is not known until the diagram
 // has been solved once; it is measured off that first solution and pinned.
 //
@@ -24,4 +24,4 @@ box three  "third with a longer label"  below two
 note spans  "level with all three, and clear of the widest"  right of one and three  width: 24  gap: wide
 note tops   "top level with the second box"                  right of two  top level with two  width: 20  gap: tight
 
-box beside  "centred on the top two"  right of spans  level with one and two  gap: wide
+box beside  "centered on the top two"  right of spans  level with one and two  gap: wide

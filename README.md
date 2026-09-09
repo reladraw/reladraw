@@ -77,7 +77,7 @@ node dist/cli.js examples/arch.reladraw -o out.svg
 Not built yet, roughly in the order they are missed:
 
 - **The diagnostics report.** The scope section below says what it is for. Today the tool either renders or fails; it will not tell you what is wrong with a picture it drew successfully.
-- **Edge routing around boxes.** A link can be told which side of a box to leave and arrive on, and which gap to run down on the way. A link that says none of that is a straight line between two centres, and it will cut through whatever stands in the way.
+- **Edge routing around boxes.** A link can be told which side of a box to leave and arrive on, and which gap to run down on the way. A link that says none of that is a straight line between two centers, and it will cut through whatever stands in the way.
 - **More glyphs.** Icons and shapes are closed sets drawn from path data inside the tool, so a diagram wanting one that is not there has nowhere to go.
 
 The language is not stable. Expect the syntax to change.
@@ -125,13 +125,13 @@ Four things sit near this, and each answers a different part of the problem.
 
 **Graphviz `rank` and `cluster`.** Constraints on an auto-layout engine rather than a replacement for one, so output stays emergent and unpredictable from the source.
 
-**Structurizr.** Has real manual layout, but is bound to the C4 model, which makes it a modelling notation with a renderer attached rather than a general placement language.
+**Structurizr.** Has real manual layout, but is bound to the C4 model, which makes it a modeling notation with a renderer attached rather than a general placement language.
 
 ## License
 
 Apache-2.0. This is a reusable primitive where adoption is the value, so restricting commercial use would defeat the purpose. See [LICENSE](LICENSE).
 
-The licence covers the code, not the name: it grants no rights to use "reladraw", the project logo, or the project's other marks. Forks are welcome and should carry a different name. See [NOTICE](NOTICE).
+The license covers the code, not the name: it grants no rights to use "reladraw", the project logo, or the project's other marks. Forks are welcome and should carry a different name. See [NOTICE](NOTICE).
 
 ## Contributing
 

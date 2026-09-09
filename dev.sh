@@ -68,11 +68,17 @@ Commands:
                                  report which ones moved. The check to run after
                                  any renderer or resolver change: what the change
                                  does not concern should be byte-identical.
+  pictures [ref]                Render every example as <ref> has it (its own
+                                 sources, its own build) and as the working tree
+                                 has it, and say which pictures changed. regress
+                                 holds the sources fixed to isolate the code, so
+                                 it cannot see an edit to an example file; this
+                                 is the other half.
   boxes <file>                  Print the solved geometry of every node
   overlaps <file>               List box pairs that share space (exit 1 if any)
   tokens <file>                 Print how the syntax scanner classifies each
                                  line, and check the spans cover it exactly.
-                                 The playground draws its colouring behind a
+                                 The playground draws its coloring behind a
                                  transparent textarea, so a dropped character
                                  slides the whole line out of register.
   screenshot <in.svg> <out.png> [WxH] [bg]
@@ -82,13 +88,13 @@ Commands:
                                  RGB/RGBA with no leading '#', or the words
                                  white / black / transparent.
 
-Reading colours out of a reference image (all take any PNG):
-  pixel <img> <x> <y>           Hex colour of one pixel
-  palette <img> [WxH+X+Y] [n]   The n most common colours in a region, biggest
+Reading colors out of a reference image (all take any PNG):
+  pixel <img> <x> <y>           Hex color of one pixel
+  palette <img> [WxH+X+Y] [n]   The n most common colors in a region, biggest
                                  first. Region defaults to the whole image,
                                  n to 12.
   scan <img> <y> [x0] [w]       Walk left to right along row <y> and print each
-                                 x where the colour changes. This is how you
+                                 x where the color changes. This is how you
                                  find a border: the fill runs flat for a long
                                  stretch and the edge shows up as a one- or
                                  two-pixel spike. x0 defaults to 0, w to 900.
@@ -295,7 +301,7 @@ case "$cmd" in
     else
       out="${1:-$(mktemp -t reladraw-page-XXXXXX.png)}"
       # A fragment here too, for the same reason the DOM mode takes one, and for
-      # one more: the editor's syntax colouring is drawn behind the textarea, so
+      # one more: the editor's syntax coloring is drawn behind the textarea, so
       # the thing to look at is a long file in a narrow pane, and the fragment is
       # how you get a long file into the page without clicking anything.
       # A file:// URL rather than a path, for the reason the DOM mode gives:
@@ -343,6 +349,46 @@ case "$cmd" in
       fi
     done
     echo "$moved of $(ls examples/*.reladraw | wc -l | tr -d ' ') examples differ from $ref"
+    ;;
+  pictures)
+    # The end-to-end counterpart to `regress`: each side renders its *own*
+    # sources with its *own* build, so an edit to an example file shows up here
+    # and a pure code change shows up in both. A baseline that fails to render
+    # counts as changed and says so, rather than being swallowed the way a
+    # missing file would be.
+    ref="${1:-HEAD}"
+    work="$(mktemp -d -t reladraw-pictures-XXXXXX)"
+    trap 'rm -rf "$work"' EXIT
+    mkdir -p "$work/base" "$work/out"
+    git archive "$ref" | tar -x -C "$work/base"
+    ln -s "$PWD/node_modules" "$work/base/node_modules"
+    (cd "$work/base" && npx tsc >/dev/null)
+
+    npx tsc >/dev/null
+    moved=0
+    for in in examples/*.reladraw; do
+      name="$(basename "$in" .reladraw)"
+      base_in="$work/base/examples/$name.reladraw"
+      if [ ! -f "$base_in" ]; then
+        echo "NEW   $name"
+        moved=$((moved + 1))
+        continue
+      fi
+      if ! (cd "$work/base" && node dist/cli.js "examples/$name.reladraw" \
+              -o "$work/out/$name.base.svg") >/dev/null 2>&1; then
+        echo "BROKE $name  (does not render at $ref)"
+        moved=$((moved + 1))
+        continue
+      fi
+      node dist/cli.js "$in" -o "$work/out/$name.head.svg" >/dev/null 2>&1 || true
+      if cmp -s "$work/out/$name.base.svg" "$work/out/$name.head.svg"; then
+        echo "same  $name"
+      else
+        echo "MOVED $name"
+        moved=$((moved + 1))
+      fi
+    done
+    echo "$moved of $(ls examples/*.reladraw | wc -l | tr -d ' ') pictures differ from $ref"
     ;;
   before)
     # One example as a git ref renders it, beside the working tree's own render.

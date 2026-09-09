@@ -2,7 +2,7 @@
 //
 // Nothing here says that the wide box must clear "left" — that is implicit on
 // every pair. What the file does say is enough to fix the direction: "middle"
-// is right of "left", and the wide box is centred under "middle", so the file
+// is right of "left", and the wide box is centered under "middle", so the file
 // lets the wide box travel rightward away from "left" and offers no way back.
 // Separating the other way would contradict a line that was written.
 //

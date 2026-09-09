@@ -1,6 +1,6 @@
 // Print how `src/grammar.ts` classifies a .reladraw file, one line at a time.
 //
-// The syntax colouring in the playground is drawn behind a transparent
+// The syntax coloring in the playground is drawn behind a transparent
 // textarea, so every character of the source has to come out of the scanner
 // exactly once and in order — a dropped one slides the whole rest of the line
 // out of register with the text the reader is typing. That is invisible in a
@@ -15,7 +15,7 @@ if (!file) {
   process.exit(2);
 }
 
-// A letter per kind, so a whole file's colouring reads as a shape under the
+// A letter per kind, so a whole file's coloring reads as a shape under the
 // source rather than as a wall of names.
 const MARK = {
   comment: '.',
@@ -26,7 +26,7 @@ const MARK = {
   relation: 'r',
   attribute: 'a',
   value: 'v',
-  colour: '#',
+  color: '#',
   bracket: '(',
   plain: ' ',
 };

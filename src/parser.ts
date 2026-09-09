@@ -326,7 +326,7 @@ function parsePlacements(tokens: Token[], line: number, subject: string): Placem
       throw new SourceError(`${subject}: unexpected text "${word.text}"`, line);
     }
 
-    // `top level with media` names an edge rather than the centre line. `left`
+    // `top level with media` names an edge rather than the center line. `left`
     // and `right` are edges as well as directions, so it is the word after them
     // that says which was meant — "left of bup_hd" against "left level with bup_hd".
     const edge = isEdgeWord(word.text) && follows(tokens, i + 1, 'level') ? word.text : undefined;
@@ -352,8 +352,8 @@ function parsePlacements(tokens: Token[], line: number, subject: string): Placem
       }
       placements.push({
         kind: 'align',
-        axis: EDGE_AXIS[edge ?? 'centre'],
-        edge: edge ?? 'centre',
+        axis: EDGE_AXIS[edge ?? 'center'],
+        edge: edge ?? 'center',
         targets: read.targets,
         line,
       });
@@ -451,7 +451,7 @@ function readBracket(
       throw new SourceError(`${about.subject}: "${key}" has no value`, about.line);
     }
     // A comma between modifiers is punctuation, exactly as it is between the
-    // targets of a placement. `(at: bottom, align: centre)` and the same without
+    // targets of a placement. `(at: bottom, align: center)` and the same without
     // the comma are the same statement.
     const value = valueToken.text;
     values[key] = value.endsWith(',') && value.length > 1 ? value.slice(0, -1) : value;
@@ -477,7 +477,7 @@ function startsPlacement(token: Token): boolean {
 }
 
 function isEdgeWord(word: string): word is Edge {
-  return word !== 'centre' && (EDGES as readonly string[]).includes(word);
+  return word !== 'center' && (EDGES as readonly string[]).includes(word);
 }
 
 /**

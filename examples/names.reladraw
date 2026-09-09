@@ -1,4 +1,4 @@
-// A box with no text is labelled with its own name. The first lines anybody
+// A box with no text is labeled with its own name. The first lines anybody
 // types are these, and before this they were a parse error asking for quotes
 // before anything had appeared on the canvas.
 

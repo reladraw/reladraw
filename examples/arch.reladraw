@@ -5,12 +5,12 @@
 // This file is the benchmark. It exists to be compared against that render,
 // and to show up whatever the language cannot yet say.
 
-// Colour is written as the viewer receives it. The style name is what carries
-// the meaning, so a diagram says `style: synced` and never a colour directly.
+// Color is written as the viewer receives it. The style name is what carries
+// the meaning, so a diagram says `style: synced` and never a color directly.
 style synced     fill: #142814  stroke: #486544  subtext: muted
 style backup     stroke: #d2904e
 // A dump is an artifact rather than a service, and the folded corner is what
-// says so. Colour alone cannot: the dark red means "a dump" only to someone who
+// says so. Color alone cannot: the dark red means "a dump" only to someone who
 // has already read the diagram, while a folded corner has meant "a document"
 // for as long as there have been flowcharts.
 style dump       fill: #460000  stroke: #4e4e4e  shape: document
@@ -90,19 +90,19 @@ box server.deploy  "services deploy dir"  below server.mirror  gap: normal
 // container would be claiming in decoration what the contents now say for real.
 //
 // Three of the five carry no meaning beyond "and others", which is why they are
-// unnamed and unlabelled. The two that are the ends of arrows have names.
+// unnamed and unlabeled. The two that are the ends of arrows have names.
 // The label's own modifiers ride in brackets on the label, the way a gap rides
 // on the placement it belongs to — `at` and `align` say where this label goes
 // and nothing else, and neither implies the other.
 //
-// The lower two cubes are each centred in the gap between two of the upper
+// The lower two cubes are each centered in the gap between two of the upper
 // three, and that needs no construct of its own: a lone directional placement
-// binds the other axis to its target's centre line, and a placement naming two
+// binds the other axis to its target's center line, and a placement naming two
 // targets is about the region bounding both. So "below a and b" is "under the
-// pair, centred between them" — which is exactly what the reference draws.
+// pair, centered between them" — which is exactly what the reference draws.
 // Writing a second placement for the horizontal would drop that half and
 // left-justify the row, which is what the first version of this did.
-box server.docker  "Docker" (at: bottom, align: centre)  below server.deploy  gap: normal
+box server.docker  "Docker" (at: bottom, align: center)  below server.deploy  gap: normal
 box server.docker.a    ""  shape: instance
 box server.docker.b    ""  right of server.docker.a  gap: tight  shape: instance
 box server.docker.db1  ""  right of server.docker.b  gap: tight  shape: instance
@@ -157,7 +157,7 @@ deck bup_hd "BUP-HD2" "BUP-HD3"
 // said about their vertical position: it falls out of the region they name.
 //
 // The third wants its top edge against the long-term storage box rather than
-// its centre line, which is what the edge form of the alignment is for.
+// its center line, which is what the edge form of the alignment is for.
 
 note rotations_note "Regular rotations backup \"important\" dir"  right of bup_hd.important_backup and bup_hd.bare  gap: tight  width: 28
 note archive_note "archive dirs remain untouched"  left of bup_hd.archive1 and bup_hd.archive2  gap: tight  width: 26  overlap: allow

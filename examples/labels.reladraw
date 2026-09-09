@@ -1,8 +1,8 @@
-// A labelled link widens the gap it crosses.
+// A labeled link widens the gap it crosses.
 //
 // Putting something between two things is what pushes them apart, and a label
 // drawn in a corridor is something in that corridor. The benchmark exercises
-// none of this — every labelled link there either names a corridor of its own
+// none of this — every labeled link there either names a corridor of its own
 // or already had room — so this file carries the cases: a gap opened by a
 // label, the same gap left alone when the label goes, a vertical run where a
 // label is only a line deep, a corridor already wider than it needs, and the

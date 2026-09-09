@@ -47,7 +47,7 @@ const related = (a, b) => {
 };
 
 // `overlap: allow` is the author saying they meant it, and the resolver already
-// honours it. A check that reported those anyway would be reporting the file
+// honors it. A check that reported those anyway would be reporting the file
 // doing what it says, which trains you to ignore the output.
 const allowed = (node) => node.attrs['overlap'] === 'allow';
 

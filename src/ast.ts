@@ -23,16 +23,16 @@ export function isDirection(word: string): word is Direction {
 export type Axis = 'x' | 'y';
 
 /**
- * Which edge of the target a `level with` shares. `centre` is the plain form;
+ * Which edge of the target a `level with` shares. `center` is the plain form;
  * the rest are written in front of it, as in `top level with media`.
  */
-export const EDGES = ['centre', 'top', 'bottom', 'left', 'right'] as const;
+export const EDGES = ['center', 'top', 'bottom', 'left', 'right'] as const;
 
 export type Edge = (typeof EDGES)[number];
 
 /** An edge belongs to one axis, so an alignment never has to say which. */
 export const EDGE_AXIS: Record<Edge, Axis> = {
-  centre: 'y',
+  center: 'y',
   top: 'y',
   bottom: 'y',
   left: 'x',
@@ -67,7 +67,7 @@ export interface OffsetPlacement {
   line: number;
 }
 
-/** `level with docker` — share an edge or a centre line, with no gap in between. */
+/** `level with docker` — share an edge or a center line, with no gap in between. */
 export interface AlignPlacement {
   kind: 'align';
   axis: Axis;
@@ -84,7 +84,7 @@ export type Placement = OffsetPlacement | AlignPlacement;
 
 /**
  * The modifiers a placement understands, in brackets after its targets. Refused
- * by name when unrecognised, for the reason `DIAGRAM_KEYS` are: a modifier that
+ * by name when unrecognized, for the reason `DIAGRAM_KEYS` are: a modifier that
  * silently does nothing looks like a bug in the tool rather than a typo.
  */
 export const PLACEMENT_KEYS = ['gap'] as const;
@@ -93,7 +93,7 @@ export const PLACEMENT_KEYS = ['gap'] as const;
 export function describePlacement(placement: Placement): string {
   const targets = listTargets(placement.targets);
   if (placement.kind === 'align') {
-    const edge = placement.edge === 'centre' ? '' : `${placement.edge} `;
+    const edge = placement.edge === 'center' ? '' : `${placement.edge} `;
     return `${edge}level with ${targets}`;
   }
   // "left of X" and "above X" are both good English; "above of X" is not.
@@ -145,7 +145,7 @@ export function describeAxis(axis: Axis): string {
 export type Attrs = Record<string, string>;
 
 /**
- * What a label's brackets may say: `"Docker" (at: bottom, align: centre)`.
+ * What a label's brackets may say: `"Docker" (at: bottom, align: center)`.
  *
  * They are bracketed onto the label rather than written among the node's
  * attributes for the same reason a gap is bracketed onto its placement — they

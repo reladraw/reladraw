@@ -57,7 +57,7 @@ export const DARK_THEME: Theme = {
   mutedText: '#8b8b8b',
   link: '#5c5c7c',
   // Both sampled off the reference's machine glyphs. Note that the reference
-  // gives each icon its own hue — the drive is grey, the laptop periwinkle, the
+  // gives each icon its own hue — the drive is gray, the laptop periwinkle, the
   // workstation violet — which is a drawing tool's per-shape default and not a
   // system. One pair for the whole set is the deliberate difference: an icon
   // should read as part of the diagram's palette, not as clip art dropped in.
@@ -115,12 +115,12 @@ export function render(layout: Layout, options: RenderOptions = {}): string {
     height: Math.ceil(ink.maxY) - Math.floor(ink.minY),
   };
 
-  const arrowColours = new Set(layout.links.map((link) => colourOf(link.appearance, theme.link)));
+  const arrowColors = new Set(layout.links.map((link) => colorOf(link.appearance, theme.link)));
 
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}" viewBox="${canvas.x} ${canvas.y} ${canvas.width} ${canvas.height}" font-family=${quote(measurer.fontFamily)} font-size="${fontSize}px">`,
     '  <defs>',
-    ...[...arrowColours].map((colour) => arrowMarker(colour)),
+    ...[...arrowColors].map((color) => arrowMarker(color)),
     '  </defs>',
     `  <rect x="${canvas.x}" y="${canvas.y}" width="${canvas.width}" height="${canvas.height}" fill="${theme.background}"/>`,
     ...body,
@@ -146,7 +146,7 @@ function drawNode(
   if (node.kind === 'note') {
     return sized(
       textBlock(node.lines, node.x, node.y, node.width, textHeight, size, {
-        colour: colourOf(node.appearance, theme.text),
+        color: colorOf(node.appearance, theme.text),
         align: 'start',
       }),
       size,
@@ -160,14 +160,14 @@ function drawNode(
 
   if (shape.body !== undefined) {
     // No outline, no fill, no padding — the node is the picture. The label, if
-    // there is one, sits under it and centred.
+    // there is one, sits under it and centered.
     const drawn = [drawIcon(shape.body, node.x + (node.width - glyphSide) / 2, node.y, glyphSide, theme)];
     if (node.lines.some((line) => line.length > 0)) {
       drawn.push(
         sized(
           textBlock(node.lines, node.x, node.y + glyphSide + ICON_GAP, node.width, textHeight, size, {
-            colour: colourOf(node.appearance, theme.text),
-            subColour: subtextOf(node.appearance, theme),
+            color: colorOf(node.appearance, theme.text),
+            subColor: subtextOf(node.appearance, theme),
             align: 'middle',
           }),
           size,
@@ -181,9 +181,9 @@ function drawNode(
   const parts: string[] = [];
   const face = faceOf(node);
   const container = node.children.length > 0;
-  const stroke = colourOf(node.appearance, container ? theme.containerStroke : theme.boxStroke);
+  const stroke = colorOf(node.appearance, container ? theme.containerStroke : theme.boxStroke);
   const fill = fillOf(node.appearance, container ? theme.containerFill : theme.boxFill);
-  const subColour = subtextOf(node.appearance, theme);
+  const subColor = subtextOf(node.appearance, theme);
 
   // Deck copies sit behind the front face, furthest back drawn first.
   for (let depth = node.deckLabels.length; depth >= 1; depth -= 1) {
@@ -197,7 +197,7 @@ function drawNode(
       parts.push(
         sized(
           textBlock([label], x + PAD, y + PAD, face.width - PAD * 2, textHeight, size, {
-            colour: theme.text,
+            color: theme.text,
             align: 'start',
           }),
           size,
@@ -222,14 +222,14 @@ function drawNode(
   const iconRoom = icon === undefined ? 0 : iconSide + (hasLabel ? ICON_GAP : 0);
 
   if (!container) {
-    // A leaf centres its label in the box, both ways — in the room beside the
+    // A leaf centers its label in the box, both ways — in the room beside the
     // icon rather than the whole box, so the two sit side by side.
     const top = face.y + (face.height - node.lines.length * textHeight) / 2;
     parts.push(
       sized(
         textBlock(node.lines, face.x, top, face.width - iconRoom, textHeight, size, {
-          colour: theme.text,
-          subColour,
+          color: theme.text,
+          subColor,
           align: 'middle',
         }),
         size,
@@ -239,14 +239,14 @@ function drawNode(
   } else {
     // The label and the icon share a band at one end of the box, and the
     // resolver has already given the contents the other end. A heading is
-    // ranged left at the top; a caption is centred at the bottom.
+    // ranged left at the top; a caption is centered at the bottom.
     const band = Math.max(node.lines.length * textHeight, iconSide);
     const bandTop = labelStyle.at === 'top' ? face.y + PAD : face.y + face.height - PAD - band;
     parts.push(
       sized(
         textBlock(node.lines, face.x + PAD, bandTop, face.width - PAD * 2 - iconRoom, textHeight, size, {
-          colour: theme.text,
-          subColour,
+          color: theme.text,
+          subColor,
           align: labelStyle.align,
         }),
         size,
@@ -260,7 +260,7 @@ function drawNode(
 
   if (icon !== undefined) {
     // A container's icon rides in the label's band, at whichever end that is; a
-    // leaf's label is centred, so the icon centres with it. Both follow the
+    // leaf's label is centered, so the icon centers with it. Both follow the
     // label rather than being placed by a rule of their own, which is what
     // keeps an icon reading as part of the title block and not as a sticker.
     const left = face.x + face.width - PAD - iconSide;
@@ -329,15 +329,15 @@ function outlineDetail(shape: BoxShape, x: number, y: number, w: number, h: numb
 /** One icon, scaled from its own grid onto a square of `side` at `x, y`. */
 function drawIcon(icon: Icon, x: number, y: number, side: number, theme: Theme): string {
   const scale = side / icon.grid;
-  const colour = (tone: IconTone | undefined): string =>
+  const color = (tone: IconTone | undefined): string =>
     tone === 'ink' ? theme.iconInk : tone === 'shade' ? theme.iconShade : theme.background;
 
   const paths = icon.paths.map((path) => {
-    const fill = path.fill === undefined ? 'none' : colour(path.fill);
+    const fill = path.fill === undefined ? 'none' : color(path.fill);
     const stroke =
       path.stroke === undefined
         ? ''
-        : ` stroke="${colour(path.stroke)}" stroke-width="${ICON_STROKE}" stroke-linejoin="round"`;
+        : ` stroke="${color(path.stroke)}" stroke-width="${ICON_STROKE}" stroke-linejoin="round"`;
     return `    <path d="${path.d}" fill="${fill}"${stroke}/>`;
   });
 
@@ -359,14 +359,14 @@ function drawLink(
   fontSize: number,
 ): { svg: string; ink: Extent } {
   const { start, end } = ends;
-  const colour = colourOf(link.appearance, theme.link);
+  const color = colorOf(link.appearance, theme.link);
 
-  const markerEnd = ` marker-end="url(#${markerId(colour)})"`;
-  const markerStart = link.both ? ` marker-start="url(#${markerId(colour)}-back)"` : '';
+  const markerEnd = ` marker-end="url(#${markerId(color)})"`;
+  const markerStart = link.both ? ` marker-start="url(#${markerId(color)}-back)"` : '';
 
   // A named side is a statement about how the line should leave or arrive, so
   // it is drawn as a curve that actually does leave and arrive that way. With
-  // neither side named there is nothing to honour and the line stays straight.
+  // neither side named there is nothing to honor and the line stays straight.
   const curved = start.side !== undefined || end.side !== undefined;
   const parts: string[] = [];
   // What the line actually covers, so the canvas can be sized to hold it. A
@@ -380,7 +380,7 @@ function drawLink(
     const path = corridorPath(start, end, corridor);
     ink = union(ink, path.ink);
     parts.push(
-      `  <path d="${path.d}" fill="none" stroke="${colour}" stroke-width="${LINE_WIDTH}"${markerEnd}${markerStart}/>`,
+      `  <path d="${path.d}" fill="none" stroke="${color}" stroke-width="${LINE_WIDTH}"${markerEnd}${markerStart}/>`,
     );
     // The label goes on the straight run rather than at the midpoint of the
     // whole path, so it sits in the gap the author asked the line to travel.
@@ -398,7 +398,7 @@ function drawLink(
     const c1 = { x: start.x + start.tx * reach + bx, y: start.y + start.ty * reach + by };
     const c2 = { x: end.x + end.tx * reach + bx, y: end.y + end.ty * reach + by };
     parts.push(
-      `  <path d="M ${round(start.x)} ${round(start.y)} C ${round(c1.x)} ${round(c1.y)}, ${round(c2.x)} ${round(c2.y)}, ${round(end.x)} ${round(end.y)}" fill="none" stroke="${colour}" stroke-width="${LINE_WIDTH}"${markerEnd}${markerStart}/>`,
+      `  <path d="M ${round(start.x)} ${round(start.y)} C ${round(c1.x)} ${round(c1.y)}, ${round(c2.x)} ${round(c2.y)}, ${round(end.x)} ${round(end.y)}" fill="none" stroke="${color}" stroke-width="${LINE_WIDTH}"${markerEnd}${markerStart}/>`,
     );
     ink = union(ink, cubicExtent(start, c1, c2, end));
     // The point halfway along a cubic, which is where the label belongs.
@@ -420,14 +420,14 @@ function drawLink(
       y: end.y - run.y + ends.bow.y * lift,
     };
     parts.push(
-      `  <path d="M ${round(start.x)} ${round(start.y)} C ${round(c1.x)} ${round(c1.y)}, ${round(c2.x)} ${round(c2.y)}, ${round(end.x)} ${round(end.y)}" fill="none" stroke="${colour}" stroke-width="${LINE_WIDTH}"${markerEnd}${markerStart}/>`,
+      `  <path d="M ${round(start.x)} ${round(start.y)} C ${round(c1.x)} ${round(c1.y)}, ${round(c2.x)} ${round(c2.y)}, ${round(end.x)} ${round(end.y)}" fill="none" stroke="${color}" stroke-width="${LINE_WIDTH}"${markerEnd}${markerStart}/>`,
     );
     ink = union(ink, cubicExtent(start, c1, c2, end));
     midX = (start.x + 3 * c1.x + 3 * c2.x + end.x) / 8;
     midY = (start.y + 3 * c1.y + 3 * c2.y + end.y) / 8;
   } else {
     parts.push(
-      `  <line x1="${round(start.x)}" y1="${round(start.y)}" x2="${round(end.x)}" y2="${round(end.y)}" stroke="${colour}" stroke-width="${LINE_WIDTH}"${markerEnd}${markerStart}/>`,
+      `  <line x1="${round(start.x)}" y1="${round(start.y)}" x2="${round(end.x)}" y2="${round(end.y)}" stroke="${color}" stroke-width="${LINE_WIDTH}"${markerEnd}${markerStart}/>`,
     );
     midX = (start.x + end.x) / 2;
     midY = (start.y + end.y) / 2;
@@ -435,7 +435,7 @@ function drawLink(
 
   if (link.label !== undefined) {
     // A link label breaks on ` / ` exactly as a box label does, so a two-line
-    // caption on an arrow needs no vocabulary of its own. The block is centred
+    // caption on an arrow needs no vocabulary of its own. The block is centered
     // on the midpoint, which keeps a one-line label where it has always been.
     const size = fontSizeFor('link', link.appearance, fontSize, link.line);
     const textHeight = measurer.lineHeight(size);
@@ -457,9 +457,9 @@ function drawLink(
     parts.push(
       sized(
         textBlock(lines, midX - width / 2, top, width, textHeight, size, {
-          // A coloured link carries its meaning into its label; an uncoloured
+          // A colored link carries its meaning into its label; an uncolored
           // one leaves the words to read as ordinary text.
-          colour: colourOf(link.appearance, theme.text),
+          color: colorOf(link.appearance, theme.text),
           align: 'middle',
         }),
         size,
@@ -536,18 +536,18 @@ function cubicExtent(p0: Point, c1: Point, c2: Point, p3: Point): Extent {
   return { minX, minY, maxX, maxY };
 }
 
-/** Walk out from the centre of a box toward a point, stopping at the border. */
+/** Walk out from the center of a box toward a point, stopping at the border. */
 function edgePoint(box: Box, toward: { x: number; y: number }): { x: number; y: number } {
-  const centre = centreOf(box);
-  const dx = toward.x - centre.x;
-  const dy = toward.y - centre.y;
-  if (dx === 0 && dy === 0) return centre;
+  const center = centerOf(box);
+  const dx = toward.x - center.x;
+  const dy = toward.y - center.y;
+  if (dx === 0 && dy === 0) return center;
 
   const scaleX = dx === 0 ? Infinity : box.width / 2 / Math.abs(dx);
   const scaleY = dy === 0 ? Infinity : box.height / 2 / Math.abs(dy);
   const scale = Math.min(scaleX, scaleY);
 
-  return { x: centre.x + dx * scale, y: centre.y + dy * scale };
+  return { x: center.x + dx * scale, y: center.y + dy * scale };
 }
 
 // --- where a link meets a box -------------------------------------------------
@@ -632,7 +632,7 @@ interface BundleEnd {
  * Work out where every link meets every box.
  *
  * An author names a *side* — `to: top` — and never a point on it. Alone on a
- * side a link lands at its centre; sharing the side with others, the points
+ * side a link lands at its center; sharing the side with others, the points
  * spread so they do not sit on top of each other. Which one goes where is
  * derived from where the far ends actually are, never chosen: of two links
  * arriving at one top edge, the one coming from further left arrives further
@@ -662,7 +662,7 @@ function planEndpoints(
         link,
         which: 'start',
         side: fromSide,
-        toward: centreOf(faceOf(link.to)),
+        toward: centerOf(faceOf(link.to)),
         rank: rankIn(bundles.get(link), link, link.from, fromSide),
       });
     }
@@ -671,7 +671,7 @@ function planEndpoints(
         link,
         which: 'end',
         side: toSide,
-        toward: centreOf(faceOf(link.from)),
+        toward: centerOf(faceOf(link.from)),
         rank: rankIn(bundles.get(link), link, link.to, toSide),
       });
     }
@@ -729,9 +729,9 @@ function planEndpoints(
       continue;
     }
     // With neither end named this is the straight line it always was, each end
-    // aiming at the other box's centre.
-    const start = partial.start ?? free(fromFace, partial.end ?? centreOf(toFace));
-    const end = partial.end ?? free(toFace, partial.start ?? centreOf(fromFace));
+    // aiming at the other box's center.
+    const start = partial.start ?? free(fromFace, partial.end ?? centerOf(toFace));
+    const end = partial.end ?? free(toFace, partial.start ?? centerOf(fromFace));
     ends.set(link, { start, end, bow: bows.get(link) });
   }
   return ends;
@@ -787,8 +787,8 @@ function planBundles(
     const [first, second] = group.ends;
     const t0 = tangentOf(first.side);
     const t1 = tangentOf(second.side);
-    const from = sideCentre(first);
-    const to = sideCentre(second);
+    const from = sideCenter(first);
+    const to = sideCenter(second);
     const run = { x: to.x - from.x, y: to.y - from.y };
 
     // Nesting is a matter of which side of the line each end steps toward. Step
@@ -839,7 +839,7 @@ interface Spread {
  * The sideways offset each link takes when several run between the same two
  * boxes and none of them names a side.
  *
- * An unnamed end has no side to spread along: it aims at the far box's centre
+ * An unnamed end has no side to spread along: it aims at the far box's center
  * and attaches wherever that ray crosses the border, so every link in such a
  * group produces the *same* ray and they are drawn on top of one another —
  * one visible line, every label stacked on one point. `planEndpoints` cannot
@@ -898,10 +898,10 @@ function planSpreads(
   const spreads = new Map<LayoutLink, Spread>();
   for (const group of groups.values()) {
     if (group.links.length < 2) continue;
-    const from = centreOf(faceOf(group.first));
+    const from = centerOf(faceOf(group.first));
     const sample = group.links[0]!;
     const other = sample.from === group.first ? sample.to : sample.from;
-    const to = centreOf(faceOf(other));
+    const to = centerOf(faceOf(other));
     const dx = to.x - from.x;
     const dy = to.y - from.y;
     const length = Math.hypot(dx, dy) || 1;
@@ -1022,12 +1022,12 @@ function laneStep(
   measurer: Measurer,
   fontSize: number,
 ): number {
-  const labelled = lanes.filter((link) => link.label !== undefined);
-  if (labelled.length < 2) return 0;
+  const labeled = lanes.filter((link) => link.label !== undefined);
+  if (labeled.length < 2) return 0;
 
   const need = (axis: Axis): number =>
     Math.max(
-      ...labelled.map((link) =>
+      ...labeled.map((link) =>
         labelExtent(link.label!, link.appearance, axis, measurer, fontSize, link.line),
       ),
     );
@@ -1058,7 +1058,7 @@ function tangentOf(side: Side): { x: number; y: number } {
 }
 
 /** The midpoint of one side of a box. */
-function sideCentre(end: BundleEnd): { x: number; y: number } {
+function sideCenter(end: BundleEnd): { x: number; y: number } {
   const face = faceOf(end.node);
   const along = end.side === 'top' || end.side === 'bottom' ? face.width : face.height;
   const origin = end.side === 'top' || end.side === 'bottom' ? face.x : face.y;
@@ -1102,9 +1102,9 @@ function anchorOn(face: Box, side: Side, at: number): Anchor {
 /** An end with no side named: leave from the border, pointing at the far end. */
 function free(face: Box, toward: { x: number; y: number }): Anchor {
   const point = edgePoint(face, toward);
-  const centre = centreOf(face);
-  const dx = point.x - centre.x;
-  const dy = point.y - centre.y;
+  const center = centerOf(face);
+  const dx = point.x - center.x;
+  const dy = point.y - center.y;
   const length = Math.hypot(dx, dy) || 1;
   return { x: point.x, y: point.y, tx: dx / length, ty: dy / length };
 }
@@ -1112,10 +1112,10 @@ function free(face: Box, toward: { x: number; y: number }): Anchor {
 /**
  * Walk from a point inside a box along a direction, stopping at the border.
  *
- * `edgePoint` walks from the centre, which is the only place a single line
+ * `edgePoint` walks from the center, which is the only place a single line
  * passes through. A fanned-out group's lines are parallel to that one and
  * beside it, so each needs the border crossing of its own line rather than of
- * the centre's — which is what keeps the group parallel instead of splayed.
+ * the center's — which is what keeps the group parallel instead of splayed.
  */
 function exitAlong(
   box: Box,
@@ -1145,8 +1145,8 @@ function exitAlong(
  * of the two edges meeting there. Neither is a case in the code.
  */
 function parallelEnds(from: Box, to: Box, offset: number): LinkEnds {
-  const a = centreOf(from);
-  const b = centreOf(to);
+  const a = centerOf(from);
+  const b = centerOf(to);
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const length = Math.hypot(dx, dy) || 1;
@@ -1359,7 +1359,7 @@ function planCorridors(
 }
 
 /**
- * An end whose side the author did not name aims at the far box's centre, which
+ * An end whose side the author did not name aims at the far box's center, which
  * is the wrong thing to aim at once the line has been told to go somewhere else
  * on the way. Point those ends at the corridor instead.
  */
@@ -1386,7 +1386,7 @@ function aimFreeEnds(
 
 /**
  * How much room a link's label takes across the corridor — its depth in a
- * horizontal channel, its width in a vertical one. Zero for an unlabelled link,
+ * horizontal channel, its width in a vertical one. Zero for an unlabeled link,
  * which needs no more than the arrow spacing.
  *
  * `labelExtent` measures the knockout along whichever axis it is handed, and the
@@ -1474,20 +1474,20 @@ function sideAttr(link: LayoutLink, key: 'from' | 'to'): Side | undefined {
   return value as Side;
 }
 
-function arrowMarker(colour: string): string {
-  const id = markerId(colour);
+function arrowMarker(color: string): string {
+  const id = markerId(color);
   return [
     `    <marker id="${id}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="${ARROW_MARKER_WIDTH}" markerHeight="${ARROW_MARKER_WIDTH}" orient="auto-start-reverse">`,
-    `      <path d="M 0 0 L 10 5 L 0 10 z" fill="${colour}"/>`,
+    `      <path d="M 0 0 L 10 5 L 0 10 z" fill="${color}"/>`,
     '    </marker>',
     `    <marker id="${id}-back" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="${ARROW_MARKER_WIDTH}" markerHeight="${ARROW_MARKER_WIDTH}" orient="auto-start-reverse">`,
-    `      <path d="M 0 0 L 10 5 L 0 10 z" fill="${colour}"/>`,
+    `      <path d="M 0 0 L 10 5 L 0 10 z" fill="${color}"/>`,
     '    </marker>',
   ].join('\n');
 }
 
-function markerId(colour: string): string {
-  return `arrow-${colour.replace(/[^a-zA-Z0-9]/g, '')}`;
+function markerId(color: string): string {
+  return `arrow-${color.replace(/[^a-zA-Z0-9]/g, '')}`;
 }
 
 // --- small shared pieces ------------------------------------------------------
@@ -1509,7 +1509,7 @@ function faceOf(node: LayoutNode): Box {
   };
 }
 
-function centreOf(box: Box): { x: number; y: number } {
+function centerOf(box: Box): { x: number; y: number } {
   return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 }
 
@@ -1530,7 +1530,7 @@ function textBlock(
   width: number,
   lineHeight: number,
   fontSize: number,
-  style: { colour: string; subColour?: string | undefined; align: 'start' | 'middle' | 'end' },
+  style: { color: string; subColor?: string | undefined; align: 'start' | 'middle' | 'end' },
 ): string {
   const anchorX =
     style.align === 'middle' ? x + width / 2 : style.align === 'end' ? x + width : x;
@@ -1540,27 +1540,27 @@ function textBlock(
       const baseline = top + index * lineHeight + lineHeight / 2 + fontSize * 0.35;
       // A label's first line is its name; anything after it is a qualifier, and
       // `subtext:` is how a box says that qualifier should read as secondary.
-      const colour = index === 0 ? style.colour : style.subColour ?? style.colour;
-      return `  <text x="${round(anchorX)}" y="${round(baseline)}" fill="${colour}" text-anchor="${style.align}">${escapeXml(line)}</text>`;
+      const color = index === 0 ? style.color : style.subColor ?? style.color;
+      return `  <text x="${round(anchorX)}" y="${round(baseline)}" fill="${color}" text-anchor="${style.align}">${escapeXml(line)}</text>`;
     })
     .filter((element) => element.length > 0)
     .join('\n');
 }
 
 /**
- * A colour is written as the viewer will receive it — `#14532d`, or any CSS
- * colour. The renderer keeps no list of colour words of its own, so a diagram
+ * A color is written as the viewer will receive it — `#14532d`, or any CSS
+ * color. The renderer keeps no list of color words of its own, so a diagram
  * is never limited to the ones somebody remembered to add here.
  */
-function colourOf(appearance: Record<string, string>, fallback: string): string {
+function colorOf(appearance: Record<string, string>, fallback: string): string {
   return appearance['stroke'] ?? fallback;
 }
 
 /**
- * The colour for every label line after the first, or undefined when the box
+ * The color for every label line after the first, or undefined when the box
  * said nothing and all its lines should read alike. `muted` is the one reserved
  * word: it defers to the theme, so a label's qualifier stays readable when the
- * theme changes. Anything else is a colour, same as `stroke` and `fill` take.
+ * theme changes. Anything else is a color, same as `stroke` and `fill` take.
  */
 function subtextOf(appearance: Record<string, string>, theme: Theme): string | undefined {
   const named = appearance['subtext'];
