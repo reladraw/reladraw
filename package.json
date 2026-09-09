@@ -10,7 +10,8 @@
   "types": "./dist/index.d.ts",
   "files": [
     "dist",
-    "NOTICE"
+    "NOTICE",
+    "SYNTAX.md"
   ],
   "keywords": [
     "diagram",

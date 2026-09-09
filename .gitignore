@@ -23,6 +23,9 @@ venv/
 # Scratch space for throwaway files, so private things are unstageable by default.
 scratch/
 
+# Local agent settings. .claude/skills/ ships; this does not.
+.claude/settings.local.json
+
 # draw.io's own lock and backup files, written beside an open drawing.
 .$*.bkp
 .$*.dtmp

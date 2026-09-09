@@ -39,6 +39,16 @@ Commands:
                                  docs/index.html. Re-run after any source
                                  change, or the hosted page demonstrates an
                                  older version of the language.
+  pack                          Build, pack exactly what `npm publish` would
+                                 ship, install that tarball into a throwaway
+                                 directory and render a diagram with it. The
+                                 stranger's-first-command check, run before
+                                 every release.
+  skill                         Refresh the copy of SYNTAX.md that the agent
+                                 skill in .claude/skills/reladraw/ carries as
+                                 its reference. Re-run after editing SYNTAX.md,
+                                 or the skill teaches an older language than
+                                 the tool accepts.
   page [out.png] [WxH] [fragment]
                                  Screenshot the built playground page. `page dom
                                  [fragment]` prints the DOM after its scripts
@@ -221,6 +231,47 @@ case "$cmd" in
     # docs/index.html is generated: the page from tools/playground.html with the
     # whole compiled library inlined, so it needs no server and no bundler.
     node tools/playground.mjs
+    ;;
+  pack)
+    # What `npm publish` would ship, installed into a throwaway directory and
+    # run there. The failure this catches is the one that is silent from inside
+    # the repository: dist/ is gitignored and listed in `files`, so a package
+    # built from a clean clone can ship a `bin` pointing at a file that is not
+    # in it. Note that `npm pack` does not run prepublishOnly — only publish
+    # does — so this builds first rather than trusting whatever dist/ holds.
+    npx tsc
+    t="$(mktemp -d)"
+    npm pack --pack-destination "$t" >/dev/null 2>&1
+    mkdir -p "$t/probe"
+    cp examples/names.reladraw "$t/probe/probe.reladraw"
+    (
+      cd "$t/probe"
+      npm init -y >/dev/null 2>&1
+      npm install "$t"/reladraw-*.tgz >/dev/null 2>&1
+      ./node_modules/.bin/reladraw probe.reladraw -o probe.svg >/dev/null 2>&1
+    )
+    if [ -s "$t/probe/probe.svg" ]; then
+      echo "packed, installed and rendered: $(wc -c < "$t/probe/probe.svg" | tr -d ' ') bytes of SVG"
+      npm pack --dry-run 2>&1 | grep -E "npm notice (name|version|total files|package size):"
+    else
+      echo "the packed tarball installed but rendered nothing" >&2
+      exit 1
+    fi
+    rm -rf "$t"
+    ;;
+  skill)
+    # The agent skill ships as a directory somebody copies into their own
+    # ~/.claude/skills, so it cannot reach SYNTAX.md by a relative path — it
+    # carries its own copy, generated here rather than edited. Same arrangement
+    # as docs/index.html: edit the source, run this, commit the result.
+    dest=.claude/skills/reladraw/reference/syntax.md
+    mkdir -p "$(dirname "$dest")"
+    if [ -f "$dest" ] && cmp -s SYNTAX.md "$dest"; then
+      echo "$dest is up to date"
+    else
+      cp SYNTAX.md "$dest"
+      echo "$dest regenerated from SYNTAX.md"
+    fi
     ;;
   page)
     # The same headless Chrome the SVG screenshots go through, pointed at the

@@ -6,11 +6,11 @@ A text language for diagrams where **placement is stated, not computed**.
 
 A diagram drawn by hand in draw.io:
 
-![The reference diagram, drawn by hand](examples/reference/arch.png)
+![The reference diagram, drawn by hand](https://raw.githubusercontent.com/reladraw/reladraw/main/examples/reference/arch.png)
 
 And the same diagram written down in reladraw and rendered from the text — [`examples/arch.reladraw`](examples/arch.reladraw), 56 statements, no coordinates anywhere in it:
 
-![The same diagram, rendered from reladraw source](docs/arch-render.png)
+![The same diagram, rendered from reladraw source](https://raw.githubusercontent.com/reladraw/reladraw/main/docs/arch-render.png)
 
 Every distance in the second picture was worked out from statements like `above-left of dropbox` and `between computer1 and computer2`. Nothing chose the arrangement; the file states it.
 
@@ -44,9 +44,28 @@ Be precise about what stated placement buys, because it is not everything. Inten
 
 So the language does not remove an agent's need to check its output. It changes what checking has to be, which is what the diagnostics in the scope section are for.
 
+### Using it with an agent
+
+reladraw is too new to be in any model's training data, so an agent has to be told the language before it can write it. This repository ships an [agent skill](https://agentskills.io) that does exactly that — the syntax, when to reach for the language, and what re-reading its own source can and cannot confirm.
+
+```
+npx skills add reladraw/reladraw -g
+```
+
+That installs it for whichever agent you use — Claude Code, Codex, Cursor, Copilot and others — each into its own skills directory. Drop the `-g` to install it into the current project instead.
+
+It is [plain Markdown](.claude/skills/reladraw/SKILL.md) with the syntax reference beside it, so it is worth reading whatever you use, and copying the directory by hand works just as well.
+
 ## Status
 
 Version 0.1.0. Early, but it runs: a parser, resolver and SVG renderer in TypeScript with no runtime dependencies, and a command-line tool that takes a text file and writes a standalone SVG. The comparison at the top of this page is that pipeline run on [`examples/arch.reladraw`](examples/arch.reladraw). What is still visibly off there is typography, not placement.
+
+```
+npm install -g reladraw
+reladraw diagram.reladraw -o diagram.svg
+```
+
+Or from a clone, which also gets you the examples:
 
 ```
 npm install && npm run build
