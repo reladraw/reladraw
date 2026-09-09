@@ -31,8 +31,9 @@ Commands:
                                  This is the one to use when you want to see a
                                  diagram; it needs no dimensions from you.
                                  out.png defaults to a temp file, path printed.
-  readme-image                  Regenerate docs/arch-render.png, the rendered
-                                 half of the README's comparison
+  readme-image                  Regenerate the README's tracked pictures:
+                                 docs/arch-render.png, the rendered half of the
+                                 comparison, and docs/gap.png
   playground                    Regenerate docs/index.html, the browser
                                  playground, with the compiled library inlined
                                  into the page. Edit tools/playground.html, not
@@ -217,15 +218,20 @@ case "$cmd" in
     echo "$out"
     ;;
   readme-image)
-    # The rendered half of the README's comparison. Regenerate it whenever the
-    # benchmark or the renderer changes, or the picture on the front page stops
-    # being a picture of this code.
+    # The README's pictures. examples/out/ is gitignored, so anything the front
+    # page shows needs a tracked copy of its own. Regenerate them whenever the
+    # examples or the renderer change, or the front page stops being a picture
+    # of this code.
     mkdir -p docs
-    svg="$(mktemp -t reladraw-XXXXXX.svg)"
-    node dist/cli.js examples/arch.reladraw -o "$svg" >/dev/null 2>&1
-    screenshot "$svg" docs/arch-render.png "$(svg_size "$svg")" ffffff
-    rm -f "$svg"
-    echo docs/arch-render.png
+    for pair in "arch:docs/arch-render.png" "gap:docs/gap.png"; do
+      name="${pair%%:*}"
+      out="${pair#*:}"
+      svg="$(mktemp -t reladraw-XXXXXX.svg)"
+      node dist/cli.js "examples/$name.reladraw" -o "$svg" >/dev/null 2>&1
+      screenshot "$svg" "$out" "$(svg_size "$svg")" ffffff
+      rm -f "$svg"
+      echo "$out"
+    done
     ;;
   playground)
     # docs/index.html is generated: the page from tools/playground.html with the

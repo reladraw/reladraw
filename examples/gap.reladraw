@@ -1,0 +1,27 @@
+// The picture in the README's "The gap" section: the two shapes a diagram
+// language can take, and the middle nobody occupies.
+//
+// The middle box is placed with `right of` one end and `left of` the other, and
+// a gap is a minimum, so putting reladraw between the two is what pushes them
+// apart. Delete its line and the ends close back up — which is the argument the
+// picture is making, made by the picture.
+
+diagram background: #111111
+
+style tool  fill: #191728  stroke: #4f5367
+style here  fill: #142814  stroke: #486544  subtext: muted
+
+box auto "Auto-layout / placement is / an output" (at: top, align: centre)  subtext: muted  align: widths
+box auto.mermaid  "Mermaid.js"  style: tool
+box auto.graphviz "Graphviz"    below auto.mermaid (gap: tight)   left level with auto.mermaid  style: tool
+box auto.d2       "D2"          below auto.graphviz (gap: tight)  left level with auto.mermaid  style: tool
+
+box manual "Absolute / placement is / pixels" (at: top, align: centre)  right of auto  level with auto  subtext: muted  align: widths
+box manual.drawio     "draw.io"     style: tool
+box manual.excalidraw "Excalidraw"  below manual.drawio (gap: tight)      left level with manual.drawio  style: tool
+box manual.figma      "Figma"       below manual.excalidraw (gap: tight)  left level with manual.drawio  style: tool
+
+box here "reladraw / placement is / stated"  right of auto  left of manual  level with auto  style: here
+
+link auto -> here    from: right  to: left
+link here -> manual  from: right  to: left

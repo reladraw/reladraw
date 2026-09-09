@@ -16,33 +16,35 @@ Every distance in the second picture was worked out from statements like `above-
 
 ## The gap
 
-Mermaid, Graphviz and D2 all take the same shape: you declare entities and connections, and a layout algorithm decides where things go. Placement is an output. That makes the result unpredictable from the source, which is tolerable for a person who can look at the render and fiddle, and close to useless for an agent that cannot see what it produced.
+Mermaid, Graphviz and D2 have you declare entities and connections, and then place everything for you. That is a superpower, and for most diagrams it is the right one. It stops being the right one as soon as you have a particular picture in mind and care where things go. Say you are actively building your understanding of a system by diagramming it, and you want some module over to the right with its connections placed just so: the auto-layout languages have no way to say it.
 
-Absolute tools like draw.io have the opposite problem: total control, expressed as pixel coordinates that carry no meaning, which no agent can meaningfully edit and no human enjoys typing.
+On the other end of the spectrum are the absolute-positioning tools — draw.io, Excalidraw, Figma. They give you total control of placement, at the cost of making every edit to a complex diagram slow hand-work. And it is slow for a human but expensive for an agent, which has to work the picture out from the coordinates before it can decide which ones to change.
 
-Nothing occupies the middle. This is an attempt at it — a language where you say where things go in the terms a person would use out loud, and never name a coordinate:
+![The two ends of the spectrum, with reladraw between them](https://raw.githubusercontent.com/reladraw/reladraw/main/docs/gap.png)
+
+reladraw aims at the middle. Every position is stated relative to something else, and nothing in the file is a coordinate:
 
 ```
-box dropbox          "Dropbox"
-box computer1        "Computer 1 / Ubuntu"  above-left of dropbox
-box computer1.files  "\"important\" directory"  style: synced
+box app "Web app"
+box app.ui  "Interface"
+box app.api "API"  below app.ui
 
-link computer1.files <-> dropbox  style: synced
+box store "Database"  right of app  level with app
+
+link app.api -> store  "queries"  from: right  to: left
 ```
 
-One statement per line. Containment is a dotted name. Nothing is nested, so no line depends on another line's position or indentation.
+Nothing is nested, so no line depends on another line's position or indentation.
 
 The draft is in [SYNTAX.md](SYNTAX.md), with a worked example in [examples/](examples/).
 
 ## Why an agent needs this
 
-An agent cannot see what it produced. Emitting Mermaid means guessing at an output it has no way to check, because the layout is an emergent property of an algorithm that runs later. That is why agents fall back to prose and ASCII boxes — ASCII is bad at everything except the one thing that matters here, which is that the source *is* the output.
+The common case is not drawing a diagram, it is changing one. Ask for the auth service to move left and a queue to go behind it. With pixel coordinates, an agent has to rebuild the picture from the numbers before it can work out which numbers to change. With auto-layout there is nothing to read at all, because the arrangement was never written down — it can only reword the source and re-render. With stated placement the arrangement is in the file as sentences, and changing the picture is changing the sentence that says where the thing goes.
 
-Reading matters more than writing, and it is where every other tool is weakest. Ask an agent to move the auth service left and add a queue behind it. Given pixel coordinates it has to reconstruct a picture from numbers before it can reason at all; given auto-layout there is no stored intent to read, because the arrangement was never written down. Given stated placement it reads sentences and already knows the arrangement. Diagrams get changed far more often than they get created, so this is the common case.
+Writing has the same shape. An agent emitting Mermaid is guessing at a layout that an algorithm settles later, and its only way to find out is to render and look — a round trip that comes back as a picture rather than as a list of what is wrong.
 
-Be precise about what stated placement buys, because it is not everything. Intent comes free: the agent can confirm the database landed under the API and all four machines hang off Dropbox by re-reading its own source. Metric outcomes do not: whether two separately-anchored clusters collide, whether a label overflows its box, whether an edge crosses four others. Placement is stated but still resolved into real coordinates, and a collision between independently-anchored clusters is emergent however clearly each one was written.
-
-So the language does not remove an agent's need to check its output. It changes what checking has to be, which is what the diagnostics in the scope section are for.
+Intent is confirmable, outcomes are not, and the difference is worth being precise about. An agent can re-read its own file and see that the database is under the API and all four machines hang off Dropbox. It cannot see that two clusters anchored to different things now overlap, that a label overflowed its box, or that an edge crosses four others — those are resolved from the statements rather than stated, so they need the diagnostics in the scope section below.
 
 ### Using it with an agent
 
@@ -82,13 +84,13 @@ The language is not stable. Expect the syntax to change.
 
 ## How it works
 
-A gap is a *minimum* distance, never an exact one. Say two things sit side by side, then say a third goes between them, and the first two are pushed apart by exactly what the third needs; delete the third and they close back up. No gap anywhere has to be chosen large enough to leave room for something else, and no number goes stale when a label grows. That is the step an author otherwise does by hand — shove things apart to make space, then drag everything back together so the diagram is not full of holes.
+A gap is a *minimum* distance, never an exact one. Say two things sit side by side, then say a third goes between them, and the first two are pushed apart by exactly what the third needs; delete the third and they close back up. That is the step an author otherwise does by hand — shove things apart to make room, then drag everything back so the diagram is not full of holes — and no number goes stale when a label grows.
 
 So the resolver solves a system rather than walking a chain. Each axis is a set of minimum distances, and the tightest arrangement satisfying all of them is found by longest paths: one answer, no search, no arrangement ever tried and rejected. The engine works out distances; which side of what a thing sits on came from the file.
 
-Solving a system rather than a chain is also what makes non-overlap affordable, and it now holds for every pair of boxes without anyone writing it down. On its own "these two must not overlap" is a choice among four directions, which is the search this whole design refuses — but the file has usually already settled which. If the arrangement you wrote lets one box travel away from another along an axis and offers no way back, that is the only separation your file permits, so nothing is chosen. Where the file orders a pair on neither axis, the tool names the pair rather than guessing. Where it orders them on both, either would do, and the tie breaks toward the axis of least overlap, which is the smallest movement and the one place the tool decides something nobody wrote.
+That is also what makes non-overlap affordable, so it holds for every pair of boxes without anyone writing it down. On its own "these two must not overlap" is a choice among four directions, which is the search this design refuses — but the file has usually settled it already: if your arrangement lets one box travel away from another and offers no way back, that is the only separation it permits. Where the file orders a pair on neither axis, the tool names them rather than guessing; where it orders them on both, the tie breaks toward the axis of least overlap, which is the smallest movement and the one place the tool decides something nobody wrote.
 
-Nothing is nudged. Each round derives the separations the file already implied, adds them as ordinary minimum distances, and solves the whole thing again from scratch. Repairing a solved layout in place is the thing being avoided, and the difference is the entire argument.
+Nothing is nudged. Each round derives the separations the file already implied, adds them as ordinary minimum distances, and solves the whole thing again from scratch — repairing a solved layout in place is the thing being avoided.
 
 ## Scope for a first version
 
@@ -115,11 +117,11 @@ Three design problems decide how much machinery this needs, and the first outran
 
 ## Prior art
 
-Four things sit near this and none closes the gap.
+Four things sit near this, and each answers a different part of the problem.
 
-**[Archify](https://github.com/tt-a1i/archify).** The closest live competitor, and the only one built for agents. An agent writes a typed JSON intermediate representation, a validator checks it against a schema and lints the layout, and it compiles deterministically to a self-contained HTML file. It ships stepped playback and pins nodes to git-verified source lines, and the output looks good. Two things it does not have. Its positioning is grid or free coordinates — auto-arrangement on one side, absolute pixels on the other, with nothing between, which is the same bifurcation in a single tool. And filling in a JSON template tells the agent nothing about the resulting picture, so its loop is still emit, render, look, tweak. That is the Mermaid problem with a linter attached.
+**[Archify](https://github.com/tt-a1i/archify).** Built for agents to write: an agent emits typed JSON, a validator checks it against a schema and lints the layout, and it compiles deterministically to a good-looking, self-contained HTML file, with stepped playback and nodes pinned to git-verified source lines. Its positioning is grid or free coordinates, though — auto-arrangement on one side, absolute pixels on the other — and a JSON template says nothing about where the picture will end up, so the loop is still emit, render, look, tweak.
 
-**PIC and [pikchr](https://pikchr.org).** The nearest thing in language design: a text diagram format with no layout engine, where placement is stated and deterministic. But it is turtle graphics — a movable cursor that drops shapes and steps along — so a diagram is a sequence of pen movements rather than a set of stated relationships between named things. There is no group that reflows when a member is added.
+**PIC and [pikchr](https://pikchr.org).** A text diagram format with no layout engine, where placement is stated and deterministic. But it is turtle graphics — a movable cursor that drops shapes and steps along — so a diagram is a sequence of pen movements rather than a set of stated relationships between named things. There is no group that reflows when a member is added.
 
 **Graphviz `rank` and `cluster`.** Constraints on an auto-layout engine rather than a replacement for one, so output stays emergent and unpredictable from the source.
 
