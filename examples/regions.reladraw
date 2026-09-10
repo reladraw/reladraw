@@ -21,7 +21,7 @@ box one    "first"
 box two    "second"                 below one
 box three  "third with a longer label"  below two
 
-note spans  "level with all three, and clear of the widest"  right of one and three  width: 24  gap: wide
-note tops   "top level with the second box"                  right of two  top level with two  width: 20  gap: tight
+note spans  "level with all three, and clear of the widest"  right of one and three  wrap: 24  gap: wide
+note tops   "top level with the second box"                  right of two  top level with two  wrap: 20  gap: tight
 
 box beside  "centered on the top two"  right of spans  level with one and two  gap: wide

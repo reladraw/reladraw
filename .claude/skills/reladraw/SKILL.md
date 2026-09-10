@@ -52,7 +52,7 @@ Nothing says how far apart `hub` and `side` are. Delete `wedge` and they close b
 
 One statement per line. No blocks, no continuations, no significant indentation. `//` starts a comment and may trail a statement.
 
-A statement is a positional head — name, then text, then placements — followed by `key: value` attributes. **Attributes end the positional part: once one appears, nothing positional may follow.** This is the mistake to expect; `note n "text" width: 30 below worker` is an error, and `note n "text" below worker width: 30` is right.
+A statement is a positional head — name, then text, then placements — followed by `key: value` attributes. **Attributes end the positional part: once one appears, nothing positional may follow.** This is the mistake to expect; `note n "text" wrap: 30 below worker` is an error, and `note n "text" below worker wrap: 30` is right.
 
 ### Nodes
 
@@ -72,13 +72,15 @@ box server.worker "Worker"
 
 A container with `""` and `fill: none  border: none` draws nothing and takes no room of its own, which is how you make a group that can be placed against as one shape.
 
-Node attributes: `style`, `fill`, `border` and `text` (each a color), `subtext` (**a color, not text** — it colors every label line after the first, so a box carries its qualifier as a second line of its own label and `subtext` only makes that line quieter; `muted` is the usual value), `size` (`small | normal | large`), `icon`, `shape`, `width` (fold the label every n characters), `gap`, `overlap: allow`, and `align: widths` on a container.
+Node attributes: `style`, `fill`, `border` and `text` (each a color), `subtext` (**a color, not text** — it colors every label line after the first, so a box carries its qualifier as a second line of its own label and `subtext` only makes that line quieter; `muted` is the usual value), `size` (`small | normal | large`), `icon`, `shape`, `wrap` (fold the label every n characters), `gap`, `overlap: allow`, and `align: widths` on a container.
 
 A color attribute names the part it colors: `fill` is the area, `border` the outline, `text` the label, and `line` the drawn line of a link. A word is refused on a kind that has no such part, so `border:` on a note is an error. A note and a glyph body are text and nothing else, so `text:` is their only color.
 
 A style contributes a part only to the kinds that have it, so a style shared between boxes and links writes one key for each — `style backup  border: #d2904e  line: #d2904e` colors the boxes' borders and the links' lines from one name.
 
-There is no `stroke` attribute. It was removed in 0.2.0 because it named no part; if you have seen it in an older file, it is `border` on a box, `text` on a note or a glyph body, and `line` on a link.
+There is no `stroke` attribute. It was removed because it named no part; if you have seen it in an older file, it is `border` on a box, `text` on a note or a glyph body, and `line` on a link.
+
+**Every attribute is checked by name, so do not invent one.** A word the tool does not know is an error, and so is a real word on a kind that has no use for it — `icon:` on a node already drawn as a glyph, `gap:` or `overlap:` on a link, `align:` on a note. The error says either what the kind takes or where the word does belong. A key handed over by a style is exempt, which is what lets one style dress both boxes and links.
 
 A qualifier under a name is written with the line break, not with `subtext`:
 
@@ -128,10 +130,10 @@ A labeled link widens the corridor between its own two ends by what the label ne
 ### Notes
 
 ```
-note <name> "<text>" <placement> ...  width: 30
+note <name> "<text>" <placement> ...  wrap: 30
 ```
 
-Text with no box, anchored to a node. **Always give a note a `width:`** — without one a sentence is drawn as one very long line across whatever is beside it.
+Text with no box, anchored to a node. **Always give a note a `wrap:`** — without one a sentence is drawn as one very long line across whatever is beside it.
 
 ### Styles
 
@@ -157,14 +159,14 @@ link browser -> api  "HTTP"    from: right  to: left
 link api -> db       "SQL"     from: right  to: left
 link worker -> db    "writes"  from: right  to: bottom
 
-note aside "The worker shares the database / but takes no HTTP traffic."  below worker (gap: tight)  width: 30
+note aside "The worker shares the database / but takes no HTTP traffic."  below worker (gap: tight)  wrap: 30
 ```
 
 ## What will bite you
 
 - **A placement written after an attribute.** Positionals first, always.
 - **Boxes that nothing orders.** Every pair of boxes must clear the other, and where the file says nothing about which side of what, it is an error naming the pair: `"b" and "c" overlap, and nothing says which side of the other either one sits on`. Hanging two children off the same side of the same target is the usual cause. Place one against the other.
-- **A note with no width.**
+- **A note with no wrap.**
 - **Reaching for a coordinate, an offset, or a waypoint.** None exist. If a line goes somewhere wrong, say more about it with `between` and `from:`/`to:`; if a box is in the wrong place, add a placement.
 - **`#` is not a comment.** It opens a hex color. Comments are `//`.
 - **Guessing at syntax from another language.** There are no braces, no semicolons, no `-->`, no subgraphs. If you want something not written here, check `reference/syntax.md` before inventing it.

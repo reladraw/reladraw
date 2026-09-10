@@ -247,12 +247,76 @@ export const COLOR_KEYS = [
  * That is what replaced `stroke:`, which named no part and so could never be
  * wrong, and which is why a box's text had no word of its own until now.
  */
-export const COLOR_PARTS: Record<'box' | 'note' | 'glyph' | 'link', readonly string[]> = {
+export const COLOR_PARTS: Record<Kind, readonly string[]> = {
   box: ['fill', 'border', 'text', 'subtext'],
   note: ['text'],
   glyph: ['text', 'subtext'],
   link: ['line', 'text'],
 };
+
+/**
+ * The four things an attribute can be written on. A glyph is a node whose
+ * `shape:` names an icon, so it is not a statement keyword — but it takes a
+ * different set of attributes from an ordinary box, which is what makes it a
+ * kind here.
+ */
+export type Kind = 'box' | 'note' | 'glyph' | 'link';
+
+/**
+ * Every attribute each kind understands. An attribute a kind has no use for is
+ * refused by name rather than dropped, the same rule as an unknown `diagram`
+ * key, a `PLACEMENT_KEYS` modifier or a color part — and for the same reason,
+ * which the color parts only closed one level down: a key that silently does
+ * nothing looks like the tool being broken rather than like a typo.
+ *
+ * The color entries repeat `COLOR_PARTS` and must agree with it. They are
+ * written out rather than spliced in because this table is the answer to "what
+ * may I write here", and a reader of it should not have to assemble the list
+ * from two places.
+ *
+ * Three of the exclusions are the whole of what this table decides, and each is
+ * a place the old silence hid something:
+ *
+ * - A glyph takes no `icon:`. It is drawn *as* a picture and has no box for a
+ *   second one to sit in; `sizeNode` returns before it would ever be read.
+ * - A glyph and a note take no `align:`, which widens a node's children, and
+ *   neither may have any.
+ * - A link takes no `gap:` or `overlap:`. Those are about where a box sits, and
+ *   a link is not placed — it joins two things that are.
+ */
+export const ATTR_KEYS: Record<Kind, readonly string[]> = {
+  box: [
+    'style',
+    'size',
+    'gap',
+    'overlap',
+    'align',
+    'wrap',
+    'icon',
+    'shape',
+    'fill',
+    'border',
+    'text',
+    'subtext',
+  ],
+  note: ['style', 'size', 'gap', 'overlap', 'wrap', 'text'],
+  glyph: ['style', 'size', 'gap', 'overlap', 'wrap', 'shape', 'text', 'subtext'],
+  link: ['style', 'size', 'from', 'to', 'line', 'text'],
+};
+
+/**
+ * Every word that is an attribute *somewhere*, which is what separates a
+ * misspelling from a key written on the wrong kind of thing. The two deserve
+ * different errors: one has no remedy but the spelling, the other has a real
+ * meaning somewhere else in the file.
+ *
+ * `DIAGRAM_KEYS` is in here so that `background:` on a box is understood to be
+ * a real word in the wrong place — that mistake wants to be pointed at `fill:`,
+ * not told the word does not exist.
+ */
+export const ALL_ATTR_KEYS: readonly string[] = [
+  ...new Set([...Object.values(ATTR_KEYS).flat(), ...DIAGRAM_KEYS]),
+];
 
 export interface StyleStmt {
   kind: 'style';

@@ -1,5 +1,11 @@
-import type { Attrs, Axis, Edge, OffsetPlacement, Placement, Document, Stmt } from './ast.js';
-import { COLOR_KEYS, COLOR_PARTS, describePlacement } from './ast.js';
+import type { Attrs, Axis, Edge, Kind, OffsetPlacement, Placement, Document, Stmt } from './ast.js';
+import {
+  ALL_ATTR_KEYS,
+  ATTR_KEYS,
+  COLOR_KEYS,
+  COLOR_PARTS,
+  describePlacement,
+} from './ast.js';
 import {
   ARROW_LENGTH,
   CHILD_GAP,
@@ -48,6 +54,7 @@ export function resolve(doc: Document, options: ResolveOptions = {}): Layout {
   const margin = options.margin ?? DEFAULT_MARGIN;
 
   const styles = collectStyles(doc.statements);
+  checkStyleKeys(doc.statements);
   const { nodes, byName, roots } = buildTree(doc.statements, styles);
   applyDecks(doc.statements, byName);
 
@@ -132,6 +139,10 @@ function buildTree(statements: Stmt[], styles: Map<string, Attrs>) {
       line: stmt.line,
     };
 
+    const kind = kindOf(node);
+    checkAttrs(kind, node.name, stmt.attrs, stmt.line);
+    checkStyleUse(kind, node.name, stmt.attrs, styles, stmt.line);
+
     const cut = stmt.name.lastIndexOf('.');
     if (cut === -1) {
       roots.push(node);
@@ -165,38 +176,135 @@ const KIND_PARTS = {
 } as const;
 
 /**
- * A color attribute names a part, so it is refused on a kind that has no such
- * part — the same rule as an unknown `diagram` key, and for the same reason: an
- * attribute that silently does nothing looks like the tool being broken. That
- * silence is exactly what `stroke:` used to hide, since it meant a different
- * part on every kind and so could never be wrong.
+ * An attribute is refused on a kind that has no use for it — the same rule as
+ * an unknown `diagram` key, and for the same reason: a key that silently does
+ * nothing looks like the tool being broken. A color names a part and so is a
+ * special case of this, which is why the two checks are one.
  *
  * What is checked is what the author wrote *on this statement*, not what a
  * style contributed. A style is a bundle meant to be shared across kinds — the
  * benchmark's `synced` carries a fill and a border for the green boxes and a
- * line for the links joining them — so a key it carries that this kind has no part for is
- * simply unused, and is not a mistake anybody made here.
+ * line for the four links joining them — so a key it carries that this kind has
+ * no part for is simply unused, and is not a mistake anybody made here. That is
+ * forced rather than chosen: checking the merged appearance would refuse the
+ * benchmark's own central idiom four times over. `checkStyleUse` is what keeps
+ * the permissiveness honest.
  */
-function checkColorParts(
-  kind: keyof typeof KIND_WORD,
-  name: string,
-  appearance: Attrs,
-  line: number,
-): void {
-  const allowed = COLOR_PARTS[kind];
-  for (const key of COLOR_KEYS) {
-    if (key === 'background') continue;
-    const value = appearance[key];
-    if (value === undefined || allowed.includes(key)) continue;
-    // The remedy is the list of parts this kind does have, which is always
-    // right and never guesses at an intent. `line:` on a box is a different
-    // mistake from `border:` on a note, and one hint cannot serve both.
-    const takes = allowed.map((part) => `\`${part}:\``).join(', ');
+function checkAttrs(kind: Kind, name: string, attrs: Attrs, line: number): void {
+  const allowed = ATTR_KEYS[kind];
+  // In the author's own order, so the error names the first offending word as
+  // it is read rather than the first in some list of ours.
+  for (const [key, value] of Object.entries(attrs)) {
+    if (allowed.includes(key)) continue;
+
+    if (!ALL_ATTR_KEYS.includes(key)) {
+      // Nothing anywhere in the language answers to this word, so the only
+      // remedy is the vocabulary itself.
+      throw new SourceError(
+        `"${name}" has ${key}: ${value}, which is not an attribute. A ${KIND_WORD[kind]} takes ${allowed.join(', ')}`,
+        line,
+      );
+    }
+
+    // A real word in the wrong place, and the two sorts of word want different
+    // explanations. A color names a *part*, so saying what the kind is made of
+    // is the whole reason it has no such color, and the remedy is the narrower
+    // list of parts it does have: `line:` on a box is a different mistake from
+    // `border:` on a note, and one hint cannot serve both.
+    if ((COLOR_KEYS as readonly string[]).includes(key)) {
+      const parts = COLOR_PARTS[kind].map((part) => `\`${part}:\``).join(', ');
+      throw new SourceError(
+        `"${name}" is a ${KIND_WORD[kind]} and has ${key}: ${value}. A ${KIND_WORD[kind]} is ${KIND_PARTS[kind]}, so it has no ${key} — it takes ${parts}`,
+        line,
+      );
+    }
+
+    // Anything else names no part, so what the kind is made of explains
+    // nothing. What does explain it is where the word *does* belong, which is
+    // also the more useful thing to be told: the author has usually written a
+    // real statement about the wrong half of the diagram.
     throw new SourceError(
-      `"${name}" is a ${KIND_WORD[kind]} and has ${key}: ${value}. A ${KIND_WORD[kind]} is ${KIND_PARTS[kind]}, so it has no ${key} — it takes ${takes}`,
+      `"${name}" is a ${KIND_WORD[kind]} and has ${key}: ${value}. \`${key}:\` belongs to ` +
+        `${listKinds(belongTo(key))} — a ${KIND_WORD[kind]} takes ${allowed.join(', ')}`,
       line,
     );
   }
+}
+
+/**
+ * A style may carry keys this kind has no use for, but it may not carry *only*
+ * those. Partial overlap is the normal case and the reason styles exist; zero
+ * overlap is a style name written on the wrong sort of thing, and nothing else.
+ *
+ * This is the check that lets `checkAttrs` ignore style-contributed keys
+ * without the silence coming back. It cannot catch a style that names every key
+ * in the language, since such a style contributes to everything by
+ * construction — that hole is left open, because nobody writes one by accident.
+ */
+function checkStyleUse(
+  kind: Kind,
+  name: string,
+  attrs: Attrs,
+  styles: Map<string, Attrs>,
+  line: number,
+): void {
+  const named = attrs['style'];
+  if (named === undefined) return;
+  const base = styles.get(named);
+  if (base === undefined) return; // `appearanceOf` reports the missing style.
+
+  // A style naming another style is the one way to carry nothing at all: the
+  // parser already refuses one with no attributes, and `appearanceOf` does not
+  // recurse, so the name would sit there doing nothing.
+  const carried = Object.keys(base).filter((key) => key !== 'style');
+  if (carried.length === 0) {
+    throw new SourceError(`style "${named}" carries nothing but a style name`, line);
+  }
+  if (carried.some((key) => ATTR_KEYS[kind].includes(key))) return;
+
+  throw new SourceError(
+    `style "${named}" gives "${name}" nothing. It carries ${carried.join(' and ')}; ` +
+      `a ${KIND_WORD[kind]} is ${KIND_PARTS[kind]}`,
+    line,
+  );
+}
+
+/**
+ * A style is a bundle spanning kinds, so its keys cannot be checked against any
+ * one of them — but a word that is an attribute of *nothing* is a misspelling
+ * wherever it sits, and a style was the last place in the language where one
+ * could hide.
+ */
+function checkStyleKeys(statements: Stmt[]): void {
+  for (const stmt of statements) {
+    if (stmt.kind !== 'style') continue;
+    for (const [key, value] of Object.entries(stmt.attrs)) {
+      if (ALL_ATTR_KEYS.includes(key)) continue;
+      throw new SourceError(
+        `style "${stmt.name}" has ${key}: ${value}, which is not an attribute. ` +
+          `The attributes are ${ALL_ATTR_KEYS.join(', ')}`,
+        stmt.line,
+      );
+    }
+  }
+}
+
+/** Which kinds understand an attribute, in the order the table declares them. */
+function belongTo(key: string): Kind[] {
+  return (Object.keys(ATTR_KEYS) as Kind[]).filter((kind) => ATTR_KEYS[kind].includes(key));
+}
+
+/** "a link", "a box or a glyph body", "a box, a note or a glyph body". */
+function listKinds(kinds: Kind[]): string {
+  const words = kinds.map((kind) => `a ${KIND_WORD[kind]}`);
+  if (words.length <= 1) return words[0] ?? 'nothing';
+  return `${words.slice(0, -1).join(', ')} or ${words[words.length - 1]}`;
+}
+
+/** Which of the four kinds a node is, which its `shape:` may decide. */
+function kindOf(node: { kind: string; appearance: Attrs; line: number }): Kind {
+  if (node.kind === 'note') return 'note';
+  return shapeFor(node.appearance, node.line).body !== undefined ? 'glyph' : 'box';
 }
 
 function appearanceOf(attrs: Attrs, styles: Map<string, Attrs>, line: number): Attrs {
@@ -239,7 +347,9 @@ function buildLinks(
       ...(stmt.between.axis !== undefined ? { axis: stmt.between.axis } : {}),
     };
     const appearance = appearanceOf(stmt.attrs, styles, stmt.line);
-    checkColorParts('link', `${stmt.from} -> ${stmt.to}`, stmt.attrs, stmt.line);
+    const what = `${stmt.from} -> ${stmt.to}`;
+    checkAttrs('link', what, stmt.attrs, stmt.line);
+    checkStyleUse('link', what, stmt.attrs, styles, stmt.line);
     links.push({
       from,
       to,
@@ -272,13 +382,6 @@ function sizeNode(
 ): void {
   for (const child of node.children) sizeNode(child, links, measurer, fontSize, local);
 
-  checkColorParts(
-    node.kind === 'note' ? 'note' : shapeFor(node.appearance, node.line).body !== undefined ? 'glyph' : 'box',
-    node.name,
-    node.attrs,
-    node.line,
-  );
-
   // Text is measured at the size it will be drawn at — the size lives in
   // `constants.ts` precisely so the resolver reserving the room and the
   // renderer filling it cannot disagree about how much room there is.
@@ -292,17 +395,6 @@ function sizeNode(
 
   if (node.kind === 'note') {
     // A note is bare text, so it gets no padding and takes no children.
-    // Both are refused rather than ignored, for the reason an unknown diagram
-    // key is: a note is bare text with no box to decorate or replace, so either
-    // word would silently do nothing and look like the tool being broken.
-    for (const key of ['icon', 'shape'] as const) {
-      if (node.appearance[key] !== undefined) {
-        throw new SourceError(
-          `"${node.name}" is a note and has ${key}: ${node.appearance[key]}. A note is bare text, with no box to ${key === 'icon' ? 'decorate' : 'replace'}`,
-          node.line,
-        );
-      }
-    }
     node.width = labelWidth;
     node.height = labelHeight;
     return;
@@ -335,14 +427,16 @@ function sizeNode(
   const iconRoom = icon === undefined ? 0 : iconSide + (hasLabel ? ICON_GAP : 0);
 
   if (node.children.length === 0) {
-    // A band only exists because contents have to sit clear of it. A leaf has
-    // none, so its label is centered in the box and there is nothing for `at` or
-    // `align` to move it relative to. Refused rather than silently dropped.
-    const stated = Object.keys(node.label);
-    if (stated.length > 0) {
+    // A band only exists because contents have to sit clear of it, and a leaf
+    // has none, so `at` has no end to name. `align` is a different question and
+    // is allowed: a label of several lines has lines of unequal length in any
+    // box, and ranging them left rather than centering them is a real thing to
+    // want. It was refused here too until 2026-09-09, purely because the two
+    // words arrive in the same brackets.
+    if (node.label['at'] !== undefined) {
       throw new SourceError(
-        `"${node.name}" holds nothing and its label carries ${stated.join(' and ')}. ` +
-          `A label sits at one end of a box so its contents can have the other; with no contents it is centered, and there is nothing to say`,
+        `"${node.name}" holds nothing and its label carries at: ${node.label['at']}. ` +
+          `A label sits at one end of a box so its contents can have the other; with no contents there is no band for it to sit at either end of`,
         node.line,
       );
     }
@@ -1273,12 +1367,12 @@ function widestLine(lines: string[], measurer: Measurer, fontSize: number): numb
  * and never becomes a coordinate in disguise.
  */
 function linesFor(text: string, attrs: Attrs, line: number): string[] {
-  const stated = attrs['width'];
+  const stated = attrs['wrap'];
   if (stated === undefined) return splitLines(text);
 
   const columns = Number(stated);
   if (!Number.isInteger(columns) || columns < 1) {
-    throw new SourceError(`width must be a whole number of characters, not "${stated}"`, line);
+    throw new SourceError(`wrap must be a whole number of characters, not "${stated}"`, line);
   }
   return splitLines(text).flatMap((part) => wrap(part, columns));
 }

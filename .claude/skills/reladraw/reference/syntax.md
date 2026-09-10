@@ -50,7 +50,9 @@ The whitespace is part of the marker, not decoration. A slash inside a word is a
 
 For a label that wants a spaced slash and no break, `\/` escapes it: `"Before \/ After"` is one line. The escapes are `\"`, `\\` and `\/`.
 
-`width: <n>` folds the text at word boundaries every `n` characters, on top of whatever ` / ` already breaks. It is a character count, not a distance, so it says how much text fits on a line and never where anything sits. It is how you make a block of text narrow and tall so it can sit snugly beside something, rather than wide and short so it cannot.
+`wrap: <n>` folds the text at word boundaries every `n` characters, on top of whatever ` / ` already breaks. It is how you make a block of text narrow and tall so it can sit snugly beside something, rather than wide and short so it cannot.
+
+It was called `width` until it was renamed, and the old name is now an error naming the new one. `width` was wrong in the way this project's naming rule catches: it says how wide something is, and this says nothing of the sort — `width: 200` meaning units was accepted, folded at two hundred characters, and did nothing visible. The reference had to carry a sentence explaining that the number was not a distance, which is the tell that a name is doing the wrong job.
 
 `size: small | normal | large` sets how big the text is, and works on a box, a note or a link label. The sizes are named for the reason gaps are named: a number would be typography by coordinate, stale the moment the document is set at another size, and silent about *why* one piece of text is smaller than another. An unrecognized value is an error naming it.
 
@@ -86,13 +88,15 @@ A container's label can say where in the box it goes, in brackets on the label i
 box docker "Docker" (at: bottom, align: center)  below deploy
 ```
 
-`at: top | bottom` says which end of the box the label sits at; the contents take the other end. `align: left | center | right` says how the text sits across it. The defaults are `top` and `left`, and the comma is optional punctuation.
+`at: top | bottom` says which end of the box the label sits at; the contents take the other end. `align: left | center | right` says how the text sits across it. The defaults are `top` and `left` in a container, and the comma is optional punctuation.
 
 The two are independent and neither implies the other. `(at: bottom)` on its own is an ordinary label that happens to be at the bottom.
 
 They are bracketed onto the label rather than written among the node's attributes for the same reason [a gap is bracketed onto its placement](#a-gap-belongs-to-the-placement): they modify that one thing, and the brackets make the scope visible instead of leaving it to be inferred from what happens to sit nearby.
 
-A leaf's label is centered in its box with nothing to sit clear of, so it takes no modifiers and saying otherwise is an error. So is putting them on a note, which has no box at all.
+A leaf has no contents, so there is no band and nothing for `at` to be at either end of; writing it on a childless box is an error. `align` is fine there, and its default is `center` rather than `left`, because a leaf's label is centered in its box. It is worth having: any label of more than one line — from a ` / ` break or from `wrap:` — has lines of unequal length, and how those sit across each other is a real question in a leaf as much as in a container.
+
+Both are refused on a note, which has no box at all.
 
 `align: widths` on a container widens every direct child to match the widest of them, so a stack of boxes with labels of different lengths draws as a column with one edge rather than a ragged one. It is the only value the key accepts; anything else is an error. Widths are the only thing it touches — it never moves a child.
 
@@ -305,7 +309,7 @@ link <from> <-> <to> ["<label>"] [between <a> and <b> [vertically|horizontally]]
 
 Endpoints may be nested (`computer1.files`). A link never says where a box goes and routing is the renderer's problem, with one exception: a labeled link claims room in the gap it crosses, which is the next section.
 
-A link's label breaks on ` / ` exactly as a node's does, and the block centers on the point the label would otherwise have occupied, so ``"run `deploy` / shell command"`` stacks its two lines around the midpoint of the line rather than running off along it. `width:` is a node attribute and does not apply — a link label folds where you say and nowhere else.
+A link's label breaks on ` / ` exactly as a node's does, and the block centers on the point the label would otherwise have occupied, so ``"run `deploy` / shell command"`` stacks its two lines around the midpoint of the line rather than running off along it. `wrap:` is a node attribute and does not apply — a link label folds where you say and nowhere else.
 
 ### A label makes room for itself
 
@@ -410,7 +414,7 @@ note <name> "<text>" <placement> ...
 
 A note is text with no box, anchored to a node so it travels with it.
 
-Nothing bounds a note the way a border bounds a box, so a sentence-length note without a `width` is drawn as one very long line and will cross whatever is beside it. Give every note a width.
+Nothing bounds a note the way a border bounds a box, so a sentence-length note without a `wrap` is drawn as one very long line and will cross whatever is beside it. Give every note a wrap.
 
 A note starts one step smaller than a box label, because a note annotates the diagram rather than being part of it and at the same size an aside reads as a statement. That is a default, not a ceiling: say `size:` and it does what you said. The two things a note most often needs saying about it are how big its text is and how wide it runs, and both are attributes of the note rather than something to be inferred from the fact that it is one.
 
@@ -421,6 +425,39 @@ deck <name> "<label>" ["<label>" ...]
 ```
 
 Draws the named container with offset copies behind it, one per label, to say "there are several of these and they are the same." Only the front copy shows its contents.
+
+## Attributes
+
+Every attribute, and what takes one. The kinds here are what a statement *draws* rather than which keyword declared it: a node whose `shape:` names an icon is drawn as a glyph body and takes a different set from an ordinary box.
+
+| attribute | box | note | glyph body | link | says |
+|---|---|---|---|---|---|
+| `style` | ✓ | ✓ | ✓ | ✓ | the named bundle to take appearance from |
+| `size` | ✓ | ✓ | ✓ | ✓ | how big the text is set |
+| `gap` | ✓ | ✓ | ✓ | | the default distance to whatever it is placed against |
+| `overlap` | ✓ | ✓ | ✓ | | `allow`, to opt out of non-overlap |
+| `wrap` | ✓ | ✓ | ✓ | | how many characters fit on a line before the label folds |
+| `align` | ✓ | | | | `widths`, to widen every child to the widest of them |
+| `icon` | ✓ | | | | the glyph that takes the column beside the label |
+| `shape` | ✓ | | ✓ | | what the node is drawn as |
+| `from` `to` | | | | ✓ | which side the line leaves and arrives on |
+| `fill` | ✓ | | | | color — see "A color names the part it colors" |
+| `border` | ✓ | | | | color |
+| `text` | ✓ | ✓ | ✓ | ✓ | color |
+| `subtext` | ✓ | | ✓ | | color |
+| `line` | | | | ✓ | color |
+
+The `diagram` statement has a vocabulary of its own — `background`, and so far nothing else — which is checked the same way. Writing `background:` on a box is an error that points at `fill:`.
+
+**A word this table does not give the kind is an error.** The two ways of being wrong get different answers, because they have different remedies. A word that is an attribute nowhere is a misspelling, and the error lists what the kind does take. A word that is an attribute *somewhere else* is usually a real statement written on the wrong half of the diagram, so the error says where it belongs:
+
+```
+"one" is a box and has from: left. `from:` belongs to a link — a box takes style, size, gap, ...
+```
+
+Three of the gaps in the table are worth saying out loud, because each was silent until then and none of them looks like a mistake while you are writing it. A glyph body takes no `icon:` — it is drawn *as* a picture and has no box for a second one to sit in. A note and a glyph body take no `align:`, which widens a node's children, and neither may have any. A link takes no `gap:` or `overlap:` — those say where a box sits, and a link is not placed, it joins two things that are.
+
+**Changed 2026-09-09.** Until then a node or link attribute the tool did not recognize was parsed, stored and never read: `wibble: red` on a box drew nothing and said nothing. This was the last place in the language where a key could silently do nothing, and the rule everywhere else — an unknown `diagram` key, an unknown placement modifier, a color naming a part the kind has not got — has always been that a key which silently does nothing looks like the tool being broken rather than like a typo. A file that rendered with a stray word in it will now stop with an error naming it.
 
 ## Styles
 
@@ -461,7 +498,22 @@ style backup  border: #d2904e  line: #d2904e
 
 The boxes take the border, the links take the line, and neither sees the other's word. Writing only `border` there would color the boxes and leave the links plain.
 
-**Removed in 0.2.0: `stroke`.** It named no part — it meant the border of a box, the *text* of a note or a glyph body, and the line of a link, whichever the thing happened to have. That is coherent one kind at a time and ambiguous read across them; it meant no ink attribute could ever be *wrong*; and it left one thing with no way to be said at all, the color of the text on an ordinary box, which is why `subtext` exists in the odd shape it does. A file written against `0.1.0` gets an error naming the word to use instead.
+### A style may carry what a thing cannot use
+
+The table under "Attributes" is checked against what you wrote *on the statement*, never against what a style handed it. That is what makes a bundle spanning kinds possible at all: the benchmark's `style synced` carries a fill, a border and a subtext for five boxes and a `line` for the four links joining them, and every use of it leaves some of its keys unused. That is the style doing its job, not a mistake, so nothing is said about it.
+
+What is refused is a style that gives a thing **nothing at all**:
+
+```
+style boxy  fill: #142814  icon: disk
+note n "An aside"  style: boxy
+```
+
+A note is bare text, with neither a fill nor an icon, so `boxy` dresses it in nothing whatever and the name is on the wrong sort of thing. Partial overlap is the normal case; zero overlap is never anything else. A style that named every attribute in the language would slip through this, since it contributes to everything by construction — nobody writes one by accident, and the hole is left open rather than closed with a rule that would fire on `synced`.
+
+A style's own keys are checked against the whole vocabulary, since a word that is an attribute of nothing is a misspelling wherever it sits. `style s  wibble: red` is an error; a style was the last place one could hide.
+
+**Removed: `stroke`.** It named no part — it meant the border of a box, the *text* of a note or a glyph body, and the line of a link, whichever the thing happened to have. That is coherent one kind at a time and ambiguous read across them; it meant no ink attribute could ever be *wrong*; and it left one thing with no way to be said at all, the color of the text on an ordinary box, which is why `subtext` exists in the odd shape it does. An older file carrying it gets an error naming the word to use instead.
 
 A color is never written in quotes, and a quoted one is refused. There is nothing to check a color *against* — the tool keeps no list of color words, as below — so this is the one thing that can be checked, and it is the mistake that actually gets made: `subtext: "medium-fine"` reads as the text that goes underneath, and every attribute that takes a color would otherwise accept the string, find it is not a color, and draw nothing without saying so. The qualifier under a name is a second line of the label, not a `subtext` value.
 
@@ -494,7 +546,7 @@ diagram  background: #111111
 
 One attribute so far. `background` takes a color the same way `fill` does, and it colors the page behind everything, including the strip a link label knocks out of whatever it crosses. Say nothing and the theme's own background stands.
 
-An unknown key is refused by name — `diagram has no "backround" — it takes background` — rather than quietly ignored. A node attribute the tool does not recognize is harmless, because you can see the node; a diagram-wide setting that silently does nothing looks exactly like a renderer bug.
+An unknown key is refused by name — `diagram has no "backround" — it takes background` — rather than quietly ignored, the same as every other attribute. See "Attributes".
 
 ## What the language refuses
 
@@ -548,6 +600,8 @@ That one was found by testing the lexer, not by rendering — and it could not h
 ~~Two links between the same pair of sides were drawn on top of each other.~~ Fixed. Each side was ordered on its own, by where the far ends sat, and for links that share both ends that signal says nothing — so the two edges were ordered without reference to each other and the lines converged in the middle instead of nesting. The visible damage was to the labels: both landed at the same point and the second knocked a hole through the first, leaving one word of it. A group like this now takes one lane order used at both ends. See "Several links between the same two sides".
 
 ~~Several links between the same two boxes with no side named were drawn on top of each other.~~ Fixed. This is the same defect as the one above, one step out: a bundle is a statement about two named edges, and an end with no side named has not made one, so nothing saw the group. `link a -> b` three times drew one visible line carrying one label. Each such link now takes its own line, parallel to the one it would have drawn alone and a lane away from it. Note what did *not* change: an unnamed end still attaches where the center-to-center ray crosses the border, so no single link anywhere moved. See "Several links with no side named at all".
+
+~~An unknown attribute was ignored in silence.~~ Fixed. `wibble: red` on a box parsed, was stored, and was never read again — nothing drew and nothing was said. So did every real attribute written on a kind with no use for it: `icon:` on a node already drawn as a glyph, `gap:` on a link. This was the same defect the color parts had closed one level down a version earlier, and it is how that migration produced false results from the repository's own regression check, since the older build simply dropped every `border:` it had not heard of. See "Attributes".
 
 ~~A link label ignored the line break.~~ Fixed. ` / ` split a node's label and was never applied to a link's, so the marker came out as a literal slash on an arrow and the benchmark's two-line captions had to be flattened to one. The measurer had always returned the split lines; the renderer was handing it the raw string and drawing that instead. The block now centers on the point the label already occupied, so a one-line label sits exactly where it did.
 

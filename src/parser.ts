@@ -119,10 +119,21 @@ function parseAttrs(tokens: Token[], line: number): Attrs {
       // Removed 2026-09-09. It meant a different part on every kind — the
       // border of a box, the text of a note or a glyph body, the line of a
       // link — so it could never be wrong, and a box's text had no word at all.
-      // Refused by name rather than ignored: a file written against 0.1.0 must
-      // be told what to write, not silently drawn without its colors.
+      // Refused by name rather than ignored: an older file must be told what
+      // to write, not silently drawn without its colors.
       throw new SourceError(
         '`stroke:` has been replaced by the part it colors — `border:` on a box, `text:` on a note or a glyph body, `line:` on a link. A style shared between boxes and links writes both, as in `border: #d2904e  line: #d2904e`',
+        line,
+      );
+    }
+    if (key === 'width') {
+      // Renamed 2026-09-09. It folds a label every n *characters* and never
+      // said how wide anything is, so `width: 200` meaning units was accepted,
+      // wrapped at 200 characters, and did nothing visible — the silent drop
+      // this vocabulary is otherwise free of. Refused by name for the reason
+      // `stroke:` is: an older file must be told, not quietly drawn unwrapped.
+      throw new SourceError(
+        '`width:` is now `wrap:`, because it folds the text every n characters and says nothing about how wide anything is',
         line,
       );
     }

@@ -179,8 +179,11 @@ export const DEFAULT_MARGIN = 40;
  * rather than process" and a reader decodes it, while "lower down" means only
  * lower down.
  *
- * A leaf has no band — its label is centered in the box — so neither says
- * anything about one.
+ * A leaf has no band, so `at` says nothing about one and is refused there. But
+ * `align` is not about the band: a label of more than one line has lines of
+ * unequal length whatever kind of box it is in, and how those sit across each
+ * other is a real question anywhere. A leaf's default is centered rather than
+ * ranged left, which is why the fallback is a parameter.
  */
 export const LABEL_ENDS = ['top', 'bottom'] as const;
 export type LabelEnd = (typeof LABEL_ENDS)[number];
@@ -208,7 +211,11 @@ export interface LabelStyle {
  * contents away from the band, and the renderer, which draws into it, so the two
  * cannot disagree about which end the band is at.
  */
-export function labelStyleFor(label: Attrs, line: number): LabelStyle {
+export function labelStyleFor(
+  label: Attrs,
+  line: number,
+  fallbackAlign: 'start' | 'middle' = 'start',
+): LabelStyle {
   const at = label['at'];
   if (at !== undefined && !(LABEL_ENDS as readonly string[]).includes(at)) {
     throw new SourceError(`a label's at takes ${LABEL_ENDS.join(' or ')}, not "${at}"`, line);
@@ -219,6 +226,6 @@ export function labelStyleFor(label: Attrs, line: number): LabelStyle {
   }
   return {
     at: (at as LabelEnd | undefined) ?? 'top',
-    align: align === undefined ? 'start' : LABEL_ALIGNMENTS[align]!,
+    align: align === undefined ? fallbackAlign : LABEL_ALIGNMENTS[align]!,
   };
 }

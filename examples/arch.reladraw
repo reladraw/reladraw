@@ -75,7 +75,7 @@ box dumps.db1 "pg_dump output / (DB 1)"  style: dump
 box dumps.db2 "pg_dump output / (DB 2)"  style: dump
 
 // The note explains what makes the dumps, so it is anchored under them.
-note dumps_trigger "Triggered by `db-backup` shell command"  below dumps  gap: tight  width: 30
+note dumps_trigger "Triggered by `db-backup` shell command"  below dumps  gap: tight  wrap: 30
 
 
 // --- the server ----------------------------------------------------------
@@ -159,6 +159,6 @@ deck bup_hd "BUP-HD2" "BUP-HD3"
 // The third wants its top edge against the long-term storage box rather than
 // its center line, which is what the edge form of the alignment is for.
 
-note rotations_note "Regular rotations backup \"important\" dir"  right of bup_hd.important_backup and bup_hd.bare  gap: tight  width: 28
-note archive_note "archive dirs remain untouched"  left of bup_hd.archive1 and bup_hd.archive2  gap: tight  width: 26  overlap: allow
-note storage_note "long-term storage is backed up only occasionally"  right of bup_hd.storage  top level with bup_hd.storage  gap: tight  width: 28
+note rotations_note "Regular rotations backup \"important\" dir"  right of bup_hd.important_backup and bup_hd.bare  gap: tight  wrap: 28
+note archive_note "archive dirs remain untouched"  left of bup_hd.archive1 and bup_hd.archive2  gap: tight  wrap: 26  overlap: allow
+note storage_note "long-term storage is backed up only occasionally"  right of bup_hd.storage  top level with bup_hd.storage  gap: tight  wrap: 28

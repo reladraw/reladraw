@@ -226,14 +226,17 @@ function drawNode(
 
   if (!container) {
     // A leaf centers its label in the box, both ways — in the room beside the
-    // icon rather than the whole box, so the two sit side by side.
+    // icon rather than the whole box, so the two sit side by side. Centered
+    // across is only the default: a label of several lines may say `align`, and
+    // there is genuine slack between lines of unequal length to range them in.
+    const leafAlign = labelStyleFor(node.label, node.line, 'middle').align;
     const top = face.y + (face.height - node.lines.length * textHeight) / 2;
     parts.push(
       sized(
         textBlock(node.lines, face.x, top, face.width - iconRoom, textHeight, size, {
           color: text,
           subColor,
-          align: 'middle',
+          align: leafAlign,
         }),
         size,
         fontSize,

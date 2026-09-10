@@ -339,7 +339,16 @@ case "$cmd" in
       name="$(basename "$in" .reladraw)"
       # Both compilers read the working tree's examples, so a difference is
       # always the code and never the file.
-      node "$work/base/dist/cli.js" "$in" -o "$work/head/$name.base.svg" >/dev/null 2>&1 || true
+      # A baseline that cannot read the working tree's source is not a moved
+      # picture, and reporting it as one is how three sessions have been misled:
+      # rename an attribute and every example using it "moves", because the old
+      # build drops the word it has never heard of. Say what actually happened
+      # and point at the command that answers the question instead.
+      if ! node "$work/base/dist/cli.js" "$in" -o "$work/head/$name.base.svg" >/dev/null 2>&1; then
+        echo "OLDER $name  (source does not render at $ref — use ./dev.sh pictures)"
+        moved=$((moved + 1))
+        continue
+      fi
       node dist/cli.js "$in" -o "$work/head/$name.head.svg" >/dev/null 2>&1 || true
       if cmp -s "$work/head/$name.base.svg" "$work/head/$name.head.svg"; then
         echo "same  $name"
