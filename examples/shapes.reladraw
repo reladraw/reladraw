@@ -11,7 +11,7 @@
 
 diagram  background: #111111
 
-style artifact  fill: #460000  stroke: #4e4e4e  shape: document
+style artifact  fill: #460000  border: #4e4e4e  shape: document
 
 // The fold is a fixed size, not a fraction of the box, so it stays the same on
 // all three of these. Sizing it proportionally is what makes it vanish on a
@@ -23,7 +23,7 @@ box wide   "A very much longer file name than either of the other two"  right of
 // A glyph body has no outline, no fill and no padding. A label goes under it,
 // which is what makes a row of these read as captioned things rather than as
 // decoration that happens to have words near it.
-box services ""  below narrow  gap: normal  fill: none  stroke: none
+box services ""  below narrow  gap: normal  fill: none  border: none
 box services.web    "web"                          shape: instance
 box services.api    "api"     right of services.web  gap: tight  shape: instance
 box services.worker "worker"  right of services.api  gap: tight  shape: instance

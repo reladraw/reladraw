@@ -206,7 +206,7 @@ export function highlightLine(line: string): Span[] {
           if (space !== null) {
             push('plain', at + space.length);
             const name = match(WORD, line, at);
-            // `style backup  stroke: …` declares a name; `box  fill: red` is a
+            // `style backup  border: …` declares a name; `box  fill: red` is a
             // half-typed line whose second word is already an attribute, and
             // coloring that as a name would be a lie about what it is.
             if (name !== null && !name.endsWith(':')) push('name', at + name.length);

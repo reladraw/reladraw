@@ -70,9 +70,15 @@ box server.api    "API"
 box server.worker "Worker"
 ```
 
-A container with `""` and `fill: none  stroke: none` draws nothing and takes no room of its own, which is how you make a group that can be placed against as one shape.
+A container with `""` and `fill: none  border: none` draws nothing and takes no room of its own, which is how you make a group that can be placed against as one shape.
 
-Node attributes: `style`, `fill` and `stroke` (each a color), `subtext` (**a color, not text** — it colors every label line after the first, so a box carries its qualifier as a second line of its own label and `subtext` only makes that line quieter; `muted` is the usual value), `size` (`small | normal | large`), `icon`, `shape`, `width` (fold the label every n characters), `gap`, `overlap: allow`, and `align: widths` on a container.
+Node attributes: `style`, `fill`, `border` and `text` (each a color), `subtext` (**a color, not text** — it colors every label line after the first, so a box carries its qualifier as a second line of its own label and `subtext` only makes that line quieter; `muted` is the usual value), `size` (`small | normal | large`), `icon`, `shape`, `width` (fold the label every n characters), `gap`, `overlap: allow`, and `align: widths` on a container.
+
+A color attribute names the part it colors: `fill` is the area, `border` the outline, `text` the label, and `line` the drawn line of a link. A word is refused on a kind that has no such part, so `border:` on a note is an error. A note and a glyph body are text and nothing else, so `text:` is their only color.
+
+A style contributes a part only to the kinds that have it, so a style shared between boxes and links writes one key for each — `style backup  border: #d2904e  line: #d2904e` colors the boxes' borders and the links' lines from one name.
+
+There is no `stroke` attribute. It was removed in 0.2.0 because it named no part; if you have seen it in an older file, it is `border` on a box, `text` on a note or a glyph body, and `line` on a link.
 
 A qualifier under a name is written with the line break, not with `subtext`:
 
@@ -130,7 +136,7 @@ Text with no box, anchored to a node. **Always give a note a `width:`** — with
 ### Styles
 
 ```
-style store  fill: #142814  stroke: #486544  icon: database
+style store  fill: #142814  border: #486544  icon: database
 box records "Records"  style: store
 ```
 
@@ -140,7 +146,7 @@ Colors are written directly — any hex or CSS color, or `none`. There is no lis
 
 ```
 // A request path, left to right.
-style store  fill: #142814  stroke: #486544  icon: database
+style store  fill: #142814  border: #486544  icon: database
 
 box browser  "Browser"
 box api      "API server"  right of browser

@@ -13,7 +13,7 @@
 
 diagram background: #111111
 
-style box  fill: #191728  stroke: #4f5367
+style box  fill: #191728  border: #4f5367
 
 // A reciprocal pair across a corner. The two edges are traversed in opposite
 // senses — further left along Gateway's bottom is further down Queue's left —

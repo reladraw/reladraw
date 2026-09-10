@@ -7,7 +7,7 @@
 
 diagram background: #111111
 
-style channel  fill: #191920  stroke: #25242f
+style channel  fill: #191920  border: #25242f
 
 // --- a horizontal channel ----------------------------------------------------
 // `north` and `south` are apart vertically, so that is the gap `between` means

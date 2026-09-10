@@ -84,6 +84,11 @@ function attributesBegin(tokens: Token[]): number {
   return -1;
 }
 
+/** The value as the author would have to write it back into a label. */
+function quoteOf(text: string): string {
+  return `"${text.replace(/"/g, '\\"')}"`;
+}
+
 function parseAttrs(tokens: Token[], line: number): Attrs {
   const attrs: Attrs = {};
   let i = 0;
@@ -110,6 +115,17 @@ function parseAttrs(tokens: Token[], line: number): Attrs {
     if (isAttrKey(valueToken)) {
       throw new SourceError(`attribute "${key}" has no value`, line);
     }
+    if (key === 'stroke') {
+      // Removed 2026-09-09. It meant a different part on every kind — the
+      // border of a box, the text of a note or a glyph body, the line of a
+      // link — so it could never be wrong, and a box's text had no word at all.
+      // Refused by name rather than ignored: a file written against 0.1.0 must
+      // be told what to write, not silently drawn without its colors.
+      throw new SourceError(
+        '`stroke:` has been replaced by the part it colors — `border:` on a box, `text:` on a note or a glyph body, `line:` on a link. A style shared between boxes and links writes both, as in `border: #d2904e  line: #d2904e`',
+        line,
+      );
+    }
     if (valueToken.quoted && (COLOR_KEYS as readonly string[]).includes(key)) {
       // A quoted value is the author saying "this is text", and every one of
       // these keys takes a color. Without this the string is passed through as
@@ -124,12 +140,22 @@ function parseAttrs(tokens: Token[], line: number): Attrs {
           line,
         );
       }
-      const remedy =
-        key === 'subtext'
-          ? ` — for a quieter second line write it into the label, as in \`"Name / ${valueToken.text}"\` with \`subtext: muted\``
-          : '';
+      // `text:` is the color of a label, not the label itself, and that is a
+      // mistake worth naming rather than only refusing — the word invites it.
+      if (key === 'text') {
+        throw new SourceError(
+          `\`text:\` is the color of a label, not the label — write the words in quotes after the name, as in \`box name ${quoteOf(valueToken.text)}\``,
+          line,
+        );
+      }
+      if (key === 'subtext') {
+        throw new SourceError(
+          `\`subtext:\` is the color of a label's later lines, not the words — write them into the label, as in \`"Name / ${valueToken.text}"\`, and \`subtext: muted\` to make them quieter`,
+          line,
+        );
+      }
       throw new SourceError(
-        `"${key}" takes a color, not text, so "${valueToken.text}" cannot be one${remedy}`,
+        `"${key}" takes a color and a quoted value is text — drop the quotes if ${valueToken.text} is a color`,
         line,
       );
     }

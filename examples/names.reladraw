@@ -18,7 +18,7 @@ box server.backup  right of server.docker  gap: tight
 // `""` is the other half: a box that is deliberately blank. Unchanged by any
 // of this, and the reason the shorter form could be added at all.
 
-box pool ""  right of server (gap: wide)  level with server  fill: none  stroke: none
+box pool ""  right of server (gap: wide)  level with server  fill: none  border: none
 box pool.one    ""  shape: instance
 box pool.two    ""  right of pool.one  gap: tight  shape: instance
 

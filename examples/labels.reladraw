@@ -10,7 +10,7 @@
 
 diagram background: #111111
 
-style box  fill: #191728  stroke: #4f5367
+style box  fill: #191728  border: #4f5367
 
 // Nothing here says how far apart these two sit. The default gap is sized for
 // two boxes to breathe rather than to hold a word, so the label opens it.

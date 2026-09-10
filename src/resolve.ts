@@ -1,5 +1,5 @@
 import type { Attrs, Axis, Edge, OffsetPlacement, Placement, Document, Stmt } from './ast.js';
-import { describePlacement } from './ast.js';
+import { COLOR_KEYS, COLOR_PARTS, describePlacement } from './ast.js';
 import {
   ARROW_LENGTH,
   CHILD_GAP,
@@ -155,6 +155,50 @@ function buildTree(statements: Stmt[], styles: Map<string, Attrs>) {
   return { nodes, byName, roots };
 }
 
+/** How each kind reads in an error, and what it is actually made of. */
+const KIND_WORD = { box: 'box', note: 'note', glyph: 'glyph body', link: 'link' } as const;
+const KIND_PARTS = {
+  box: 'a fill, a border and text',
+  note: 'bare text and nothing else',
+  glyph: 'a picture and the text under it',
+  link: 'a line and its label',
+} as const;
+
+/**
+ * A color attribute names a part, so it is refused on a kind that has no such
+ * part — the same rule as an unknown `diagram` key, and for the same reason: an
+ * attribute that silently does nothing looks like the tool being broken. That
+ * silence is exactly what `stroke:` used to hide, since it meant a different
+ * part on every kind and so could never be wrong.
+ *
+ * What is checked is what the author wrote *on this statement*, not what a
+ * style contributed. A style is a bundle meant to be shared across kinds — the
+ * benchmark's `synced` carries a fill and a border for the green boxes and a
+ * line for the links joining them — so a key it carries that this kind has no part for is
+ * simply unused, and is not a mistake anybody made here.
+ */
+function checkColorParts(
+  kind: keyof typeof KIND_WORD,
+  name: string,
+  appearance: Attrs,
+  line: number,
+): void {
+  const allowed = COLOR_PARTS[kind];
+  for (const key of COLOR_KEYS) {
+    if (key === 'background') continue;
+    const value = appearance[key];
+    if (value === undefined || allowed.includes(key)) continue;
+    // The remedy is the list of parts this kind does have, which is always
+    // right and never guesses at an intent. `line:` on a box is a different
+    // mistake from `border:` on a note, and one hint cannot serve both.
+    const takes = allowed.map((part) => `\`${part}:\``).join(', ');
+    throw new SourceError(
+      `"${name}" is a ${KIND_WORD[kind]} and has ${key}: ${value}. A ${KIND_WORD[kind]} is ${KIND_PARTS[kind]}, so it has no ${key} — it takes ${takes}`,
+      line,
+    );
+  }
+}
+
 function appearanceOf(attrs: Attrs, styles: Map<string, Attrs>, line: number): Attrs {
   const named = attrs['style'];
   if (named === undefined) return { ...attrs };
@@ -194,6 +238,8 @@ function buildLinks(
       }) as [LayoutNode, LayoutNode],
       ...(stmt.between.axis !== undefined ? { axis: stmt.between.axis } : {}),
     };
+    const appearance = appearanceOf(stmt.attrs, styles, stmt.line);
+    checkColorParts('link', `${stmt.from} -> ${stmt.to}`, stmt.attrs, stmt.line);
     links.push({
       from,
       to,
@@ -201,7 +247,7 @@ function buildLinks(
       ...(stmt.label !== undefined ? { label: stmt.label } : {}),
       ...(between ? { between } : {}),
       attrs: stmt.attrs,
-      appearance: appearanceOf(stmt.attrs, styles, stmt.line),
+      appearance,
       line: stmt.line,
     });
   }
@@ -225,6 +271,13 @@ function sizeNode(
   local: Local,
 ): void {
   for (const child of node.children) sizeNode(child, links, measurer, fontSize, local);
+
+  checkColorParts(
+    node.kind === 'note' ? 'note' : shapeFor(node.appearance, node.line).body !== undefined ? 'glyph' : 'box',
+    node.name,
+    node.attrs,
+    node.line,
+  );
 
   // Text is measured at the size it will be drawn at — the size lives in
   // `constants.ts` precisely so the resolver reserving the room and the

@@ -115,7 +115,7 @@ export function render(layout: Layout, options: RenderOptions = {}): string {
     height: Math.ceil(ink.maxY) - Math.floor(ink.minY),
   };
 
-  const arrowColors = new Set(layout.links.map((link) => colorOf(link.appearance, theme.link)));
+  const arrowColors = new Set(layout.links.map((link) => lineOf(link.appearance, theme.link)));
 
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}" viewBox="${canvas.x} ${canvas.y} ${canvas.width} ${canvas.height}" font-family=${quote(measurer.fontFamily)} font-size="${fontSize}px">`,
@@ -146,7 +146,7 @@ function drawNode(
   if (node.kind === 'note') {
     return sized(
       textBlock(node.lines, node.x, node.y, node.width, textHeight, size, {
-        color: colorOf(node.appearance, theme.text),
+        color: textOf(node.appearance, theme.text),
         align: 'start',
       }),
       size,
@@ -166,7 +166,7 @@ function drawNode(
       drawn.push(
         sized(
           textBlock(node.lines, node.x, node.y + glyphSide + ICON_GAP, node.width, textHeight, size, {
-            color: colorOf(node.appearance, theme.text),
+            color: textOf(node.appearance, theme.text),
             subColor: subtextOf(node.appearance, theme),
             align: 'middle',
           }),
@@ -181,8 +181,11 @@ function drawNode(
   const parts: string[] = [];
   const face = faceOf(node);
   const container = node.children.length > 0;
-  const stroke = colorOf(node.appearance, container ? theme.containerStroke : theme.boxStroke);
+  const border = borderOf(node.appearance, container ? theme.containerStroke : theme.boxStroke);
   const fill = fillOf(node.appearance, container ? theme.containerFill : theme.boxFill);
+  // A box is the one kind with two inkable parts, which is why its text needs
+  // a word of its own — `border:` cannot stand in for it.
+  const text = textOf(node.appearance, theme.text);
   const subColor = subtextOf(node.appearance, theme);
 
   // Deck copies sit behind the front face, furthest back drawn first.
@@ -190,14 +193,14 @@ function drawNode(
     const x = face.x - depth * DECK_STEP;
     const y = face.y - depth * DECK_STEP;
     parts.push(
-      `  <path d="${outlinePath(shape.outline, x, y, face.width, face.height)}" fill="${theme.containerFill}" stroke="${stroke}"/>`,
+      `  <path d="${outlinePath(shape.outline, x, y, face.width, face.height)}" fill="${theme.containerFill}" stroke="${border}"/>`,
     );
     const label = node.deckLabels[depth - 1];
     if (label !== undefined) {
       parts.push(
         sized(
           textBlock([label], x + PAD, y + PAD, face.width - PAD * 2, textHeight, size, {
-            color: theme.text,
+            color: text,
             align: 'start',
           }),
           size,
@@ -208,10 +211,10 @@ function drawNode(
   }
 
   parts.push(
-    `  <path d="${outlinePath(shape.outline, face.x, face.y, face.width, face.height)}" fill="${fill}" stroke="${stroke}"/>`,
+    `  <path d="${outlinePath(shape.outline, face.x, face.y, face.width, face.height)}" fill="${fill}" stroke="${border}"/>`,
   );
   for (const extra of outlineDetail(shape.outline, face.x, face.y, face.width, face.height)) {
-    parts.push(`  <path d="${extra}" fill="none" stroke="${stroke}"/>`);
+    parts.push(`  <path d="${extra}" fill="none" stroke="${border}"/>`);
   }
 
   // The icon takes a column on the right and the label lays out in what is
@@ -228,7 +231,7 @@ function drawNode(
     parts.push(
       sized(
         textBlock(node.lines, face.x, top, face.width - iconRoom, textHeight, size, {
-          color: theme.text,
+          color: text,
           subColor,
           align: 'middle',
         }),
@@ -245,7 +248,7 @@ function drawNode(
     parts.push(
       sized(
         textBlock(node.lines, face.x + PAD, bandTop, face.width - PAD * 2 - iconRoom, textHeight, size, {
-          color: theme.text,
+          color: text,
           subColor,
           align: labelStyle.align,
         }),
@@ -359,7 +362,7 @@ function drawLink(
   fontSize: number,
 ): { svg: string; ink: Extent } {
   const { start, end } = ends;
-  const color = colorOf(link.appearance, theme.link);
+  const color = lineOf(link.appearance, theme.link);
 
   const markerEnd = ` marker-end="url(#${markerId(color)})"`;
   const markerStart = link.both ? ` marker-start="url(#${markerId(color)}-back)"` : '';
@@ -459,7 +462,7 @@ function drawLink(
         textBlock(lines, midX - width / 2, top, width, textHeight, size, {
           // A colored link carries its meaning into its label; an uncolored
           // one leaves the words to read as ordinary text.
-          color: colorOf(link.appearance, theme.text),
+          color: textOf(link.appearance, lineOf(link.appearance, theme.text)),
           align: 'middle',
         }),
         size,
@@ -1551,16 +1554,28 @@ function textBlock(
  * A color is written as the viewer will receive it — `#14532d`, or any CSS
  * color. The renderer keeps no list of color words of its own, so a diagram
  * is never limited to the ones somebody remembered to add here.
+ *
+ * Each names the part it colors, so each reads exactly one key. The word these
+ * replaced, `stroke:`, named no part and meant a different one on every kind,
+ * which is why a box's text could not be colored at all until `text:`.
  */
-function colorOf(appearance: Record<string, string>, fallback: string): string {
-  return appearance['stroke'] ?? fallback;
+function borderOf(appearance: Record<string, string>, fallback: string): string {
+  return appearance['border'] ?? fallback;
+}
+
+function lineOf(appearance: Record<string, string>, fallback: string): string {
+  return appearance['line'] ?? fallback;
+}
+
+function textOf(appearance: Record<string, string>, fallback: string): string {
+  return appearance['text'] ?? fallback;
 }
 
 /**
  * The color for every label line after the first, or undefined when the box
  * said nothing and all its lines should read alike. `muted` is the one reserved
  * word: it defers to the theme, so a label's qualifier stays readable when the
- * theme changes. Anything else is a color, same as `stroke` and `fill` take.
+ * theme changes. Anything else is a color, same as `text` and `fill` take.
  */
 function subtextOf(appearance: Record<string, string>, theme: Theme): string | undefined {
   const named = appearance['subtext'];

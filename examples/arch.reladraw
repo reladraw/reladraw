@@ -7,14 +7,14 @@
 
 // Color is written as the viewer receives it. The style name is what carries
 // the meaning, so a diagram says `style: synced` and never a color directly.
-style synced     fill: #142814  stroke: #486544  subtext: muted
-style backup     stroke: #d2904e
+style synced     fill: #142814  border: #486544  line: #486544  subtext: muted
+style backup     border: #d2904e  line: #d2904e
 // A dump is an artifact rather than a service, and the folded corner is what
 // says so. Color alone cannot: the dark red means "a dump" only to someone who
 // has already read the diagram, while a folded corner has meant "a document"
 // for as long as there have been flowcharts.
-style dump       fill: #460000  stroke: #4e4e4e  shape: document
-style invisible  fill: none  stroke: none
+style dump       fill: #460000  border: #4e4e4e  shape: document
+style invisible  fill: none  border: none
 
 // The page is nearly black in the reference, a shade below the containers so
 // they read as regions sitting on it.

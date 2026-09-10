@@ -223,7 +223,36 @@ export const DIAGRAM_KEYS = ['background'] as const;
  * mistake people actually make: `subtext: "medium-fine"` reads as the text
  * that goes underneath, and was accepted and dropped in silence.
  */
-export const COLOR_KEYS = ['fill', 'stroke', 'subtext', 'background'] as const;
+export const COLOR_KEYS = [
+  'fill',
+  'border',
+  'text',
+  'line',
+  'subtext',
+  'background',
+] as const;
+
+/**
+ * A color attribute names the *part* it colors, and a part exists only on the
+ * kinds that have one. A box has a border and text; a note and a glyph body are
+ * text and nothing else; a link is a line and its label.
+ *
+ * This table is what makes the words checkable. `border:` on a note is refused
+ * by name rather than ignored — the same rule as an unknown `diagram` key, and
+ * for the same reason: an attribute that silently does nothing looks like the
+ * tool being broken.
+ *
+ * A style spanning kinds writes one key per kind — `border: #d2904e  line:
+ * #d2904e` — since a style contributes a part only to the kinds that have it.
+ * That is what replaced `stroke:`, which named no part and so could never be
+ * wrong, and which is why a box's text had no word of its own until now.
+ */
+export const COLOR_PARTS: Record<'box' | 'note' | 'glyph' | 'link', readonly string[]> = {
+  box: ['fill', 'border', 'text', 'subtext'],
+  note: ['text'],
+  glyph: ['text', 'subtext'],
+  link: ['line', 'text'],
+};
 
 export interface StyleStmt {
   kind: 'style';

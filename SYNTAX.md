@@ -66,10 +66,10 @@ box server.deploy  "services deploy dir"
 
 A container is sized by its contents. Children stack vertically in written order unless a child carries a placement of its own.
 
-A container with empty text and no fill or stroke takes up no room of its own and draws nothing. It exists so that everything inside it can be placed against as a single shape:
+A container with empty text and no fill or border takes up no room of its own and draws nothing. It exists so that everything inside it can be placed against as a single shape:
 
 ```
-style invisible  fill: none  stroke: none
+style invisible  fill: none  border: none
 
 box hub ""  style: invisible
 box hub.dropbox    "Dropbox"
@@ -125,7 +125,7 @@ The glyph is two lines of the label tall, so it follows `size:` down and up with
 `icon` is appearance, so a style can carry one and every store in a diagram then looks alike without the word being written more than once:
 
 ```
-style store  fill: #142814  stroke: #486544  icon: database
+style store  fill: #142814  border: #486544  icon: database
 box records "Records"  style: store
 ```
 
@@ -149,7 +149,7 @@ That distinction is worth having because it is a second channel alongside color,
 Any icon name is also a shape, and then the node *is* the glyph: no outline, no fill, no padding, and its size is the picture's rather than its label's. A label goes underneath it.
 
 ```
-box services ""  fill: none  stroke: none
+box services ""  fill: none  border: none
 box services.web    "web"                            shape: instance
 box services.api    "api"  right of services.web  gap: tight  shape: instance
 ```
@@ -431,26 +431,52 @@ style <name> <attributes>
 A named bundle of appearance, applied with `style: <name>` on a node or link. Color carries meaning through the style name rather than being written per node.
 
 ```
-style backup  stroke: #d2904e
+style backup  border: #d2904e
 box server.mirror "\\"important\\" mirror"  style: backup
 ```
 
-The appearance attributes are `stroke`, `fill`, `subtext`, `size`, `icon` and `shape`. The first three each take a color written as the viewer will receive it — `#142814`, or any CSS color, or `none`. On a link `stroke` colors the line, its arrowheads *and* its label, since a link that means something by being orange means it in its words too.
+The appearance attributes are `fill`, `border`, `text`, `line`, `subtext`, `size`, `icon` and `shape`. The first five each take a color written as the viewer will receive it — `#142814`, or any CSS color, or `none`.
 
-A color is never written in quotes, and a quoted one is refused. There is nothing to check a color *against* — see the next paragraph — so this is the one thing that can be checked, and it is the mistake that actually gets made: `subtext: "medium-fine"` reads as the text that goes underneath, and every attribute that takes a color would otherwise accept the string, find it is not a color, and draw nothing without saying so. The qualifier under a name is a second line of the label, not a `subtext` value.
+### A color names the part it colors
+
+A color attribute says which part of a thing it colors, and a part exists only on the kinds that have one:
+
+| attribute | colors | on |
+|---|---|---|
+| `fill` | the area inside the outline | a box |
+| `border` | the outline | a box |
+| `text` | the label | a box, a note, a glyph body, a link |
+| `line` | the drawn line and its arrowheads | a link |
+| `subtext` | every label line after the first | a box, a glyph body |
+
+A word written on a kind that has no such part is refused by name, and the error lists the parts that kind does have — `border:` on a note is a mistake, not something to ignore, for the same reason an unknown `diagram` key is.
+
+A link's label takes the line's color unless `text` says otherwise, so a link that means something by being orange means it in its words too, and there is still a way to say the words are not orange.
+
+A style contributes a part only to the kinds that have it, so a style shared between boxes and links writes one key for each:
+
+```
+style backup  border: #d2904e  line: #d2904e
+```
+
+The boxes take the border, the links take the line, and neither sees the other's word. Writing only `border` there would color the boxes and leave the links plain.
+
+**Removed in 0.2.0: `stroke`.** It named no part — it meant the border of a box, the *text* of a note or a glyph body, and the line of a link, whichever the thing happened to have. That is coherent one kind at a time and ambiguous read across them; it meant no ink attribute could ever be *wrong*; and it left one thing with no way to be said at all, the color of the text on an ordinary box, which is why `subtext` exists in the odd shape it does. A file written against `0.1.0` gets an error naming the word to use instead.
+
+A color is never written in quotes, and a quoted one is refused. There is nothing to check a color *against* — the tool keeps no list of color words, as below — so this is the one thing that can be checked, and it is the mistake that actually gets made: `subtext: "medium-fine"` reads as the text that goes underneath, and every attribute that takes a color would otherwise accept the string, find it is not a color, and draw nothing without saying so. The qualifier under a name is a second line of the label, not a `subtext` value.
 
 There is no list of color words the tool knows. An earlier version had one, and it was wrong in the way such lists always are: `dark-green` existed only because somebody added it to a map in the renderer, and the next color a diagram wanted would have needed a code change to say. Writing the color directly removes both the list and the reason to grow it. `green` still works, because it is a CSS color, not because this tool has heard of it.
 
 `subtext` colors every label line after the first, so a box can carry a name and a quieter qualifier under it:
 
 ```
-style synced  fill: #142814  stroke: #486544  subtext: muted
+style synced  fill: #142814  border: #486544  subtext: muted
 box pc.files "\"important\" directory / Dropbox-synced"  style: synced
 ```
 
 `icon` and `shape` belong in a style for the same reason a color does: they say what kind of thing this is, and a kind wants to look alike everywhere it appears. `style artifact  fill: #460000  shape: document` puts the folded corner on every dump in the diagram, and the use site stays one word.
 
-Bundling `size` into a style is how a size comes to mean something. `style aside  size: small  stroke: #8b8b8b` applied to several nodes says they are the same kind of remark, which a `size: small` written out at each of them does not.
+Bundling `size` into a style is how a size comes to mean something. `style aside  size: small  text: #8b8b8b` applied to several nodes says they are the same kind of remark, which a `size: small` written out at each of them does not.
 
 `muted` is the one reserved word left, and it earns the exception: it means the theme's secondary text color rather than a fixed one, so a qualifier stays readable when the theme changes. Writing `subtext: #8b8b8b` instead would pin it to one theme. Say nothing and every line of a label reads alike, which is what most labels want — `Computer 1 / Ubuntu` is two lines of one name, not a name and a qualifier, and the distinction is the author's to make rather than the renderer's to guess.
 
