@@ -213,6 +213,18 @@ export interface DiagramStmt {
 /** The attributes a `diagram` statement understands. */
 export const DIAGRAM_KEYS = ['background'] as const;
 
+/**
+ * The attributes whose value is a color rather than text. A color is written
+ * as the viewer will receive it and the renderer keeps no list of color words
+ * of its own, so there is nothing to check a value *against* — but quoting is
+ * the author saying "this is text", and an unquoted value cannot hold a space,
+ * so prose has to be quoted to get in at all. Refusing a quoted color is
+ * therefore the whole of what can be checked here, and it happens to be the
+ * mistake people actually make: `subtext: "medium-fine"` reads as the text
+ * that goes underneath, and was accepted and dropped in silence.
+ */
+export const COLOR_KEYS = ['fill', 'stroke', 'subtext', 'background'] as const;
+
 export interface StyleStmt {
   kind: 'style';
   name: string;

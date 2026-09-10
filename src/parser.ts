@@ -13,6 +13,7 @@ import type {
   StyleStmt,
 } from './ast.js';
 import {
+  COLOR_KEYS,
   DIAGRAM_KEYS,
   EDGE_AXIS,
   EDGES,
@@ -108,6 +109,29 @@ function parseAttrs(tokens: Token[], line: number): Attrs {
     if (!valueToken) throw new SourceError(`attribute "${key}" has no value`, line);
     if (isAttrKey(valueToken)) {
       throw new SourceError(`attribute "${key}" has no value`, line);
+    }
+    if (valueToken.quoted && (COLOR_KEYS as readonly string[]).includes(key)) {
+      // A quoted value is the author saying "this is text", and every one of
+      // these keys takes a color. Without this the string is passed through as
+      // a color, turns out not to be one, and nothing is drawn and nothing is
+      // said. Name the likely intent rather than only the rule: the qualifier
+      // under a name is a second label line, not a `subtext` value.
+      if (valueToken.text.startsWith('#')) {
+        // A hex color that was merely quoted. The author wrote a color and the
+        // remedy is punctuation, so say that rather than that it is not one.
+        throw new SourceError(
+          `a color is written without quotes — "${key}: ${valueToken.text}"`,
+          line,
+        );
+      }
+      const remedy =
+        key === 'subtext'
+          ? ` — for a quieter second line write it into the label, as in \`"Name / ${valueToken.text}"\` with \`subtext: muted\``
+          : '';
+      throw new SourceError(
+        `"${key}" takes a color, not text, so "${valueToken.text}" cannot be one${remedy}`,
+        line,
+      );
     }
     attrs[key] = valueToken.text;
     i += 2;

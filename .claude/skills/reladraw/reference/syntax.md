@@ -437,6 +437,8 @@ box server.mirror "\\"important\\" mirror"  style: backup
 
 The appearance attributes are `stroke`, `fill`, `subtext`, `size`, `icon` and `shape`. The first three each take a color written as the viewer will receive it — `#142814`, or any CSS color, or `none`. On a link `stroke` colors the line, its arrowheads *and* its label, since a link that means something by being orange means it in its words too.
 
+A color is never written in quotes, and a quoted one is refused. There is nothing to check a color *against* — see the next paragraph — so this is the one thing that can be checked, and it is the mistake that actually gets made: `subtext: "medium-fine"` reads as the text that goes underneath, and every attribute that takes a color would otherwise accept the string, find it is not a color, and draw nothing without saying so. The qualifier under a name is a second line of the label, not a `subtext` value.
+
 There is no list of color words the tool knows. An earlier version had one, and it was wrong in the way such lists always are: `dark-green` existed only because somebody added it to a map in the renderer, and the next color a diagram wanted would have needed a code change to say. Writing the color directly removes both the list and the reason to grow it. `green` still works, because it is a CSS color, not because this tool has heard of it.
 
 `subtext` colors every label line after the first, so a box can carry a name and a quieter qualifier under it:
