@@ -1,55 +1,39 @@
-// What a node is drawn as.
-//
-// `shape:` answers one question — what is this drawn as — and the answer is
-// either another outline for the box or a glyph standing where the box would
-// be. The author has no reason to care which; the test that separates them is
-// whether the node still sizes itself from its label.
-//
-// The benchmark exercises `document` on two wide boxes and `instance` on five
-// unlabeled ones. What is here instead: the fold at several box widths, a
-// glyph body with a label under it, and a shape carried by a style.
+// What a node is drawn as. `shape:` is either another outline for the box or a
+// glyph standing where the box would be.
 
 diagram  background: #111111
 
 style artifact  fill: #460000  border: #4e4e4e  shape: document
 
-// The fold is a fixed size, not a fraction of the box, so it stays the same on
-// all three of these. Sizing it proportionally is what makes it vanish on a
-// wide box, which is the one thing the reference drawing gets wrong.
+// The fold is a fixed size rather than a fraction of the box, so it looks the
+// same on all three of these.
 box narrow "Report"  style: artifact
 box medium "Nightly database dump"        right of narrow  gap: tight  style: artifact
 box wide   "A very much longer file name than either of the other two"  right of medium  gap: tight  style: artifact
 
-// A glyph body has no outline, no fill and no padding. A label goes under it,
-// which is what makes a row of these read as captioned things rather than as
-// decoration that happens to have words near it.
+// A glyph has no outline, no fill and no padding. The label goes underneath.
 box services ""  below narrow  gap: normal  fill: none  border: none
 box services.web    "web"                          shape: instance
 box services.api    "api"     right of services.web  gap: tight  shape: instance
 box services.worker "worker"  right of services.api  gap: tight  shape: instance
 
-// Unlabeled, so the node is exactly the glyph. These are the shape the
-// benchmark's Docker cubes take.
+// Unlabeled, so the node is exactly the glyph.
 box bare1 ""  below services (gap: normal)  shape: instance
 box bare2 ""  below bare1     gap: tight  shape: instance
 
-// A glyph body is an ordinary node, so it takes links and sides like any other.
-// That is the whole reason it exists rather than being an icon: an icon cannot
-// be the end of an arrow.
+// A glyph is an ordinary node, so it takes links and sides like any other. That
+// is what it buys over an icon, which cannot be the end of an arrow.
 box sink "collector"  right of bare1 and bare2 (gap: wide)  level with bare1, bare2
 link bare1 -> sink  from: right  to: left
 link bare2 -> sink  from: right  to: left
 
-// Any icon can be a body, not just the cube.
+// Any icon works as a body, not just the cube.
 box store ""  below bare2 (gap: normal)  shape: database
 box drive ""  right of store  gap: tight  shape: disk
 
-// A label's own modifiers ride in brackets on the label. `at: bottom` puts it
-// under the contents, `align: center` centers it, and neither implies the other.
-//
-// The lower row is centered between the upper pair with no construct for it: a
-// lone directional placement binds the other axis to its target's center, and
-// naming two targets makes that target the region bounding both.
+// `at: bottom` puts the label under the contents and `align: center` centers
+// it; neither implies the other. The lower cube is centered under the upper
+// pair by naming both of them and nothing else.
 box pool "Worker pool" (at: bottom, align: center)  right of store and drive (gap: wide)  level with store, drive 
 box pool.one    ""  shape: instance
 box pool.two    ""  right of pool.one  gap: tight  shape: instance

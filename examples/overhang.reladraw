@@ -1,15 +1,5 @@
-// A link that leaves the drawing still gets a page to be drawn on.
-//
-// A link's geometry is measured off the solved layout rather than solved for,
-// so the resolver sizes the canvas from the boxes alone and knows nothing about
-// where the lines go. A curve out of a `top` side arches above every box in the
-// drawing, and its label rides higher still; both used to be clipped in silence.
-// The renderer grows the page around whatever it draws instead.
-//
-// The cases here: an arch over the widest gap in the file, one over the
-// narrowest, a loop off the left of the leftmost box, and one dipping under the
-// lowest — the boxes cover 378x230 and the page has grown to 428x312 to hold
-// what the lines do outside that.
+// Links that leave the area the boxes cover. The page grows to hold them: the
+// boxes here cover 378x230 and the page comes out 428x312.
 
 diagram background: #111111
 
@@ -21,16 +11,14 @@ box c "C"  right of b                style: box
 
 box d "D"  below a and c             style: box
 
-// The long arch. Its handles reach their limit, so the curve rises well clear
-// of the boxes and the label sits at the top of it.
+// A long arch over everything, with the label at the top of it.
 link a -> b  "over the top"  from: top  to: top
 
-// The same shape across a narrow gap: a smaller arch, still above the boxes.
+// The same shape across a narrow gap.
 link b -> c  from: top  to: top
 
-// Out of the left of the leftmost box and back into the bottom of it, which
-// puts the whole loop off the left-hand edge of what the boxes cover.
+// Out the left and back into the bottom, so the loop hangs off the left edge.
 link d -> a  "round the side"  from: left  to: left
 
-// And below the bottom row.
+// And one under the bottom row.
 link a -> d  from: bottom  to: bottom

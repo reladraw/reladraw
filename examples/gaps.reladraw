@@ -1,9 +1,4 @@
-// A gap belongs to the placement, not to the box at either end of it.
-//
-// The benchmark exercises one asymmetric wedge and nothing else, so this file
-// carries the rest: a node-wide default with one placement overriding it, a
-// bracket on each of two opposing placements, and contact written as a gap of
-// none on a node whose other placement keeps its distance.
+// Gaps: on a placement, on a box, and what happens when both ends ask.
 
 diagram background: #111111
 
@@ -12,29 +7,22 @@ style plain  fill: #191728  border: #4f5367
 box left_wall  "Left wall"   style: plain
 box right_wall "Right wall"  right of left_wall  style: plain
 
-// Both sides bind, and they want different distances. Without a gap of its own
-// per placement there is one number for both, and the corridor is symmetric
-// whether or not the picture wants it to be.
+// Both sides bind and they want different distances, so each placement carries
+// its own gap.
 box wedge "Wedged tight left, wide right"  right of left_wall (gap: tight)  left of right_wall (gap: wide)  level with left_wall  style: plain
 
-// `gap:` on the node is still the default for whatever does not say. Here the
-// stack sits wide below the wedge and tight to the right of the left wall.
+// `gap:` on the box is the default for whatever the placements do not say.
 box stack "Node default is wide"  below wedge  right of left_wall (gap: tight)  gap: wide  style: plain
 
-// A gap of none is contact, and it is now sayable on one placement while the
-// other keeps its distance — which the node-wide attribute could not do.
+// `none` is contact, and the other placement still keeps its distance.
 box shelf "Flat on the stack"  below stack (gap: none)  right of left_wall (gap: tight)  style: plain
 
 link left_wall -> wedge  from: right  to: left
 link wedge -> right_wall  from: right  to: left
 
-// A node's `gap:` reaches the placements written *against* it as well as its
-// own. `island` names nothing and states wide; both neighbors are held off at
-// that distance, which is what lets an author push a box away from what is
-// crowding it without first working out which line happens to mention which.
-//
-// `west` asks for tight and gets wide, because both ends stated something and a
-// gap is a minimum, so the larger of the two is the one that holds.
+// A box's gap also reaches placements written against it. `island` names nobody
+// and asks for wide, so both neighbors are held off at that distance. `west`
+// asks for tight and gets wide: a gap is a minimum, so the larger one holds.
 box island "States wide, names nobody"  below shelf  gap: wide  style: plain
 box east   "Takes the island's wide"    right of island  level with island  style: plain
 box west   "Asks tight, gets wide"      left of island   level with island  gap: tight  style: plain

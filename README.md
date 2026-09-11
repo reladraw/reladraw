@@ -1,6 +1,6 @@
 # reladraw
 
-A text language for diagrams where **placement is stated, not computed**.
+A text language for diagrams where **you say where things go**.
 
 **[Try it in your browser →](https://reladraw.github.io/reladraw/)** — edit the source on the left, watch the layout re-solve on the right. Nothing to install.
 

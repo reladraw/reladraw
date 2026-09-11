@@ -1,41 +1,26 @@
-// Several links between the same two sides run in nested lanes.
-//
-// Two links joining the bottom of one box to the left of another are not two
-// independent orderings, one per side. They are one order used twice: step
-// outward along the first edge and the same link must step outward along the
-// second, or the lines scissor across each other in the middle instead of
-// nesting. Ordering each side by where its far ends sit — the rule everywhere
-// else — has nothing to read here, because every link in the group has the
-// same far box.
-//
-// The lanes are as wide as the labels riding in them, so the labels come apart
-// with the lines and need no rule of their own.
+// Several links between the same two sides nest instead of crossing. The lanes
+// are as wide as the labels riding in them.
 
 diagram background: #111111
 
 style box  fill: #191728  border: #4f5367
 
-// A reciprocal pair across a corner. The two edges are traversed in opposite
-// senses — further left along Gateway's bottom is further down Queue's left —
-// so the ranks reverse between the ends.
+// A reciprocal pair around a corner. Further left along Gateway's bottom is
+// further down Queue's left, so the order reverses between the two ends.
 box gateway "Gateway"  style: box
 box queue   "Queue"    below gateway  right of gateway (gap: wide)  style: box
 link gateway -> queue  "publishes messages"  from: bottom  to: left
 link queue -> gateway  "receives messages"   from: left    to: bottom
 
-// The same idea with the two edges facing each other, where the senses agree
-// and the ranks run the same way at both ends. Nothing crosses here either.
+// Two edges facing each other, where the order runs the same way at both ends.
 box client "Client"  below queue (gap: wide)  left of queue  style: box
 box server "Server"  right of client (gap: wide)  level with client  style: box
 link client -> server  "request"   from: right  to: left
 link server -> client  "response"  from: left   to: right
 
-// Five lanes. A vertical run puts every label at the same height, so the only
-// way they clear each other is sideways, and the step is a whole label wide
-// rather than a line deep. These two boxes are wide enough to hold five of
-// those. Narrower ones would run into the squeeze `planEndpoints` falls back to
-// when a side is too short for the group, and the lines would bow apart in the
-// middle to make up what their ends could not give them.
+// Five lanes down a vertical run. The labels all sit at the same height, so the
+// only way they clear each other is sideways and a lane has to be a whole label
+// wide. These two boxes are wide enough for five of them.
 box fan  "Fan of five, spread wide"  below client (gap: wide)  left of client  style: box
 box hub  "Hub of the same five"     below fan (gap: wide)  style: box
 link fan -> hub  "one"    from: bottom  to: top
@@ -44,30 +29,24 @@ link fan -> hub  "three"  from: bottom  to: top
 link fan -> hub  "four"   from: bottom  to: top
 link fan -> hub  "five"   from: bottom  to: top
 
-// Two links pointing the same way have no direction to be ordered by, so the
-// order they are written in is the only signal left and it is what decides
-// which lane each takes. Swap these two lines and the labels swap lanes.
+// Two links pointing the same way. Nothing tells them apart, so the order they
+// are written in decides. Swap these two lines and the labels swap lanes.
 box left_wall  "Producer"  below hub (gap: wide)  left of hub  style: box
 box right_wall "Consumer"  right of left_wall (gap: wide)  level with left_wall  style: box
 link left_wall -> right_wall  "bulk"     from: right  to: left
 link left_wall -> right_wall  "control"  from: right  to: left
 
-// Sharing only one side is not a bundle: the far ends genuinely differ, so the
-// existing rule orders them and nothing here changes.
+// Sharing one side only is not a bundle. The far ends differ, and that is
+// enough to order them.
 box spoke "Spoke"  below right_wall (gap: wide)  style: box
 box up    "Up"     above spoke  right of spoke (gap: wide)  style: box
 box down  "Down"   below spoke  right of spoke (gap: wide)  style: box
 link spoke -> up    from: right  to: left
 link spoke -> down  from: right  to: left
 
-// A group larger than the sides can hold. Every one of these still attaches on
-// the right of one box and the left of the other, and those edges are only as
-// tall as the boxes, so the attachments squeeze together and there is nowhere
-// further to go. The room they could not give is taken in the middle instead:
-// each line bows across its run by its own share of the shortfall, so the
-// captions come apart even though the arrowheads are packed. Naming these two
-// sides is naming the ones the tool would have chosen anyway, and it now draws
-// the same picture as saying nothing would.
+// More links than the two edges can hold. The arrowheads squeeze together
+// because there is nowhere further along an edge to go, and each line makes up
+// the shortfall by bowing out in the middle, where the labels ride.
 box narrow "Narrow"  below spoke (gap: wide)  left of spoke  style: box
 box also   "Also"    right of narrow (gap: wide)  level with narrow  style: box
 link narrow -> also  "first"   from: right  to: left

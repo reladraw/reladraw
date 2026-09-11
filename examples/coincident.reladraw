@@ -1,66 +1,47 @@
-// Several links between the same two boxes with no side named anywhere.
-//
-// An unnamed end names no side to be spread along: it aims at the far box's
-// center and attaches wherever that ray crosses the border, so every link
-// between one pair produces the same ray and they are drawn on top of each
-// other — one visible line, every label stacked on one point.
-//
-// The rule stays exactly what it was and only stops two links using it in the
-// same place: the line a link would have drawn alone is translated sideways
-// across its own run by a lane. The lines are therefore parallel, a lane
-// apart, and where each end lands is whatever falls out of that.
+// Several links between the same two boxes with no side named anywhere. Each
+// line is shifted sideways off the one a single link would draw, so they stay
+// parallel and each end lands wherever its own line crosses the border.
 
 diagram background: #111111
 
 style box  fill: #191728  border: #4f5367
 
-// Level boxes, so the run is horizontal and the lanes fan out vertically. All
-// three attach along the same two edges, spread about the point the single
-// link would have taken.
+// Level boxes, so the run is horizontal and the lanes fan out vertically.
 box a "A"  style: box
 box b "B"  right of a (gap: wide)  level with a  style: box
 link a -> b  "first"
 link a -> b  "second"
 link a -> b  "third"
 
-// A perfect diagonal: equal boxes offset the same amount on both axes, so the
-// one line a lone link would draw leaves through the corner exactly. Two links
-// straddle it — one point slides onto each of the two edges meeting there —
-// and the lines stay parallel.
+// A perfect diagonal, where the single line would leave through the corner
+// exactly. These two straddle it, one point on each of the edges meeting there.
 box low  "Low"   below a (gap: wide)  left of a  style: box
 box high "High"  above low  right of low (gap: wide)  style: box
 link low -> high   "up"
 link high -> low   "down"
 
 // A near diagonal, where the crossing point sits on one edge but close to the
-// corner. Whether both offsets stay on that edge or one crosses onto the next
-// is arithmetic, not a case.
+// corner.
 box near "Near"  below low (gap: wide)  style: box
 box far  "Far"   right of near (gap: wide)  above near  style: box
 link near -> far  "one"
 link near -> far  "two"
 
-// A lone unnamed link is in no group and is untouched: it still attaches where
-// the center-to-center ray crosses the border.
+// A lone link is in no group and does not move.
 box solo  "Solo"   below near (gap: wide)  style: box
 box alone "Alone"  right of solo (gap: wide)  level with solo  style: box
 link solo -> alone  "by itself"
 
-// Naming a side on either end takes a link out of the group — it has a side to
-// be spread along, and the existing rules own it.
+// Naming a side on either end takes a link out of the group.
 box named "Named"  below solo (gap: wide)  style: box
 box other "Other"  right of named (gap: wide)  level with named  style: box
 link named -> other  "free"
 link named -> other  "free too"
 link named -> other  "top"  from: top  to: top
 
-// More links than the edge can hold. Every one of them still has to attach
-// somewhere on the same two edges, and those are only as tall as the boxes, so
-// past a point there is nowhere further to spread. The ends squeeze evenly and
-// each line makes up the shortfall in the middle instead, bowing across its own
-// run by exactly what its ends could not give it — so the labels come apart
-// even though the arrowheads crowd. The middle line has no shortfall and stays
-// straight, which is what every group small enough for its boxes looks like.
+// More than the edges can hold. The ends squeeze together and each line bows
+// out in the middle to make up what its ends could not give it, so the labels
+// still come apart. The middle line has no shortfall and stays straight.
 box many "Many"  below named (gap: wide)  style: box
 box one  "One"   right of many (gap: wide)  level with many  style: box
 link many -> one  "first"
@@ -69,9 +50,8 @@ link many -> one  "third"
 link many -> one  "fourth"
 link many -> one  "fifth"
 
-// The same thing on a vertical run, where the labels all sit at one height and
-// so have to clear each other sideways. A lane is a whole label wide there,
-// which two narrow boxes run out of far sooner.
+// The same on a vertical run, where the labels sit at one height and a lane is
+// a whole label wide.
 box top    "Top"     below many (gap: wide)  style: box
 box bottom "Bottom"  below top (gap: wide)  style: box
 link top -> bottom  "alpha"

@@ -403,7 +403,7 @@
   <body>
     <header>
       <h1>reladraw</h1>
-      <p>a diagram language where placement is stated, not computed</p>
+      <p>a diagram language where you say where things go</p>
       <nav>
         <a href="https://github.com/reladraw/reladraw">GitHub</a>
         <a href="https://github.com/reladraw/reladraw/blob/main/SYNTAX.md">Syntax</a>
@@ -524,14 +524,10 @@
       (function () {
         'use strict';
 
-        // Eight lines that make the argument: a gap is a minimum, so putting
-        // something between two boxes is what pushes them apart, and deleting it
-        // closes them back up. Nothing here is a coordinate.
+        // The first thing a visitor sees. No comments in it: every statement
+        // says where a box goes, which is the whole point, and a paragraph
+        // explaining that in advance only gets in the way.
         var SEED = [
-          '// A gap is a minimum, not a measurement. The resolver',
-          '// is what holds these two apart — delete its line and',
-          '// watch them close back up. Nothing here is a coordinate.',
-          '',
           'box parser "Parser"',
           'box renderer "Renderer"  right of parser',
           'box resolver "Resolver"  right of parser  left of renderer  level with parser',

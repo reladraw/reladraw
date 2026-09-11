@@ -1,36 +1,25 @@
-// A color attribute names the part it colors.
-//
-// There used to be one ink word, `stroke:`, and it meant a different part on
-// every kind — the border of a box, the text of a note or a glyph body, the
-// line of a link. Coherent kind by kind, and it left exactly one thing with no
-// way to say it: the color of the text on an ordinary box.
-//
-// `border:`, `text:` and `line:` name parts instead, so each means one thing
-// everywhere and a word is refused on a kind that has no such part.
+// A color names the part it colors: fill, border, text, line.
 
 diagram background: #111111
 
-// A box has three inkable parts and now a word for each of them.
+// All three parts of a box.
 box ledger "Ledger / append only"  fill: #142814  border: #486544  text: #cfe8c4  subtext: muted
 
-// The part that could not be said before: text alone, on the default box.
+// Text on its own.
 box plain "Plain"  right of ledger (gap: wide)  text: #ff9d4d
 
-// A note is bare text, so `text:` is the only color it takes. `border:` here
-// is an error rather than a no-op, which is the point of naming parts.
+// A note is text and nothing else, so `text:` is the only color it takes.
+// `border:` here is an error rather than a no-op.
 note remark "a note is text and nothing else"  below ledger  text: #66ccff
 
-// A style shared between boxes and links writes one key per kind. A style
-// contributes a part only to the kinds that have it, so the box takes the
-// border and the link takes the line, and neither sees the other's word.
+// A style shared between boxes and links writes one key per kind. The box takes
+// the border, the link takes the line, and neither sees the other's word.
 style traced  border: #d2904e  line: #d2904e
 
-// A glyph body is a picture and the text under it. Same one part.
+// A glyph body is a picture and the text under it.
 box store "store"  right of plain (gap: wide)  shape: database  text: #ff9d4d
 
-// On a link the line and the label are separate parts. The label still takes
-// the line's color when it says nothing, so an orange link says orange in its
-// words too — `text:` is how that is overridden.
+// A link's label takes the line's color unless `text:` says otherwise.
 box worker "Worker"  below remark (gap: wide)  style: traced
 box queue  "Queue"   right of worker (gap: wide)  level with worker
 link worker -> queue  "inherits the line"  style: traced  from: right  to: left

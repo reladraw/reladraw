@@ -40,6 +40,9 @@ Commands:
                                  docs/index.html. Re-run after any source
                                  change, or the hosted page demonstrates an
                                  older version of the language.
+  open                          Regenerate docs/index.html and open it in the
+                                 default browser. The page is self-contained,
+                                 so it needs no server.
   pack                          Build, pack exactly what `npm publish` would
                                  ship, install that tarball into a throwaway
                                  directory and render a diagram with it. The
@@ -243,6 +246,21 @@ case "$cmd" in
     # docs/index.html is generated: the page from tools/playground.html with the
     # whole compiled library inlined, so it needs no server and no bundler.
     node tools/playground.mjs
+    ;;
+  open)
+    # The page has the library inlined, so file:// is enough — that is the whole
+    # reason tools/playground.mjs concatenates instead of leaving ES modules to
+    # be fetched, which file:// refuses.
+    node tools/playground.mjs
+    page="$PWD/docs/index.html"
+    if command -v xdg-open >/dev/null 2>&1; then
+      xdg-open "$page" >/dev/null 2>&1 &
+    elif command -v open >/dev/null 2>&1; then
+      open "$page"
+    else
+      echo "No xdg-open or open on this machine. The page is at:"
+    fi
+    echo "$page"
     ;;
   pack)
     # What `npm publish` would ship, installed into a throwaway directory and

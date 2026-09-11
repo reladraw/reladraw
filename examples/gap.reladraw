@@ -1,10 +1,6 @@
-// The picture in the README's "The gap" section: the two shapes a diagram
-// language can take, and the middle nobody occupies.
-//
-// The middle box is placed with `right of` one end and `left of` the other, and
-// a gap is a minimum, so putting reladraw between the two is what pushes them
-// apart. Delete its line and the ends close back up — which is the argument the
-// picture is making, made by the picture.
+// The picture from the README: where reladraw sits between auto-layout and
+// pixel-pushing. The middle box is what holds the two ends apart — delete its
+// line and they close up.
 
 diagram background: #111111
 

@@ -1,14 +1,9 @@
-// The whole icon palette, and the cases the benchmark does not cover.
-//
-// The benchmark exercises icons on containers with two-line titles and on one
-// short leaf. What is here instead: every name in the set, an icon carried by a
-// style rather than written on the node, an icon on a node with no label at
-// all, and an icon on a `size: small` node so the glyph shrinks with the text.
+// The seven icons, and the ways to use one.
 
 diagram  background: #111111
 
-// An icon is appearance, so a style can carry one. Every store in a diagram
-// then looks alike without anyone writing the word more than once.
+// A style can carry an icon, so every store in a diagram looks alike without
+// anyone typing the word twice.
 style store  fill: #142814  border: #486544  icon: database
 
 box row1 ""  fill: none  border: none
@@ -21,11 +16,9 @@ box row2.package  "Archive"           icon: package
 box row2.cubes    "Service instances" right of row2.package  gap: tight  icon: cubes
 box row2.db       "Records"           right of row2.cubes    gap: tight  style: store
 
-// No label. The box is exactly the icon plus its padding, which is what makes
-// an icon usable as a marker rather than only as a title-block ornament.
+// No label, so the box is just the icon and its padding.
 box bare ""  below row2  gap: tight  icon: disk
 
-// The icon is two lines of the label tall, so it follows `size:` down. These
-// two sit side by side to make the difference plain.
+// An icon is two lines of the label tall, so it shrinks and grows with the text.
 box small "Small text / and a small icon"  right of bare  gap: tight  size: small  icon: laptop
 box large "Large text / and a large icon"  right of small gap: tight  size: large  icon: laptop

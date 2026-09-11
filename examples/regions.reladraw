@@ -1,27 +1,14 @@
-// Placing a node against several things at once.
-//
-// Naming more than one target places the node against the box that just bounds
-// them all. Both forms take a list, and they differ in what the region is for.
-//
-// A direction uses the region as a floor: "right of one and three" clears the
-// furthest of them, which is what the solver's longest paths already computes,
-// so it works whatever the targets are and wherever they sit. Note that the
-// annotation says nothing about its own vertical position — that falls out of
-// the region, which is the whole point of naming a region rather than a box.
-//
-// An alignment uses the region as a position, and "top level with" takes an
-// edge of it rather than its center line. The three stacked boxes are not
-// inside a container, so the region they bound is not known until the diagram
-// has been solved once; it is measured off that first solution and pinned.
-//
-// The benchmark exercises the container case, where the region is a constant.
-// This file is the coverage for the other one.
+// Naming several targets places a box against the region that bounds them all.
 
 box one    "first"
 box two    "second"                 below one
 box three  "third with a longer label"  below two
 
+// A direction clears the furthest of them. This note says nothing about its own
+// vertical position — that comes from the region.
 note spans  "level with all three, and clear of the widest"  right of one and three  wrap: 24  gap: wide
+
+// An alignment uses the region as a position. "top" is its top edge, not its middle.
 note tops   "top level with the second box"                  right of two  top level with two  wrap: 20  gap: tight
 
 box beside  "centered on the top two"  right of spans  level with one and two  gap: wide
