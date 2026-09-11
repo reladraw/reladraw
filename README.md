@@ -60,7 +60,7 @@ It is [plain Markdown](.claude/skills/reladraw/SKILL.md) with the syntax referen
 
 ## Status
 
-Version 0.1.0. Early, but it runs: a parser, resolver and SVG renderer in TypeScript with no runtime dependencies, and a command-line tool that takes a text file and writes a standalone SVG. The comparison at the top of this page is that pipeline run on [`examples/arch.reladraw`](examples/arch.reladraw). What is still visibly off there is typography, not placement.
+Version 0.2.0. Early, but it runs: a parser, resolver and SVG renderer in TypeScript with no runtime dependencies, and a command-line tool that takes a text file and writes a standalone SVG. The comparison at the top of this page is that pipeline run on [`examples/arch.reladraw`](examples/arch.reladraw). What is still visibly off there is typography, not placement.
 
 ```
 npm install -g reladraw

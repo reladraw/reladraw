@@ -1,6 +1,6 @@
 {
   "name": "reladraw",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A diagram language where placement is stated, not computed.",
   "type": "module",
   "bin": {
