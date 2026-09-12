@@ -1,0 +1,26 @@
+// A deck draws offset copies behind a box to say "there are several of these
+// and they are the same". Only the front copy shows its contents.
+
+diagram  background: #111111
+
+style box  fill: #191728  border: #4f5367
+
+// The usual case: a container with rows, and two more like it behind.
+box drive          "Drive 1"  icon: disk  align: widths
+box drive.backup   "shared folder / backup"  style: box
+box drive.archive  "archive"                 style: box
+
+deck drive "Drive 2" "Drive 3"
+
+// A deck of a leaf, with one copy behind it.
+box worker "worker"  right of drive (gap: wide)  level with drive  style: box
+deck worker "worker"
+
+// The copies are part of the box, and they hang up and to the left. Something
+// placed above or left of a deck clears the whole stack, so this sits a gap
+// away from the back card, not the front one.
+box source "source"  above drive  style: box
+
+// A note may overlap the blank area of the trailing cards, as an annotation
+// beside a row does in a drawing, by saying so.
+note rotated "swapped weekly"  left of drive.backup  gap: tight  overlap: allow

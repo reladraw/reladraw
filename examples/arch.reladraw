@@ -11,46 +11,46 @@ diagram  background: #111111
 
 // --- The hub and its four machines ------------------------------------------
 // The cluster is wrapped in an invisible container so things outside it can be
-// placed against the whole cluster rather than against Dropbox alone.
+// placed against the whole cluster rather than against the hub alone.
 
-box dropbox_and_machines ""  style: invisible
+box cluster ""  style: invisible
 
-box dropbox_and_machines.dropbox "Dropbox"  icon: package  style: synced
+box cluster.hub "Cloud sync"  icon: package  style: synced
 
-box dropbox_and_machines.computer1       "Computer 1 / Ubuntu"    above-left of dropbox_and_machines.dropbox   gap: tight  icon: desktop
-box dropbox_and_machines.computer1.files "\"important\" directory / Dropbox-synced"   style: synced
+box cluster.desktop1       "Desktop 1 / Linux"    above-left of cluster.hub   gap: tight  icon: desktop
+box cluster.desktop1.files "shared folder / synced"  style: synced
 
-box dropbox_and_machines.computer3       "Computer 3 / Windows"   above-right of dropbox_and_machines.dropbox  gap: tight  icon: desktop
-box dropbox_and_machines.computer3.files "\"important\" directory / Dropbox-synced"   style: synced
+box cluster.desktop2       "Desktop 2 / Windows"  above-right of cluster.hub  gap: tight  icon: desktop
+box cluster.desktop2.files "shared folder / synced"  style: synced
 
-box dropbox_and_machines.computer2       "Computer 2 / Macbook"   below-left of dropbox_and_machines.dropbox   gap: tight  icon: laptop
-box dropbox_and_machines.computer2.files "\"important\" directory / Dropbox-synced"   style: synced
+box cluster.laptop1        "Laptop 1 / macOS"     below-left of cluster.hub   gap: tight  icon: laptop
+box cluster.laptop1.files  "shared folder / synced"  style: synced
 
-box dropbox_and_machines.computer4       "Computer 4 / Macbook"   below-right of dropbox_and_machines.dropbox  gap: tight  icon: laptop
-box dropbox_and_machines.computer4.files "\"important\" directory / Dropbox-synced"   style: synced
+box cluster.laptop2        "Laptop 2 / macOS"     below-right of cluster.hub  gap: tight  icon: laptop
+box cluster.laptop2.files  "shared folder / synced"  style: synced
 
-link dropbox_and_machines.computer1.files <-> dropbox_and_machines.dropbox  style: synced  from: right  to: top
-link dropbox_and_machines.computer3.files <-> dropbox_and_machines.dropbox  style: synced  from: left   to: top
-link dropbox_and_machines.computer2.files <-> dropbox_and_machines.dropbox  style: synced  from: right  to: bottom
-link dropbox_and_machines.computer4.files <-> dropbox_and_machines.dropbox  style: synced  from: left   to: bottom
+link cluster.desktop1.files <-> cluster.hub  style: synced  from: right  to: top
+link cluster.desktop2.files <-> cluster.hub  style: synced  from: left   to: top
+link cluster.laptop1.files  <-> cluster.hub  style: synced  from: right  to: bottom
+link cluster.laptop2.files  <-> cluster.hub  style: synced  from: left   to: bottom
 
 
 // --- The database dumps -----------------------------------------------------
 // Nothing says how wide the corridor between the server and the machines is.
 // Putting the dumps in between is what pushes those two apart.
 
-box dumps ""  right of server.docker  left of dropbox_and_machines (gap: wide)  level with server.docker  style: invisible
-box dumps.db1 "pg_dump output / (DB 1)"  style: dump
-box dumps.db2 "pg_dump output / (DB 2)"  style: dump
+box dumps ""  right of server.docker  left of cluster (gap: wide)  level with server.docker  style: invisible
+box dumps.db1 "db dump / (app 1)"  style: dump
+box dumps.db2 "db dump / (app 2)"  style: dump
 
-note dumps_trigger "Triggered by `db-backup` shell command"  below dumps  gap: tight  wrap: 30
+note dumps_note "Written by nightly cron job."  below dumps  gap: tight  wrap: 30
 
 
 // --- The server -------------------------------------------------------------
 
-box server         "My Server Machine"  left of dropbox_and_machines  icon: desktop  align: widths
-box server.mirror  "\"important\" mirror"  style: backup
-box server.deploy  "services deploy dir"  below server.mirror  gap: normal
+box server         "Home Server"  left of cluster  icon: desktop  align: widths
+box server.mirror  "shared folder / mirror"  style: backup
+box server.deploy  "deploy dir"  below server.mirror  gap: normal
 
 // The cubes are nodes rather than ornament: two of them are where the dump
 // arrows start. The lower pair is centered under the upper three by naming two
@@ -62,41 +62,26 @@ box server.docker.db1  ""  right of server.docker.b  gap: tight  shape: instance
 box server.docker.c    ""  below server.docker.a and server.docker.b    gap: tight  shape: instance
 box server.docker.db2  ""  below server.docker.b and server.docker.db1  gap: tight  shape: instance
 
-link server.deploy -> server.docker  "docker compose up"
+link server.deploy -> server.docker  "compose up"
 
 link server.docker.db1 -> dumps.db1  from: right  to: left
 link server.docker.db2 -> dumps.db2  from: right  to: left
 
-// The rclone lines run up the channel between Computer 1 and Computer 2, so the
-// dumps arrive through the middle of the machines rather than across one.
-link dumps.db1 -> dropbox_and_machines.dropbox  "rclone"  between dropbox_and_machines.computer1 and dropbox_and_machines.computer2  from: right  to: left
-link dumps.db2 -> dropbox_and_machines.dropbox  "rclone"  between dropbox_and_machines.computer1 and dropbox_and_machines.computer2  from: right  to: left
+// The rclone lines run up the channel between the two left-hand machines, so
+// the dumps arrive through the middle of the cluster rather than across one.
+link dumps.db1 -> cluster.hub  "rclone"  between cluster.desktop1 and cluster.laptop1  from: right  to: left
+link dumps.db2 -> cluster.hub  "rclone"  between cluster.desktop1 and cluster.laptop1  from: right  to: left
 
-link dropbox_and_machines.computer1.files -> server.mirror  "run `backup` / shell command"  style: backup  from: left  to: right
-link dropbox_and_machines.computer1.files -> server.deploy  "run `deploy` / shell command"                 from: left  to: right
+link cluster.desktop1.files -> server.mirror  "backup script"  style: backup  from: left  to: right
+link cluster.desktop1.files -> server.deploy  "deploy script"                 from: left  to: right
 
 
-// --- The drives -------------------------------------------------------------
+// --- The backup drive -------------------------------------------------------
 
-box ext_hd           "External HD"  above-left of server  icon: disk  align: widths
-box ext_hd.important_backup  "\"important\" backup"      style: backup
-box ext_hd.bare              "\"important\" bare clone"  style: backup
-box ext_hd.archive1          "archive1"
-box ext_hd.archive2          "archive2"
+box drive          "External HD"  left of server  top level with server  icon: disk  align: widths
+box drive.mirror   "shared folder / backup"  style: backup
+box drive.archive  "archive"
 
-link server.mirror -> ext_hd.important_backup  style: backup  from: left  to: right
-link server.mirror -> ext_hd.bare  style: backup  from: left  to: right
+link server.mirror -> drive.mirror  style: backup  from: left  to: right
 
-box bup_hd           "BUP-HD1 / External Hard Drive"  below-left of ext_hd  icon: disk  align: widths
-box bup_hd.important_backup  "\"important\" backup"
-box bup_hd.bare              "\"important\" bare clone"
-box bup_hd.archive1          "archive1"
-box bup_hd.archive2          "archive2"
-box bup_hd.storage           "long-term storage"
-
-deck bup_hd "BUP-HD2" "BUP-HD3"
-
-// Each note sits beside the rows it is about, not beside the drive.
-note rotations_note "Regular rotations backup \"important\" dir"  right of bup_hd.important_backup and bup_hd.bare  gap: tight  wrap: 28
-note archive_note "archive dirs remain untouched"  left of bup_hd.archive1 and bup_hd.archive2  gap: tight  wrap: 26  overlap: allow
-note storage_note "long-term storage is backed up only occasionally"  right of bup_hd.storage  top level with bup_hd.storage  gap: tight  wrap: 28
+note drive_note "Swapped with a second drive weekly."  left of drive.mirror  gap: tight  wrap: 22

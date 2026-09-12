@@ -15,11 +15,11 @@ A lone `/` is an ordinary character rather than the start of a comment, and `#` 
 A statement is a positional head followed by optional `key: value` attributes. Attributes begin at the first token ending in a colon, which is the only rule a parser needs to tell the two apart. Everything positional therefore comes first — name, text and placements, in that order — and once an attribute has appeared nothing positional may follow it.
 
 ```
-box server "My Server Machine" left of dropbox  gap: wide  icon: desktop
-    ^   ^                 ^                ^
-    |   |                 |                attributes
-    |   |                 placements
-    |   text
+box server "Home Server" left of cluster  gap: wide  icon: desktop
+    ^      ^             ^                ^
+    |      |             |                attributes
+    |      |             placements
+    |      text
     name
 ```
 
@@ -61,9 +61,9 @@ Every kind of text has a default, and `size:` overrides it exactly as `fill:` ov
 Containment is a dotted name. A node named `server.docker` is inside `server`. The parent must be declared before the child.
 
 ```
-box server         "My Server Machine"  left of dropbox
-box server.mirror  "\\"important\\" mirror"
-box server.deploy  "services deploy dir"
+box server         "Home Server"  left of cluster
+box server.mirror  "shared folder / mirror"
+box server.deploy  "deploy dir"
 ```
 
 A container is sized by its contents. Children stack vertically in written order unless a child carries a placement of its own.
@@ -73,14 +73,14 @@ A container with empty text and no fill or border takes up no room of its own an
 ```
 style invisible  fill: none  border: none
 
-box hub ""  style: invisible
-box hub.dropbox    "Dropbox"
-box hub.computer1  "Computer 1"  above-left of hub.dropbox
+box cluster ""  style: invisible
+box cluster.hub       "Cloud sync"
+box cluster.desktop1  "Desktop 1"  above-left of cluster.hub
 
-box server "My Server Machine"  left of hub
+box server "Home Server"  left of cluster
 ```
 
-Here the server clears the whole cluster. Placed `left of hub.dropbox` instead, it would only clear Dropbox, and the machines around Dropbox would be free to grow into it.
+Here the server clears the whole cluster. Placed `left of cluster.hub` instead, it would only clear the hub, and the machines around the hub would be free to grow into it.
 
 A container's label can say where in the box it goes, in brackets on the label itself:
 
@@ -117,7 +117,7 @@ Both are refused on a note, which has no box at all.
 `cubes` draws three whatever the number, because it is the symbol for "several" and not a count. Where the number matters — where one of them is the end of an arrow — they are separate nodes, and `shape: instance` is how you draw those.
 
 ```
-box ext_hd "External HD"  icon: disk
+box drive "External HD"  icon: disk
 ```
 
 A name says what the thing *is*, never what the picture looks like, for the same reason `gap: wide` beats `gap: 110`: naming the meaning is what lets the drawing be improved later without every diagram that uses it changing sense. An unrecognized name is an error listing the whole set, rather than a box that quietly draws no icon — you would go looking for the mistake in the wrong place.
@@ -142,7 +142,7 @@ Icons are drawn from path data inside the tool, never from a font or a linked fi
 `shape: <name>` says what a node is drawn as. It answers one question, and the answer is either a different outline for the box or a glyph standing where the box would be.
 
 ```
-box dump "pg_dump output / (DB 1)"  shape: document
+box dump "db dump / (app 1)"  shape: document
 box svc  ""                             shape: instance
 ```
 
@@ -210,7 +210,7 @@ This is the step you would otherwise do by hand: shove two things apart to make 
 `level with X` is the one placement that fixes a distance outright: share a center line, no gap involved. It binds the vertical only.
 
 ```
-box dumps ""  right of server.docker  left of dropbox_and_machines  level with server.docker
+box dumps ""  right of server.docker  left of cluster  level with server.docker
 ```
 
 Horizontally between two different targets, vertically level with a third. No single relation can say that, which is why a node can carry several.
@@ -222,8 +222,8 @@ Naming an edge in front of it aligns that edge instead of the center. `top level
 A placement may name several targets joined by `and`, with optional commas. It then places the node against the box that just bounds them all — a region you never have to declare.
 
 ```
-note rotations "Weekly rotations …"  right of bup_hd.borg and bup_hd.bare  gap: tight
-note archive   "archive remains …"   left of bup_hd.archive and bup_hd.par2  gap: tight
+note swapped "Swapped weekly …"   left of drive.mirror and drive.clone  gap: tight
+note kept    "never rotated …"    right of drive.archive and drive.old  gap: tight
 ```
 
 Neither note says anything about its own vertical position, and neither needs to. A lone directional placement centers on what it names, and what these name is the region covering two boxes, so each note lands centered on the pair it explains.
@@ -307,7 +307,7 @@ link <from> <-> <to> ["<label>"] [between <a> and <b> [vertically|horizontally]]
 
 `a <- b` is exactly `b -> a` — same arrow, same picture. What changes is which name you write first, and that is worth having: the first name reads as the subject of the line, and plenty of links are about the thing the arrow points at rather than the thing it leaves. `from:` and `to:` follow the arrow, not the writing order, so they still name the tail and the head.
 
-Endpoints may be nested (`computer1.files`). A link never says where a box goes and routing is the renderer's problem, with one exception: a labeled link claims room in the gap it crosses, which is the next section.
+Endpoints may be nested (`desktop1.files`). A link never says where a box goes and routing is the renderer's problem, with one exception: a labeled link claims room in the gap it crosses, which is the next section.
 
 A link's label breaks on ` / ` exactly as a node's does, and the block centers on the point the label would otherwise have occupied, so ``"run `deploy` / shell command"`` stacks its two lines around the midpoint of the line rather than running off along it. `wrap:` is a node attribute and does not apply — a link label folds where you say and nowhere else.
 
@@ -332,10 +332,10 @@ An unlabeled link asks for nothing, since every gap is wide enough for an arrowh
 `from:` and `to:` name a side of the box at each end — `top`, `bottom`, `left` or `right`.
 
 ```
-link computer1.files <-> dropbox  from: right  to: top
+link desktop1.files <-> hub  from: right  to: top
 ```
 
-That line leaves the right side of `computer1.files` heading right, and arrives at the top of `dropbox` heading down. Naming a side is a statement about how the line should leave or arrive, so the link is drawn as a curve that actually does. A link naming neither side stays the straight center-to-center line it has always been. Either end may be named on its own; the unnamed one aims at wherever its partner ended up.
+That line leaves the right side of `desktop1.files` heading right, and arrives at the top of `hub` heading down. Naming a side is a statement about how the line should leave or arrive, so the link is drawn as a curve that actually does. A link naming neither side stays the straight center-to-center line it has always been. Either end may be named on its own; the unnamed one aims at wherever its partner ended up.
 
 You name a side and never a point on it. Alone on a side, a link lands at its center. Sharing a side with other links, the attachments space themselves apart, and which one goes where is derived from where the far ends actually sit — of two links arriving at one top edge, the one coming from further left arrives further left. Move a box and the order follows it. This is the same rule as boxes not overlapping: the tool separates things by default and reads the direction off the solved layout rather than asking you.
 
@@ -385,7 +385,7 @@ The bow is the shortfall, not a style — nothing bends until the edge is full, 
 `between <a> and <b>` says that the line travels down the gap between two named nodes.
 
 ```
-link dumps.db1 -> dropbox  "rclone"  between computer1 and computer2  from: right  to: left
+link dumps.db1 -> hub  "rclone"  between desktop1 and laptop1  from: right  to: left
 ```
 
 It says nothing about the rest of the line. The clause binds only the stretch where the line is actually passing that pair — where it enters the span the two of them occupy, it is in the gap between them, and before and after it goes wherever its ends take it. The line is drawn as a curve into the gap, a straight run along it, and a curve out to its far end.
@@ -469,7 +469,7 @@ A named bundle of appearance, applied with `style: <name>` on a node or link. Co
 
 ```
 style backup  border: #d2904e
-box server.mirror "\\"important\\" mirror"  style: backup
+box server.mirror "shared folder / mirror"  style: backup
 ```
 
 The appearance attributes are `fill`, `border`, `text`, `line`, `subtext`, `size`, `icon` and `shape`. The first five each take a color written as the viewer will receive it — `#142814`, or any CSS color, or `none`.
@@ -523,7 +523,7 @@ There is no list of color words the tool knows. An earlier version had one, and 
 
 ```
 style synced  fill: #142814  border: #486544  subtext: muted
-box pc.files "\"important\" directory / Dropbox-synced"  style: synced
+box pc.files "shared folder / synced"  style: synced
 ```
 
 `icon` and `shape` belong in a style for the same reason a color does: they say what kind of thing this is, and a kind wants to look alike everywhere it appears. `style artifact  fill: #460000  shape: document` puts the folded corner on every dump in the diagram, and the use site stays one word.

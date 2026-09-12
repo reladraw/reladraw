@@ -29,3 +29,6 @@ scratch/
 # draw.io's own lock and backup files, written beside an open drawing.
 .$*.bkp
 .$*.dtmp
+
+# The original benchmark drawing and its transcription. Never commit.
+private/

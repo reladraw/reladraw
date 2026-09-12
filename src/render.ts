@@ -286,7 +286,7 @@ function drawNode(
  *
  * Twice the corner radius, so it is the same size on every box however wide.
  * The reference sizes its fold as a fraction of the box, which is why the fold
- * on those two wide `pg_dump` boxes almost disappears — the idea was right and
+ * on those two wide dump boxes almost disappears — the idea was right and
  * only the scaling was wrong.
  */
 const FOLD = CORNER * 2;
@@ -1280,7 +1280,7 @@ function gapBetween(
  *
  * Links sharing one gap share its lanes, spread like attachments on a side and
  * ordered the same derived way — by where their ends actually sit, so the two
- * arriving at Dropbox's left edge in one order run through the corridor in that
+ * arriving at the hub's left edge in one order run through the corridor in that
  * same order and never cross.
  */
 function planCorridors(

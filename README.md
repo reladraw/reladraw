@@ -8,11 +8,11 @@ A diagram drawn by hand in draw.io:
 
 ![The reference diagram, drawn by hand](https://raw.githubusercontent.com/reladraw/reladraw/main/examples/reference/arch.png)
 
-And the same diagram written down in reladraw and rendered from the text — [`examples/arch.reladraw`](examples/arch.reladraw), 56 statements, no coordinates anywhere in it:
+And the same diagram written down in reladraw and rendered from the text — [`examples/arch.reladraw`](examples/arch.reladraw), 44 statements, no coordinates anywhere in it:
 
 ![The same diagram, rendered from reladraw source](https://raw.githubusercontent.com/reladraw/reladraw/main/docs/arch-render.png)
 
-Every distance in the second picture was worked out from statements like `above-left of dropbox` and `between computer1 and computer2`. Nothing chose the arrangement; the file states it.
+Every distance in the second picture was worked out from statements like `above-left of cluster.hub` and `between cluster.desktop1 and cluster.laptop1`. Nothing chose the arrangement; the file states it.
 
 ## The gap
 
@@ -44,7 +44,7 @@ The common case is not drawing a diagram, it is changing one. Ask for the auth s
 
 Writing has the same shape. An agent emitting Mermaid is guessing at a layout that an algorithm settles later, and its only way to find out is to render and look — a round trip that comes back as a picture rather than as a list of what is wrong.
 
-Intent is confirmable, outcomes are not, and the difference is worth being precise about. An agent can re-read its own file and see that the database is under the API and all four machines hang off Dropbox. It cannot see that two clusters anchored to different things now overlap, that a label overflowed its box, or that an edge crosses four others — those are resolved from the statements rather than stated, so they need the diagnostics in the scope section below.
+Intent is confirmable, outcomes are not, and the difference is worth being precise about. An agent can re-read its own file and see that the database is under the API and all four machines hang off the sync hub. It cannot see that two clusters anchored to different things now overlap, that a label overflowed its box, or that an edge crosses four others — those are resolved from the statements rather than stated, so they need the diagnostics in the scope section below.
 
 ### Using it with an agent
 
@@ -103,7 +103,7 @@ Nothing is nudged. Each round derives the separations the file already implied, 
 - Minimal box-avoiding edge routing
 - Machine-readable diagnostics from the solved geometry
 
-Diagnostics are a real output rather than a debugging aid. What they cannot do is stand in for the grammar: a check catches only what the language genuinely leaves open, and "these must not overlap" rules arrangements out without naming one, so it can never place anything. Everything the source cannot tell you is computable once the geometry is solved, with no image involved: overlapping boxes, crossed edges, text exceeding its container, anything off-canvas, large dead regions. So the tool reports `dropbox overlaps machine3` and `edge auth->db crosses 4 edges`, and the fix is written in the same vocabulary as the source. An agent working this way reads a report about a text file it wrote and edits that text file — no rendering, no vision model, no pixel arithmetic.
+Diagnostics are a real output rather than a debugging aid. What they cannot do is stand in for the grammar: a check catches only what the language genuinely leaves open, and "these must not overlap" rules arrangements out without naming one, so it can never place anything. Everything the source cannot tell you is computable once the geometry is solved, with no image involved: overlapping boxes, crossed edges, text exceeding its container, anything off-canvas, large dead regions. So the tool reports `hub overlaps laptop1` and `edge auth->db crosses 4 edges`, and the fix is written in the same vocabulary as the source. An agent working this way reads a report about a text file it wrote and edits that text file — no rendering, no vision model, no pixel arithmetic.
 
 A diagnostic never repairs a solved layout in place. That is the line the design holds: a checker allowed to nudge boxes is a layout algorithm with a bad search strategy, fixing one overlap into the next with no view of the whole. Deriving a constraint the file already implied and solving the whole system again is a different thing, and is how non-overlap works. What is left over — anything the source genuinely does not settle — is reported, naming the statement that was broken, and the author edits the source. Open, and it decides how far this goes: may a diagnostic describe a fix in words, or only name the symptom? Describing one means the tool has an opinion about layout, which is the auto-layout instinct coming back in through the side door.
 

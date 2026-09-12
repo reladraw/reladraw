@@ -110,7 +110,7 @@ export function listTargets(targets: Targets): string {
 }
 
 /**
- * `between computer1 and computer2` on a link — the gap it passes through.
+ * `between desktop1 and laptop1` on a link — the gap it passes through.
  *
  * This is not a claim about the whole line. It binds only the stretch where the
  * line is actually passing the pair, and says nothing about where it goes
@@ -174,7 +174,7 @@ export interface LinkStmt {
   /** `<->` rather than `->`. */
   both: boolean;
   label?: string;
-  /** `between computer1 and computer2` — the gap the line passes through. */
+  /** `between desktop1 and laptop1` — the gap the line passes through. */
   between?: Passage;
   attrs: Attrs;
   line: number;

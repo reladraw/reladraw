@@ -389,7 +389,7 @@ function parsePlacements(tokens: Token[], line: number, subject: string): Placem
 
     // `top level with media` names an edge rather than the center line. `left`
     // and `right` are edges as well as directions, so it is the word after them
-    // that says which was meant — "left of bup_hd" against "left level with bup_hd".
+    // that says which was meant — "left of drive" against "left level with drive".
     const edge = isEdgeWord(word.text) && follows(tokens, i + 1, 'level') ? word.text : undefined;
     const head = edge ? tokens[i + 1]! : word;
 
