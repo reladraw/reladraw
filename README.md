@@ -56,6 +56,14 @@ npx skills add reladraw/reladraw -g
 
 That installs it for whichever agent you use — Claude Code, Codex, Cursor, Copilot and others — each into its own skills directory. Drop the `-g` to install it into the current project instead.
 
+To install it for one agent rather than all of them, name it with `-a`:
+
+```
+npx skills add reladraw/reladraw -g -a claude-code
+```
+
+Re-run whichever command you used after a release that changes the syntax. The skill is a copy taken at install time, not a link, so nothing refreshes it on its own.
+
 It is [plain Markdown](.claude/skills/reladraw/SKILL.md) with the syntax reference beside it, so it is worth reading whatever you use, and copying the directory by hand works just as well.
 
 ## Status
