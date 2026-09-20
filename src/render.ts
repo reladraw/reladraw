@@ -15,7 +15,7 @@ import {
 import type { Axis } from './ast.js';
 import { describeAxis } from './ast.js';
 import { SourceError } from './errors.js';
-import { ICON_STROKE, iconFor, shapeFor, type BoxShape, type Icon, type IconTone } from './icons.js';
+import { ICON_STROKE, badgeFor, type Icon, type IconTone, type Outline } from './icons.js';
 import { monospaceMeasurer, type Measurer } from './measure.js';
 import type { Layout, LayoutEdge, LayoutNode } from './model.js';
 
@@ -143,7 +143,7 @@ function drawNode(
   const size = fontSizeFor(node.kind, node.appearance, fontSize, node.line);
   const textHeight = measurer.lineHeight(size);
 
-  if (node.kind === 'note') {
+  if (node.body.kind === 'none') {
     return sized(
       textBlock(node.lines, node.x, node.y, node.width, textHeight, size, {
         color: textOf(node.appearance, theme.text),
@@ -154,14 +154,13 @@ function drawNode(
     );
   }
 
-  const shape = shapeFor(node.appearance, node.line);
   const textStyle = textStyleFor(node.textAttrs, node.line);
   const glyphSide = ICON_LINES * textHeight;
 
-  if (shape.body !== undefined) {
+  if (node.body.kind === 'icon') {
     // No outline, no fill, no padding — the node is the picture. The text, if
     // there is one, sits under it and centered.
-    const drawn = [drawIcon(shape.body, node.x + (node.width - glyphSide) / 2, node.y, glyphSide, theme)];
+    const drawn = [drawIcon(node.body.icon, node.x + (node.width - glyphSide) / 2, node.y, glyphSide, theme)];
     if (node.lines.some((line) => line.length > 0)) {
       drawn.push(
         sized(
@@ -178,6 +177,7 @@ function drawNode(
     return drawn.join('\n');
   }
 
+  const outline = node.body.outline;
   const parts: string[] = [];
   const face = faceOf(node);
   const container = node.children.length > 0;
@@ -193,7 +193,7 @@ function drawNode(
     const x = face.x - depth * DECK_STEP;
     const y = face.y - depth * DECK_STEP;
     parts.push(
-      `  <path d="${outlinePath(shape.outline, x, y, face.width, face.height)}" fill="${theme.containerFill}" stroke="${border}"/>`,
+      `  <path d="${outlinePath(outline, x, y, face.width, face.height)}" fill="${theme.containerFill}" stroke="${border}"/>`,
     );
     const copy = node.deckTexts[depth - 1];
     if (copy !== undefined) {
@@ -211,15 +211,15 @@ function drawNode(
   }
 
   parts.push(
-    `  <path d="${outlinePath(shape.outline, face.x, face.y, face.width, face.height)}" fill="${fill}" stroke="${border}"/>`,
+    `  <path d="${outlinePath(outline, face.x, face.y, face.width, face.height)}" fill="${fill}" stroke="${border}"/>`,
   );
-  for (const extra of outlineDetail(shape.outline, face.x, face.y, face.width, face.height)) {
+  for (const extra of outlineDetail(outline, face.x, face.y, face.width, face.height)) {
     parts.push(`  <path d="${extra}" fill="none" stroke="${border}"/>`);
   }
 
-  // The icon takes a column on the right and the text lays out in what is
+  // The badge takes a column on the right and the text lays out in what is
   // left, which is the room the resolver already reserved for exactly this.
-  const icon = iconFor(node.appearance, node.line);
+  const icon = badgeFor(node.appearance, node.line);
   const iconSide = icon === undefined ? 0 : glyphSide;
   const hasText = node.lines.some((line) => line.length > 0);
   const iconRoom = icon === undefined ? 0 : iconSide + (hasText ? ICON_GAP : 0);
@@ -265,7 +265,7 @@ function drawNode(
   }
 
   if (icon !== undefined) {
-    // A container's icon rides in the text's band, at whichever end that is; a
+    // A container's badge rides in the text's band, at whichever end that is; a
     // leaf's text is centered, so the icon centers with it. Both follow the
     // text rather than being placed by a rule of their own, which is what
     // keeps an icon reading as part of the title block and not as a sticker.
@@ -292,7 +292,7 @@ function drawNode(
 const FOLD = CORNER * 2;
 
 /** The node's outline, as path data. */
-function outlinePath(shape: BoxShape, x: number, y: number, w: number, h: number): string {
+function outlinePath(shape: Outline, x: number, y: number, w: number, h: number): string {
   const r = CORNER;
   if (shape === 'document') {
     // Every corner rounded but the top-right one, which is cut away and folded.
@@ -324,7 +324,7 @@ function outlinePath(shape: BoxShape, x: number, y: number, w: number, h: number
 }
 
 /** Lines drawn inside the outline: the flap of a fold, and nothing else so far. */
-function outlineDetail(shape: BoxShape, x: number, y: number, w: number, h: number): string[] {
+function outlineDetail(shape: Outline, x: number, y: number, w: number, h: number): string[] {
   void h;
   if (shape !== 'document') return [];
   return [

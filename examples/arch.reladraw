@@ -15,18 +15,18 @@ diagram  background: #111111
 
 node cluster ""  style: invisible
 
-node cluster.hub "Cloud sync"  icon: package  style: synced
+node cluster.hub "Cloud sync"  badge: package  style: synced
 
-node cluster.desktop1       "Desktop 1 / Linux"    above-left of cluster.hub   gap: tight  icon: desktop
+node cluster.desktop1       "Desktop 1 / Linux"    above-left of cluster.hub   gap: tight  badge: desktop
 node cluster.desktop1.files "shared folder / synced"  style: synced
 
-node cluster.desktop2       "Desktop 2 / Windows"  above-right of cluster.hub  gap: tight  icon: desktop
+node cluster.desktop2       "Desktop 2 / Windows"  above-right of cluster.hub  gap: tight  badge: desktop
 node cluster.desktop2.files "shared folder / synced"  style: synced
 
-node cluster.laptop1        "Laptop 1 / macOS"     below-left of cluster.hub   gap: tight  icon: laptop
+node cluster.laptop1        "Laptop 1 / macOS"     below-left of cluster.hub   gap: tight  badge: laptop
 node cluster.laptop1.files  "shared folder / synced"  style: synced
 
-node cluster.laptop2        "Laptop 2 / macOS"     below-right of cluster.hub  gap: tight  icon: laptop
+node cluster.laptop2        "Laptop 2 / macOS"     below-right of cluster.hub  gap: tight  badge: laptop
 node cluster.laptop2.files  "shared folder / synced"  style: synced
 
 edge cluster.desktop1.files <-> cluster.hub  style: synced  from: right  to: top
@@ -43,12 +43,12 @@ node dumps ""  right of server.docker  left of cluster (gap: wide)  level with s
 node dumps.db1 "db dump / (app 1)"  style: dump
 node dumps.db2 "db dump / (app 2)"  style: dump
 
-note dumps_note "Written by nightly cron job."  below dumps  gap: tight  wrap: 30
+node dumps_note "Written by nightly cron job."  below dumps  gap: tight  wrap: 30  shape: none
 
 
 // --- The server -------------------------------------------------------------
 
-node server         "Home Server"  left of cluster  icon: desktop  align: widths
+node server         "Home Server"  left of cluster  badge: desktop  align: widths
 node server.mirror  "shared folder / mirror"  style: backup
 node server.deploy  "deploy dir"  below server.mirror  gap: normal
 
@@ -56,11 +56,11 @@ node server.deploy  "deploy dir"  below server.mirror  gap: normal
 // arrows start. The lower pair is centered under the upper three by naming two
 // targets and nothing else.
 node server.docker  "Docker" (at: bottom, align: center)  below server.deploy  gap: normal
-node server.docker.a    ""  shape: instance
-node server.docker.b    ""  right of server.docker.a  gap: tight  shape: instance
-node server.docker.db1  ""  right of server.docker.b  gap: tight  shape: instance
-node server.docker.c    ""  below server.docker.a and server.docker.b    gap: tight  shape: instance
-node server.docker.db2  ""  below server.docker.b and server.docker.db1  gap: tight  shape: instance
+node server.docker.a  icon: cube
+node server.docker.b  right of server.docker.a  gap: tight  icon: cube
+node server.docker.db1  right of server.docker.b  gap: tight  icon: cube
+node server.docker.c  below server.docker.a and server.docker.b    gap: tight  icon: cube
+node server.docker.db2  below server.docker.b and server.docker.db1  gap: tight  icon: cube
 
 edge server.deploy -> server.docker  "compose up"
 
@@ -78,10 +78,10 @@ edge cluster.desktop1.files -> server.deploy  "deploy script"                 fr
 
 // --- The backup drive -------------------------------------------------------
 
-node drive          "External HD"  left of server  top level with server  icon: disk  align: widths
+node drive          "External HD"  left of server  top level with server  badge: disk  align: widths
 node drive.mirror   "shared folder / backup"  style: backup
 node drive.archive  "archive"
 
 edge server.mirror -> drive.mirror  style: backup  from: left  to: right
 
-note drive_note "Swapped with a second drive weekly."  left of drive.mirror  gap: tight  wrap: 22
+node drive_note "Swapped with a second drive weekly."  left of drive.mirror  gap: tight  wrap: 22  shape: none

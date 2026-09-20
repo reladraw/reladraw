@@ -1,0 +1,55 @@
+// `on X at <position>` holds a node on another's box, at one of nine named
+// points, inset from that corner or edge and overlapping by construction.
+//
+// It is not containment. A dotted name is what puts something *inside* a box —
+// padded, widening it, a member of its constraint system. An overlay is stamped
+// on the box and changes nothing about it.
+
+diagram  background: #111111
+
+style mark   shape: none  text: #8b8b8b
+style spacer  fill: none  border: none
+style link  shape: none  text: #6fa8dc
+
+// All nine positions at once. The board is held open by six invisible children
+// with nothing in them, which is also the point being made: a box is sized by
+// what it *holds*, and the nine marks stamped on it are not held by anything.
+node board ""  fill: #191728  border: #4f5367
+node board.nw ""  style: spacer
+node board.n  ""  style: spacer  right of board.nw  gap: wide
+node board.ne ""  style: spacer  right of board.n   gap: wide
+node board.sw ""  style: spacer  below board.nw  gap: wide
+node board.s  ""  style: spacer  right of board.sw  below board.n   gap: wide
+node board.se ""  style: spacer  right of board.s   below board.ne  gap: wide
+
+node p1 "top-left"       on board at top-left       style: mark
+node p2 "top-center"     on board at top-center     style: mark
+node p3 "top-right"      on board at top-right      style: mark
+node p4 "left-center"    on board at left-center    style: mark
+node p5 "center"         on board at center         style: mark
+node p6 "right-center"   on board at right-center   style: mark
+node p7 "bottom-left"    on board at bottom-left    style: mark
+node p8 "bottom-center"  on board at bottom-center  style: mark
+node p9 "bottom-right"   on board at bottom-right   style: mark
+
+// The case the design record names: an ordinary box with its text in the middle
+// and, centred at the bottom inside it, a small link. No one-position slot
+// could say that, and the primitive says it in one line.
+node bob "Bob the builder"  below board  gap: normal
+node bob.card ""  style: spacer
+node bob_link "bob.example.com"  on bob at bottom-center  style: link
+
+// The inset is a named gap on the placement, and `none` puts the node hard
+// against the edge. It is deliberately not the node's own `gap:`, which says
+// how this node stands off its neighbours rather than how far in a stamp sits.
+node plate "A wide plate to stamp on"  right of bob  gap: wide
+node flush "flush"  on plate at top-right (gap: none)  style: mark
+
+// An overlay sits on a picture as readily as on a box, and the picture is an
+// ordinary node underneath it.
+node unit  icon: cube  right of plate  gap: normal
+node tag "x3"  on unit at bottom-right  style: mark
+
+// The overlap exemption is for the pair and nothing else: `flush` is still kept
+// clear of everything in the drawing that is not `plate`.
+edge bob -> plate  from: right  to: left

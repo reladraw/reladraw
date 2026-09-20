@@ -12,16 +12,18 @@ Blank lines and `//` comments are ignored. A comment runs to the end of the line
 
 A lone `/` is an ordinary character rather than the start of a comment, and `#` is ordinary too — it opens a hex color. Comments were spelled `#` in an earlier version and moved to `//` so that `fill: #14532d` could be written the way every other tool writes a color.
 
-A statement is a positional head followed by optional `key: value` attributes. Attributes begin at the first token ending in a colon, which is the only rule a parser needs to tell the two apart. Everything positional therefore comes first — name, text and placements, in that order — and once an attribute has appeared nothing positional may follow it.
+A statement is a positional head — the keyword, a name and a text — followed by attributes and placements in any order. A token ending in a colon opens an attribute and nothing else does, so the two never have to be told apart by position.
 
 ```
-node server "Home Server" left of cluster  gap: wide  icon: desktop
+node server "Home Server" left of cluster  gap: wide  badge: desktop
      ^      ^             ^                ^
      |      |             |                attributes
-     |      |             placements
+     |      |             a placement
      |      text
      name
 ```
+
+`node aside "…"  shape: none  below dumps (gap: tight)  wrap: 30` is one statement with a placement in the middle of its attributes, and reads the same as any other arrangement of those three. Until 0.3.0 placements had to come first; that rule existed only because a bare `gap:` between two placements could not be told from the node-wide default, and [bracketing a gap onto its placement](#a-gap-belongs-to-the-placement) removed the ambiguity that made it necessary.
 
 Attribute values are a single bare word unless quoted. No commas between attributes.
 
@@ -42,7 +44,7 @@ node resolver  right of parser
 
 draws two nodes reading "parser" and "resolver". A dotted name shows its last segment only — `node server.docker` reads "docker", because the containment is already drawn and repeating it in the text says nothing new.
 
-Write `""` for a node that is deliberately blank: an invisible container, a node that is nothing but its icon, a glyph body. The empty string is the way to say a node has no text, and leaving the text out entirely is the way to say the name is the text.
+Write `""` for a node that is deliberately blank: an invisible container, a node that is nothing but its badge. The empty string is the way to say a node has no text, and leaving the text out entirely is the way to say the name is the text. A node drawn as a picture is the one exception — there, leaving the text out means no text, and `""` says the same thing.
 
 A name written this way is doing two jobs, so renaming such a node changes the picture. That is the trade, and the escape from it is to state the text.
 
@@ -54,9 +56,9 @@ For a text that wants a spaced slash and no break, `\/` escapes it: `"Before \/ 
 
 It was called `width` until it was renamed, and the old name is now an error naming the new one. `width` was wrong in the way this project's naming rule catches: it says how wide something is, and this says nothing of the sort — `width: 200` meaning units was accepted, folded at two hundred characters, and did nothing visible. The reference had to carry a sentence explaining that the number was not a distance, which is the tell that a name is doing the wrong job.
 
-`size: small | normal | large` sets how big the text is, and works on a node, a note or an edge text. The sizes are named for the reason gaps are named: a number would be typography by coordinate, stale the moment the document is set at another size, and silent about *why* one piece of text is smaller than another. An unrecognized value is an error naming it.
+`size: small | normal | large` sets how big the text is, and works on any node or edge text. The sizes are named for the reason gaps are named: a number would be typography by coordinate, stale the moment the document is set at another size, and silent about *why* one piece of text is smaller than another. An unrecognized value is an error naming it.
 
-Every kind of text has a default, and `size:` overrides it exactly as `fill:` overrides the theme's color. Only `note` defaults to anything other than `normal`, and it defaults to `small`.
+Every kind of text has a default, and `size:` overrides it exactly as `fill:` overrides the theme's color. Only `shape: none` defaults to anything other than `normal`, and it defaults to `small`.
 
 Containment is a dotted name. A node named `server.docker` is inside `server`. The parent must be declared before the child.
 
@@ -96,13 +98,23 @@ They are bracketed onto the text rather than written among the node's attributes
 
 A leaf has no contents, so there is no band and nothing for `at` to be at either end of; writing it on a childless node is an error. `align` is fine there, and its default is `center` rather than `left`, because a leaf's text is centered in its node. It is worth having: any text of more than one line — from a ` / ` break or from `wrap:` — has lines of unequal length, and how those sit across each other is a real question in a leaf as much as in a container.
 
-Both are refused on a note, which has no node at all.
+Both are refused on a node with no body, which has no box at all.
 
 `align: widths` on a container widens every direct child to match the widest of them, so a stack of nodes with texts of different lengths draws as a column with one edge rather than a ragged one. It is the only value the key accepts; anything else is an error. Widths are the only thing it touches — it never moves a child.
 
-### Icons
+### The body
 
-`icon: <name>` puts a small glyph beside the node's text. There are seven:
+Every node has a *body*: the thing that is drawn where the node is. Two keys name it, and each names one part.
+
+`shape: <name>` is the outline the node is drawn with.
+
+| Value | What it draws |
+| --- | --- |
+| `rectangle` | The plain rounded box. The default, so nothing has to say it. |
+| `document` | The same box with its top-right corner folded — the flowchart symbol saying *this is an artifact, not a process*. |
+| `none` | No outline, no fill, no padding. The node is its text and nothing else. |
+
+`icon: <name>` is a picture the node is drawn **as**, with no box at all.
 
 | Name | What it means |
 | --- | --- |
@@ -111,60 +123,51 @@ Both are refused on a note, which has no node at all.
 | `laptop` | A portable machine. |
 | `package` | Something stored as a whole rather than run: an archive, a bucket, a sync root. |
 | `cubes` | Several interchangeable units of the same kind. |
-| `instance` | One of them. |
+| `cube` | One of them. |
 | `database` | A store queried rather than read as files. |
-
-`cubes` draws three whatever the number, because it is the symbol for "several" and not a count. Where the number matters — where one of them is the end of an arrow — they are separate nodes, and `shape: instance` is how you draw those.
-
-```
-node drive "External HD"  icon: disk
-```
-
-A name says what the thing *is*, never what the picture looks like, for the same reason `gap: wide` beats `gap: 110`: naming the meaning is what lets the drawing be improved later without every diagram that uses it changing sense. An unrecognized name is an error listing the whole set, rather than a node that quietly draws no icon — you would go looking for the mistake in the wrong place.
-
-The set is small on purpose, and it is not the same trade a drawing tool makes. There you pick a shape out of a visual palette and hundreds are browsable; here you type the word from memory, which caps the useful vocabulary at what fits in a head. Adding your own is not possible yet — see "Not built yet".
-
-The glyph is two lines of the text tall, so it follows `size:` down and up with the text, and it sits at the top of a container beside the title and centered in a leaf beside the text. There is nothing to write about where it goes or how big it is. It takes a column of its own, so the node grows to hold the text and the icon side by side and one never runs under the other.
-
-`icon` is appearance, so a style can carry one and every store in a diagram then looks alike without the word being written more than once:
-
-```
-style store  fill: #142814  border: #486544  icon: database
-node records "Records"  style: store
-```
-
-A node with no text at all is exactly the icon and its padding, which makes an icon usable as a marker and not only as a title-block ornament. A note cannot take one, and says so: an icon decorates a box, and a note has no box.
-
-Icons are drawn from path data inside the tool, never from a font or a linked file. The output is a standalone SVG and has to stay one — an icon font renders as blank boxes on a machine that does not have it, and a linked image has to travel beside the file.
-
-### Shapes
-
-`shape: <name>` says what a node is drawn as. It answers one question, and the answer is either a different outline for the node or a glyph standing where the node would be.
 
 ```
 node dump "db dump / (app 1)"  shape: document
-node svc  ""                             shape: instance
+node aside "Written by a nightly cron job."  shape: none  wrap: 30
+node svc  icon: cube
 ```
 
-`box` is the plain rectangle and is what you get by saying nothing. `document` is the same node with its top-right corner folded — the flowchart symbol saying *this is an artifact, not a process*.
+A node has one body, so writing both keys is an error naming both.
 
-That distinction is worth having because it is a second channel alongside color, and a stronger one. A fill means whatever you assigned it, and a reader has to learn it from the diagram; a folded corner has meant "a document" for as long as there have been flowcharts, and reads with no legend. Most diagrams lose the difference between a thing that runs and a thing that is produced, because every node is a rectangle.
+The `document` fold is worth having because a shape is a second channel alongside color, and a stronger one. A fill means whatever you assigned it and a reader has to learn it from the diagram; a folded corner has meant "a document" for as long as there have been flowcharts, and reads with no legend. Most diagrams lose the difference between a thing that runs and a thing that is produced, because every node is a rectangle. `circle` and `diamond` will join these when a diagram asks for them.
 
-Any icon name is also a shape, and then the node *is* the glyph: no outline, no fill, no padding, and its size is the picture's rather than its text's. A text goes underneath it.
+A name says what the thing *is*, never what the picture looks like, for the same reason `gap: wide` beats `gap: 110`: naming the meaning is what lets the drawing be improved later without every diagram that uses it changing sense. `document`, not `folded-corner`. The one place that rule stops is a picture with no single meaning — the cube stands for a container in one diagram, a VM in another, a service in a third — which is why it is called `cube` and not `instance`. An unrecognized name is an error listing the whole set, rather than a node that quietly draws nothing.
+
+The icon set is small on purpose, and it is not the trade a drawing tool makes. There you pick a shape out of a visual palette and hundreds are browsable; here you type the word from memory, which caps the useful vocabulary at what fits in a head. Adding your own is not possible yet — see "Not built yet".
+
+`cubes` draws three whatever the number, because it is the symbol for "several" and not a count. Where the number matters — where one of them is the end of an arrow — they are separate nodes, each with `icon: cube`.
+
+A node drawn as a picture is an ordinary node in every other way. It takes placements, it takes edges and sides, other nodes keep clear of it. That is what it buys over a badge: a badge cannot be the end of an arrow. It cannot contain anything, though, and a picture with children is an error, as is a `shape: none` node with children — neither has a box for anything to go inside.
+
+**A picture with no text of its own shows none.** Everywhere else a node with no text is labelled with its name, because `node a` and `node b right of a` mean the two boxes to read "a" and "b". A picture usually *is* the statement, so the default flips: `node svc icon: cube` draws the cube and no caption, and a row of five of them does not come out reading a, b, c, d, e. Write the text if you want one.
+
+Icons are drawn from path data inside the tool, never from a font or a linked file. The output is a standalone SVG and has to stay one — an icon font renders as blank boxes on a machine that does not have it, and a linked image has to travel beside the file.
+
+### Badges
+
+`badge: <name>` puts one of the same pictures beside the node's text, as a small mark on a node that keeps its own body.
 
 ```
-node services ""  fill: none  border: none
-node services.web    "web"                            shape: instance
-node services.api    "api"  right of services.web  gap: tight  shape: instance
+node drive "External HD"  badge: disk
 ```
 
-**`icon:` decorates a node; `shape:` replaces it.** The test is whether the node still sizes itself from its text — a `document` does, a glyph does not. The same artwork can serve both, as a corner ornament on one node and as another node's whole body.
+**A badge decorates a node; `icon:` replaces its body.** The test is whether the node still sizes itself from its text: a badged node does, a picture does not. The same artwork serves both.
 
-A glyph body is an ordinary node in every other way. It takes placements, it takes edges and sides, other nodes keep clear of it. That is why it exists rather than being an icon: an icon cannot be the end of an arrow. It cannot contain anything, though, and a glyph with children is an error — a picture is not a node.
+The badge is two lines of the text tall, so it follows `size:` down and up with the text, and it sits at the top of a container beside the title and centered in a leaf beside the text. There is nothing to write about where it goes or how big it is. It takes a column of its own, so the node grows to hold the text and the badge side by side and one never runs under the other.
 
-Shapes are named for what a node is, never for the geometry: `document`, not `folded-corner`. Same rule as the icon names, and for the same reason. An unrecognized name is an error listing what is available.
+`badge` is appearance, so a style can carry one and every store in a diagram then looks alike without the word being written more than once:
 
-The fold is a fixed size rather than a fraction of the node, so it looks the same on a narrow node and a wide one. Sizing it proportionally is what makes it vanish on a long text.
+```
+style store  fill: #142814  border: #486544  badge: database
+node records "Records"  style: store
+```
+
+A node with no text at all is exactly the badge and its padding, which makes a badge usable as a marker and not only as a title-block ornament.
 
 ## Placement
 
@@ -222,27 +225,27 @@ Naming a side in front of it aligns that side instead of the center. `top level 
 A placement may name several targets joined by `and`, with optional commas. It then places the node against the box that just bounds them all — a region you never have to declare.
 
 ```
-note swapped "Swapped weekly …"   left of drive.mirror and drive.clone  gap: tight
-note kept    "never rotated …"    right of drive.archive and drive.old  gap: tight
+node swapped "Swapped weekly …"  shape: none  left of drive.mirror and drive.clone  gap: tight
+node kept    "never rotated …"   shape: none  right of drive.archive and drive.old  gap: tight
 ```
 
-Neither note says anything about its own vertical position, and neither needs to. A lone directional placement centers on what it names, and what these name is the region covering two nodes, so each note lands centered on the pair it explains.
+Neither annotation says anything about its own vertical position, and neither needs to. A lone directional placement centers on what it names, and what these name is the region covering two nodes, so each one lands centered on the pair it explains.
 
 This is why it is one placement with two targets rather than two placements. Two separate `level with` statements are two demands that both have to hold, and nodes at different heights cannot both share a center line with the same node, so that combination is a contradiction. One statement naming two targets is a single demand about a single region.
 
 Combined with the rule that a lone directional placement also binds the other axis, this is how you offset one row against another. `below a and b` reads as "under the pair, centered between them", because the direction binds the vertical against the region and the horizontal falls on the region's center line:
 
 ```
-node a  ""  shape: instance
-node b  ""  right of a  gap: tight  shape: instance
-node c  ""  right of b  gap: tight  shape: instance
-node d  ""  below a and b  gap: tight  shape: instance
-node e  ""  below b and c  gap: tight  shape: instance
+node a  icon: cube
+node b  right of a  gap: tight  icon: cube
+node c  right of b  gap: tight  icon: cube
+node d  below a and b  gap: tight  icon: cube
+node e  below b and c  gap: tight  icon: cube
 ```
 
 Three above, two below, each sitting in the gap between two of them. Adding a second placement to bind the horizontal is what would left-justify the lower row instead — the centering is dropped as soon as anything else claims that axis.
 
-For a direction the region is a floor, so `right of one and three` clears whichever of them sticks out furthest, and it works wherever the targets sit. For an alignment the region is an exact position, and there is one restriction worth knowing: it must not depend on the node being aligned to it. Aligning a note to the region covering `A` and `B` while `B` is placed relative to that same note is refused by name, because there is no order in which each could wait for the other.
+For a direction the region is a floor, so `right of one and three` clears whichever of them sticks out furthest, and it works wherever the targets sit. For an alignment the region is an exact position, and there is one restriction worth knowing: it must not depend on the node being aligned to it. Aligning a node to the region covering `A` and `B` while `B` is placed relative to that same node is refused by name, because there is no order in which each could wait for the other.
 
 ### A gap belongs to the placement
 
@@ -275,6 +278,10 @@ Where both ends state a gap the larger applies, since a gap is a minimum either 
 
 The brackets take `gap:` and nothing else at present; anything else in them is an error naming it. An alignment is an error too — `level with x (gap: tight)` — because sharing a line leaves no distance for a gap to set, and a word that quietly does nothing looks like a fault in the tool.
 
+### On a box
+
+A placement may also hold a node *on* another's box rather than clear of it — `on hub at top-right`. It is the one placement that overlaps on purpose, and it has a section of its own: [On a box: overlays](#on-a-box-overlays).
+
 ### Side to side
 
 A zero gap turns an offset into contact. `below docker (gap: none)` puts the node's top side flat against Docker's bottom side, so exact side relations need no vocabulary of their own.
@@ -287,7 +294,7 @@ Every axis is solved as one system, so a target does not have to come first. Wha
 
 ## Nodes do not overlap
 
-You never have to say that two nodes must not sit on top of each other. Every pair carries that already, and `overlap: allow` on either one is the opt-out for the rare case where one is meant to cover another. A container never counts as overlapping its own contents.
+You never have to say that two nodes must not sit on top of each other. Every pair carries that already, and `overlap: allow` on either one is the opt-out for the rare case where one is meant to cover another. A container never counts as overlapping its own contents, and neither does an overlay and the box it is stamped on — that exemption is for the pair and nothing else, so an overlay is still kept clear of everything else in the drawing.
 
 **The tool never picks which way to separate two nodes.** It reads the direction off the arrangement you already stated. Say `A` is left of `B`, put `x` between them, and hang a wide node below `x`: because `x` is right of `A` and the wide node is centered under `x`, the file lets the wide node travel rightward away from `A` and offers no way back. So the only separation it allows is `A` moving further left. Nothing is chosen. Where nothing in the file orders a pair on either axis, the tool refuses and names the pair rather than guessing — which is what happens if you hang two nodes off the same side of the same target and expect them to sort themselves out.
 
@@ -406,17 +413,51 @@ Several edges may share one channel, and they take a lane each. As with attachme
 
 A named channel does not widen. It is measured off the layout you described, so if you name a gap too narrow for the lines you put through it they crowd together rather than pushing the two nodes apart. That is the difference between this and a text making room for itself, above: there, the corridor is the gap between the edge's own two ends, and opening it moves them apart exactly as anything else put between them would. Here the pair is named by an edge merely passing through, and nothing yet lets an edge bid into a gap it is only a visitor in. It is the remaining half and it is not built.
 
-## Notes
+## On a box: overlays
 
 ```
-note <name> "<text>" <placement> ...
+on <node> at <position>
+on <node> at <position> (gap: <named gap>)
 ```
 
-A note is text with no node, anchored to a node so it travels with it.
+A placement that holds the node **on** another's box, at one of nine named points, inset from that corner or edge, overlapping it by construction.
 
-Nothing bounds a note the way a border bounds a node, so a sentence-length note without a `wrap` is drawn as one very long line and will cross whatever is beside it. Give every note a wrap.
+```
+top-left      top-center      top-right
+left-center   center          right-center
+bottom-left   bottom-center   bottom-right
+```
 
-A note starts one step smaller than a node text, because a note annotates the diagram rather than being part of it and at the same size an aside reads as a statement. That is a default, not a ceiling: say `size:` and it does what you said. The two things a note most often needs saying about it are how big its text is and how wide it runs, and both are attributes of the note rather than something to be inferred from the fact that it is one.
+```
+node bob "Bob the builder"
+node bob_link "bob.example.com"  on bob at bottom-center
+```
+
+Those nine are the whole set, and every part of the language that has a position accepts all of them. They are words anybody can point at without measuring, which is what makes them allowed where `x: 140` is not — and a diagram written in them still moves correctly when a box moves, which is the property that refusal exists to protect.
+
+**`on` is not containment.** A dotted name is what puts something inside a box: `server.docs` is padded, widens `server`, and is a member of its constraint system. An overlay is none of those. It sits outside the contents, never resizes what it is stamped on, and overlaps it on purpose. That is why the word is `on` and not `in`.
+
+The inset is a named gap on the placement, and `tight` if nothing says. `(gap: none)` puts the node hard against the edge. It is deliberately *not* the node's own `gap:`, which says how the node stands off its neighbours — a node marked `gap: wide` so its siblings keep clear should not thereby wear its mark 110 pixels in from the corner. A midpoint or the centre ignores the inset on the axis it is centered on, because there is no edge there to be held off.
+
+**The overlap exemption is for that one pair.** Everything else in the drawing still keeps clear of the overlay in the ordinary way.
+
+One target only. A direction may name several — `right of a and b` means "clear of the box bounding both", which is a floor and decomposes into one demand per target — but an overlay names an exact point on a box, and the box that bounds two things is not a box anybody drew.
+
+**`at` and `of` are what tell the two position vocabularies apart.** A *direction* is a relation between two nodes and puts this one outside the other, clear of it by a gap: `above-left of hub`. A *position* is a point of one box and is always preceded by `at`: `on hub at top-left`. They reach the same corner with different words on purpose, because `above hub` could never become `top of hub` — "the top of the hub" is unambiguously its edge.
+
+## Notes and other bare text
+
+There is no `note` statement. A note is a node with no body:
+
+```
+node aside "Written by a nightly cron job."  shape: none  below dumps  gap: tight  wrap: 30
+```
+
+A keyword names a picture, and "note" names a use. The picture is *text with no box*, and that serves plenty of uses which are not asides — a caption on a brace, a title over a diagram. So the keyword went and the picture stayed. An older file writing `note` gets an error quoting the replacement.
+
+Nothing bounds bare text the way a border bounds a node, so a sentence-length one without a `wrap` is drawn as one very long line and will cross whatever is beside it. Give every one a wrap.
+
+`shape: none` starts one step smaller than a node's text, because an aside at the same size reads as a statement. That is a default, not a ceiling: say `size:` and it does what you said.
 
 ## Decks
 
@@ -428,9 +469,9 @@ Draws the named container with offset copies behind it, one per text, to say "th
 
 ## Attributes
 
-Every attribute, and what takes one. The kinds here are what a statement *draws* rather than which keyword declared it: a node whose `shape:` names an icon is drawn as a glyph body and takes a different set from an ordinary node.
+Every attribute, and what takes one. The kinds here are what a node's **body** is rather than which keyword declared it — every one of the three is written `node`, and each takes a different set.
 
-| attribute | node | note | glyph body | edge | says |
+| attribute | `shape:` | `icon:` | `shape: none` | edge | says |
 |---|---|---|---|---|---|
 | `style` | ✓ | ✓ | ✓ | ✓ | the named bundle to take appearance from |
 | `size` | ✓ | ✓ | ✓ | ✓ | how big the text is set |
@@ -438,13 +479,14 @@ Every attribute, and what takes one. The kinds here are what a statement *draws*
 | `overlap` | ✓ | ✓ | ✓ | | `allow`, to opt out of non-overlap |
 | `wrap` | ✓ | ✓ | ✓ | | how many characters fit on a line before the text folds |
 | `align` | ✓ | | | | `widths`, to widen every child to the widest of them |
-| `icon` | ✓ | | | | the glyph that takes the column beside the text |
-| `shape` | ✓ | | ✓ | | what the node is drawn as |
+| `badge` | ✓ | ✓ | ✓ | | the picture that takes the column beside the text |
+| `shape` | ✓ | | ✓ | | the outline the node is drawn with, `none` included |
+| `icon` | | ✓ | | | the picture the node is drawn as |
 | `from` `to` | | | | ✓ | which side the line leaves and arrives on |
 | `fill` | ✓ | | | | color — see "A color names the part it colors" |
 | `border` | ✓ | | | | color |
 | `text` | ✓ | ✓ | ✓ | ✓ | color |
-| `subtext` | ✓ | | ✓ | | color |
+| `subtext` | ✓ | ✓ | | | color |
 | `line` | | | | ✓ | color |
 
 The `diagram` statement has a vocabulary of its own — `background`, and so far nothing else — which is checked the same way. Writing `background:` on a node is an error that points at `fill:`.
@@ -455,7 +497,7 @@ The `diagram` statement has a vocabulary of its own — `background`, and so far
 "one" is a node and has from: left. `from:` belongs to an edge — a node takes style, size, gap, ...
 ```
 
-Three of the gaps in the table are worth saying out loud, because each was silent until then and none of them looks like a mistake while you are writing it. A glyph body takes no `icon:` — it is drawn *as* a picture and has no box for a second one to sit in. A note and a glyph body take no `align:`, which widens a node's children, and neither may have any. An edge takes no `gap:` or `overlap:` — those say where a node sits, and an edge is not placed, it joins two things that are.
+Some of the gaps in the table are worth saying out loud, because none of them looks like a mistake while you are writing it. A picture and a bodiless node take no `fill:` or `border:` — there is no outline for either to reach. Neither takes `align:` either, which widens a node's children, and neither may have any. `shape:` and `icon:` each appear only on the kind they make, and writing both is an error naming both. An edge takes no `gap:` or `overlap:` — those say where a node sits, and an edge is not placed, it joins two things that are.
 
 **Changed 2026-09-09.** Until then a node or edge attribute the tool did not recognize was parsed, stored and never read: `wibble: red` on a node drew nothing and said nothing. This was the last place in the language where a key could silently do nothing, and the rule everywhere else — an unknown `diagram` key, an unknown placement modifier, a color naming a part the kind has not got — has always been that a key which silently does nothing looks like the tool being broken rather than like a typo. A file that rendered with a stray word in it will now stop with an error naming it.
 
@@ -482,11 +524,11 @@ A color attribute says which part of a thing it colors, and a part exists only o
 |---|---|---|
 | `fill` | the area inside the outline | a node |
 | `border` | the outline | a node |
-| `text` | the text | a node, a note, a glyph body, an edge |
+| `text` | the text | every node, and an edge |
 | `line` | the drawn line and its arrowheads | an edge |
-| `subtext` | every text line after the first | a node, a glyph body |
+| `subtext` | every text line after the first | a node with a `shape:` or an `icon:` body |
 
-A word written on a kind that has no such part is refused by name, and the error lists the parts that kind does have — `border:` on a note is a mistake, not something to ignore, for the same reason an unknown `diagram` key is.
+A word written on a kind that has no such part is refused by name, and the error lists the parts that kind does have — `border:` on a node with no body is a mistake, not something to ignore, for the same reason an unknown `diagram` key is.
 
 An edge's text takes the line's color unless `text` says otherwise, so an edge that means something by being orange means it in its words too, and there is still a way to say the words are not orange.
 
@@ -505,15 +547,15 @@ The table under "Attributes" is checked against what you wrote *on the statement
 What is refused is a style that gives a thing **nothing at all**:
 
 ```
-style boxy  fill: #142814  icon: disk
-note n "An aside"  style: boxy
+style boxy  fill: #142814  badge: disk
+node n "An aside"  shape: none  style: boxy
 ```
 
-A note is bare text, with neither a fill nor an icon, so `boxy` dresses it in nothing whatever and the name is on the wrong sort of thing. Partial overlap is the normal case; zero overlap is never anything else. A style that named every attribute in the language would slip through this, since it contributes to everything by construction — nobody writes one by accident, and the hole is left open rather than closed with a rule that would fire on `synced`.
+A node with no body is bare text, with neither a fill nor a badge, so `boxy` dresses it in nothing whatever and the name is on the wrong sort of thing. Partial overlap is the normal case; zero overlap is never anything else. A style that named every attribute in the language would slip through this, since it contributes to everything by construction — nobody writes one by accident, and the hole is left open rather than closed with a rule that would fire on `synced`.
 
 A style's own keys are checked against the whole vocabulary, since a word that is an attribute of nothing is a misspelling wherever it sits. `style s  wibble: red` is an error; a style was the last place one could hide.
 
-**Removed: `stroke`.** It named no part — it meant the border of a node, the *text* of a note or a glyph body, and the line of an edge, whichever the thing happened to have. That is coherent one kind at a time and ambiguous read across them; it meant no ink attribute could ever be *wrong*; and it left one thing with no way to be said at all, the color of the text on an ordinary node, which is why `subtext` exists in the odd shape it does. An older file carrying it gets an error naming the word to use instead.
+**Removed: `stroke`.** It named no part — it meant the border of a node, the *text* of one drawn as a picture or with no body at all, and the line of an edge, whichever the thing happened to have. That is coherent one kind at a time and ambiguous read across them; it meant no ink attribute could ever be *wrong*; and it left one thing with no way to be said at all, the color of the text on an ordinary node, which is why `subtext` exists in the odd shape it does. An older file carrying it gets an error naming the word to use instead.
 
 A color is never written in quotes, and a quoted one is refused. There is nothing to check a color *against* — the tool keeps no list of color words, as below — so this is the one thing that can be checked, and it is the mistake that actually gets made: `subtext: "medium-fine"` reads as the text that goes underneath, and every attribute that takes a color would otherwise accept the string, find it is not a color, and draw nothing without saying so. The qualifier under a name is a second line of the text, not a `subtext` value.
 
@@ -526,7 +568,7 @@ style synced  fill: #142814  border: #486544  subtext: muted
 node pc.files "shared folder / synced"  style: synced
 ```
 
-`icon` and `shape` belong in a style for the same reason a color does: they say what kind of thing this is, and a kind wants to look alike everywhere it appears. `style artifact  fill: #460000  shape: document` puts the folded corner on every dump in the diagram, and the use site stays one word.
+`badge`, `icon` and `shape` belong in a style for the same reason a color does: they say what kind of thing this is, and a kind wants to look alike everywhere it appears. `style artifact  fill: #460000  shape: document` puts the folded corner on every dump in the diagram, and the use site stays one word.
 
 Bundling `size` into a style is how a size comes to mean something. `style aside  size: small  text: #8b8b8b` applied to several nodes says they are the same kind of remark, which a `size: small` written out at each of them does not.
 
@@ -567,7 +609,7 @@ Designed, decided, and absent from the code. Written down so the next version ha
 
 **Nothing keeps an edge clear of a node on its own.** Non-overlap applies to nodes only. A line may still cut across a node it has nothing to do with, and an edge text may still land on top of one. `between` is how you say where a line goes when that matters, and nothing checks the ones where you have not said. A check belongs on the diagnostics list, but finding a route by itself does not — see "What the language refuses".
 
-**An icon outside the built-in seven.** The set is closed, and a diagram wanting a glyph that is not in it has nowhere to go. The two shapes this could take are a declaration in the file, `icon <name> "<path data>"` beside `style`, and `icon: ./thing.svg` inlined by the tool at render time. Either keeps the output standalone, which is the constraint any answer has to meet.
+**An icon outside the built-in seven.** The set is closed, and a diagram wanting a picture that is not in it has nowhere to go. The two shapes this could take are a declaration in the file, `icon <name> "<path data>"` beside `style`, and `icon: ./thing.svg` inlined by the tool at render time. Either keeps the output standalone, which is the constraint any answer has to meet.
 
 **A named channel cannot make room for itself.** Lines through a `between` gap too narrow for them crowd together silently, in exactly the way attachments on a too-short side do. An edge with text *does* now open the gap between its own two ends — see "A text makes room for itself" — and it does so by the measure-then-constrain route that region alignments already use, which is the route this wants too. What is missing is the harder case: several edges sharing a channel between two nodes neither of them is an end of, where the room needed is the whole stack of lanes rather than one text.
 
@@ -575,13 +617,13 @@ Designed, decided, and absent from the code. Written down so the next version ha
 
 Not omissions — defects, left here so nobody rediscovers them. Most were found by rendering the benchmark diagram; the last was not, and that is the interesting one, because the benchmark could never have caught it.
 
-~~A placement written after an attribute reports the wrong mistake.~~ Fixed. Attributes still end the positional part of a statement, so `node q "Q" gap: wide level with p` is still an error, but the message now names the token that starts the stray placement and says to move it in front of the first `key: value`, rather than reporting where the parser had got to. The shape was easy to write by accident because a gap read as though it belonged to the placement it followed — which it now does, in brackets.
+~~A placement written after an attribute was an error.~~ Gone entirely in 0.3.0, along with the papercut about how it was reported. `node q "Q"  gap: wide  level with p` is now an ordinary statement. The rule existed only because a bare `gap:` written between two placements could not be told from the node-wide default; [bracketing a gap onto its placement](#a-gap-belongs-to-the-placement) removed that ambiguity and left the ordering rule with nothing to protect.
 
 **A bracketed node sits against one side of any slack.** When two opposing placements leave more room than the node needs — because something else forced the two targets further apart — the node sits against the side it was pushed from rather than centered between them. In practice the tightest arrangement usually leaves no slack, so this rarely shows. Whether it should center instead is not decided.
 
 ~~A node placed only with `left of` or `above` drifted to the canvas edge.~~ Fixed. Every constraint reads "this one is at least so far right of that one", so the solve puts each node at the smallest position its constraints allow — right for anything with something behind it, but `left of X` bounds *X* rather than the node that wrote it, leaving such a node nothing to be pushed by. It settled at the edge of the drawing while its target was carried off by the rest of the diagram. A node with nothing behind it now travels until the first of its own placements binds, which is what "as close together as your placements allow" always said.
 
-~~A note could not be put beside the rows it was about.~~ Fixed by letting a placement name several targets, which places the node against the region bounding them. The workaround before it was to wrap the targets in an invisible container so there was a single thing to name, which made the author declare a node to stand in for an idea the language could have expressed directly — and cost the container's padding on top.
+~~An annotation could not be put beside the rows it was about.~~ Fixed by letting a placement name several targets, which places the node against the region bounding them. The workaround before it was to wrap the targets in an invisible container so there was a single thing to name, which made the author declare a node to stand in for an idea the language could have expressed directly — and cost the container's padding on top.
 
 ~~One relation cannot say what a real arrangement needs.~~ Fixed by letting a node carry several placements: it takes its horizontal position from one target and its vertical from another, and two opposing placements put it between two more.
 
@@ -601,7 +643,7 @@ That one was found by testing the lexer, not by rendering — and it could not h
 
 ~~Several edges between the same two nodes with no side named were drawn on top of each other.~~ Fixed. This is the same defect as the one above, one step out: a bundle is a statement about two named sides, and an end with no side named has not made one, so nothing saw the group. `edge a -> b` three times drew one visible line carrying one text. Each such edge now takes its own line, parallel to the one it would have drawn alone and a lane away from it. Note what did *not* change: an unnamed end still attaches where the center-to-center ray crosses the border, so no single edge anywhere moved. See "Several edges with no side named at all".
 
-~~An unknown attribute was ignored in silence.~~ Fixed. `wibble: red` on a node parsed, was stored, and was never read again — nothing drew and nothing was said. So did every real attribute written on a kind with no use for it: `icon:` on a node already drawn as a glyph, `gap:` on an edge. This was the same defect the color parts had closed one level down a version earlier, and it is how that migration produced false results from the repository's own regression check, since the older build simply dropped every `border:` it had not heard of. See "Attributes".
+~~An unknown attribute was ignored in silence.~~ Fixed. `wibble: red` on a node parsed, was stored, and was never read again — nothing drew and nothing was said. So did every real attribute written on a kind with no use for it: `align:` on a node that may have no children, `gap:` on an edge. This was the same defect the color parts had closed one level down a version earlier, and it is how that migration produced false results from the repository's own regression check, since the older build simply dropped every `border:` it had not heard of. See "Attributes".
 
 ~~An edge text ignored the line break.~~ Fixed. ` / ` split a node's text and was never applied to an edge's, so the marker came out as a literal slash on an arrow and the benchmark's two-line captions had to be flattened to one. The measurer had always returned the split lines; the renderer was handing it the raw string and drawing that instead. The block now centers on the point the text already occupied, so a one-line text sits exactly where it did.
 
@@ -612,6 +654,6 @@ Open questions the benchmark raised, recorded so a later session does not redisc
 - Named gaps are the first step toward numbers, but making them minimums took most of the pressure off: they now set how much a diagram breathes, never whether something fits. Whether four names is the right number is still open.
 - Four machines each holding a `files` child with the same text means writing the same line four times. This is the strongest case for a set-level declaration, for terseness rather than for placement.
 - The 2×2 arrangement around a hub is four independent statements, so a fifth machine has no slot to reflow into. There are only eight directions.
-- ~~Two notes anchored to the same side of one node will collide.~~ Answered by putting both in an invisible container and placing the container, so they stack instead of stacking on top of each other. Writing it the colliding way is now an error rather than a bad picture, since nothing in the file orders the two. Whether the container idiom is good enough or wants dedicated syntax is open.
+- ~~Two annotations anchored to the same side of one node will collide.~~ Answered by putting both in an invisible container and placing the container, so they stack instead of stacking on top of each other. Writing it the colliding way is now an error rather than a bad picture, since nothing in the file orders the two. Whether the container idiom is good enough or wants dedicated syntax is open.
 - Nothing yet expresses one node spanning several rows of a parallel column, which the OSI reference render needs.
 - **How contents sit inside a container that is wider than they are.** A container is as wide as the wider of its title and its contents, and when the title wins, the children sit against the left of the slack — because every member goes at the smallest position its constraints allow, and nothing pushes them right. The column then reads as ragged inside a node whose own text may well be centered. `align: widths` already means "how the contents sit", so the key is the obvious home for a second, independent word; what is not settled is whether centering is one word there, whether it should be sayable per axis, and whether it is the same question as the bracketed node sitting against one side of its slack under "Known to be wrong" — which smells like it is. Automatic centering is ruled out either way: it would move every existing diagram whose container title is wider than its contents.

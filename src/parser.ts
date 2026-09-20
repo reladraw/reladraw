@@ -7,7 +7,6 @@ import type {
   DiagramStmt,
   Document,
   EdgeStmt,
-  NoteStmt,
   Passage,
   Stmt,
   StyleStmt,
@@ -15,12 +14,16 @@ import type {
 import {
   COLOR_KEYS,
   DIAGRAM_KEYS,
+  DIRECTIONS,
+  describePlacement,
+  POSITIONS,
   SIDE_AXIS,
   SIDES,
   PASSAGE_AXES,
   TEXT_KEYS,
   PLACEMENT_KEYS,
   isDirection,
+  isPosition,
   listTargets,
 } from './ast.js';
 import { SourceError } from './errors.js';
@@ -41,30 +44,24 @@ export function parse(source: string): Document {
 }
 
 function parseStatement(tokens: Token[], line: number): Stmt {
-  const split = attributesBegin(tokens);
-  const head = split === -1 ? tokens : tokens.slice(0, split);
-  const attrs = split === -1 ? {} : parseAttrs(tokens.slice(split), line);
-
-  const keyword = head[0];
+  const keyword = tokens[0];
   if (!keyword || keyword.quoted) {
     throw new SourceError('a statement must begin with a keyword', line);
   }
 
   switch (keyword.text) {
     case 'node':
-      return parseNode(head, attrs, line);
-    case 'note':
-      return parseNote(head, attrs, line);
+      return parseNode(tokens, line);
     case 'edge':
-      return parseEdge(head, attrs, line);
+      return parseEdge(tokens, line);
     case 'deck':
-      return parseDeck(head, line);
+      return parseDeck(tokens, line);
     case 'style':
-      return parseStyle(head, attrs, line);
+      return parseStyle(tokens, line);
     case 'diagram':
-      return parseDiagram(head, attrs, line);
+      return parseDiagram(tokens, line);
     default:
-      throw new SourceError(substitution(keyword.text, head), line);
+      throw new SourceError(substitution(keyword.text, tokens), line);
   }
 }
 
@@ -94,34 +91,31 @@ const SUBSTITUTIONS: Record<string, 'node' | 'edge'> = {
  * spelling.
  */
 function substitution(word: string, head: Token[]): string {
+  // A note is not a kind of statement any more, and the reason is worth the
+  // longer message: a keyword names a picture, and "note" names a use. Free
+  // text is a brace caption, a title over a diagram or an aside, so the
+  // picture it names is a node with no body — which is what to write.
+  if (word === 'note') {
+    return `reladraw has no \`note\` statement — a note is a node with no body, so try ` +
+      `\`node ${rewrite(head)} shape: none\``;
+  }
   const replacement = SUBSTITUTIONS[word];
   if (replacement === undefined) return `unknown statement "${word}"`;
   const plural = replacement === 'node' ? 'nodes' : 'edges';
   // Quote the fix in the line the author actually wrote. `node parser` and
   // `edge a -> b` both say more than a placeholder does, and the whole head is
   // what makes the second of those readable.
-  const rest = head
-    .slice(1)
-    .map((token) => (token.quoted ? quoteOf(token.text) : token.text))
-    .join(' ');
+  const rest = rewrite(head);
   const example = rest === '' ? '' : ` \u2014 try \`${replacement} ${rest}\``;
   return `reladraw calls these ${plural}, so there is no \`${word}\` statement${example}`;
 }
 
-/**
- * Where the node's own attributes start: the first `key:` outside any brackets.
- * A placement's modifiers are `key: value` too, so a plain search for the first
- * attribute key would cut the head in the middle of `left of hub (gap: wide)`.
- */
-function attributesBegin(tokens: Token[]): number {
-  let depth = 0;
-  for (const [at, token] of tokens.entries()) {
-    if (token.quoted) continue;
-    if (token.text === '(') depth += 1;
-    else if (token.text === ')') depth = Math.max(0, depth - 1);
-    else if (depth === 0 && isAttrKey(token)) return at;
-  }
-  return -1;
+/** Everything after the keyword, written back the way the author would type it. */
+function rewrite(head: Token[]): string {
+  return head
+    .slice(1)
+    .map((token) => (token.quoted ? quoteOf(token.text) : token.text))
+    .join(' ');
 }
 
 /** The value as the author would have to write it back into a text. */
@@ -129,89 +123,127 @@ function quoteOf(text: string): string {
   return `"${text.replace(/"/g, '\\"')}"`;
 }
 
-function parseAttrs(tokens: Token[], line: number): Attrs {
+/**
+ * Everything after a statement's positional head: its attributes and, on a
+ * node, its placements, in whatever order they were written.
+ *
+ * The ordering rule that used to stand here — placements first, attributes
+ * after — existed because a bare `gap:` written between two placements could
+ * not be told from the node-wide default. Gaps went into brackets on their own
+ * placement, so that ambiguity is gone and with it the reason for the rule. A
+ * `key:` token can never open a placement and a placement never opens with one,
+ * so the two interleave with nothing to resolve.
+ */
+function parseTail(
+  tokens: Token[],
+  start: number,
+  line: number,
+  subject: string,
+  other?: (tokens: Token[], at: number) => number | undefined,
+): { attrs: Attrs; placements: Placement[] } {
   const attrs: Attrs = {};
-  let i = 0;
+  const placements: Placement[] = [];
+  let i = start;
+
   while (i < tokens.length) {
-    const keyToken = tokens[i]!;
-    if (!isAttrKey(keyToken)) {
-      // Attributes end the positional part of a statement, so a placement
-      // written after one is a real mistake with an obvious remedy. Saying what
-      // the parser expected describes its own state; say what to move instead.
-      if (startsPlacement(keyToken)) {
-        throw new SourceError(
-          `"${keyToken.text}" starts a placement, and placements come before the attributes — move it in front of the first "key: value"`,
-          line,
-        );
-      }
+    const token = tokens[i]!;
+    if (isAttrKey(token)) {
+      i = readAttr(tokens, i, attrs, line);
+      continue;
+    }
+    const taken = other?.(tokens, i);
+    if (taken !== undefined) {
+      i = taken;
+      continue;
+    }
+    const read = readPlacement(tokens, i, line, subject);
+    placements.push(read.placement);
+    i = read.next;
+  }
+
+  return { attrs, placements };
+}
+
+/** Read one `key: value` pair, and refuse the words that used to be keys. */
+function readAttr(tokens: Token[], at: number, attrs: Attrs, line: number): number {
+  const keyToken = tokens[at]!;
+  const key = keyToken.text.slice(0, -1);
+  const valueToken = tokens[at + 1];
+  if (!valueToken || isAttrKey(valueToken) || valueToken.text === ')') {
+    throw new SourceError(`attribute "${key}" has no value`, line);
+  }
+  if (key === 'stroke') {
+    // Removed 2026-09-09. It meant a different part on every kind — the
+    // border of a box, the text of a note or a glyph body, the line of a
+    // edge — so it could never be wrong, and a node's text had no word at all.
+    // Refused by name rather than ignored: an older file must be told what
+    // to write, not silently drawn without its colors.
+    throw new SourceError(
+      '`stroke:` has been replaced by the part it colors — `border:` on a node, `text:` on a node with no body or an icon body, `line:` on an edge. A style shared between nodes and edges writes both, as in `border: #d2904e  line: #d2904e`',
+      line,
+    );
+  }
+  if (key === 'width') {
+    // Renamed 2026-09-09. It folds a text every n *characters* and never
+    // said how wide anything is, so `width: 200` meaning units was accepted,
+    // wrapped at 200 characters, and did nothing visible — the silent drop
+    // this vocabulary is otherwise free of. Refused by name for the reason
+    // `stroke:` is: an older file must be told, not quietly drawn unwrapped.
+    throw new SourceError(
+      '`width:` is now `wrap:`, because it folds the text every n characters and says nothing about how wide anything is',
+      line,
+    );
+  }
+  if (valueToken.quoted && (COLOR_KEYS as readonly string[]).includes(key)) {
+    // A quoted value is the author saying "this is text", and every one of
+    // these keys takes a color. Without this the string is passed through as
+    // a color, turns out not to be one, and nothing is drawn and nothing is
+    // said. Name the likely intent rather than only the rule: the qualifier
+    // under a name is a second text line, not a `subtext` value.
+    if (valueToken.text.startsWith('#')) {
+      // A hex color that was merely quoted. The author wrote a color and the
+      // remedy is punctuation, so say that rather than that it is not one.
       throw new SourceError(
-        `expected an attribute like "key: value", found "${keyToken.text}"`,
+        `a color is written without quotes — "${key}: ${valueToken.text}"`,
         line,
       );
     }
-    const key = keyToken.text.slice(0, -1);
-    const valueToken = tokens[i + 1];
-    if (!valueToken) throw new SourceError(`attribute "${key}" has no value`, line);
-    if (isAttrKey(valueToken)) {
-      throw new SourceError(`attribute "${key}" has no value`, line);
-    }
-    if (key === 'stroke') {
-      // Removed 2026-09-09. It meant a different part on every kind — the
-      // border of a box, the text of a note or a glyph body, the line of a
-      // edge — so it could never be wrong, and a node's text had no word at all.
-      // Refused by name rather than ignored: an older file must be told what
-      // to write, not silently drawn without its colors.
+    // `text:` is the color of a text, not the text itself, and that is a
+    // mistake worth naming rather than only refusing — the word invites it.
+    if (key === 'text') {
       throw new SourceError(
-        '`stroke:` has been replaced by the part it colors — `border:` on a node, `text:` on a note or a glyph body, `line:` on an edge. A style shared between nodes and edges writes both, as in `border: #d2904e  line: #d2904e`',
+        `\`text:\` colors a node's text rather than setting it — write the words in quotes after the name, as in \`node name ${quoteOf(valueToken.text)}\``,
         line,
       );
     }
-    if (key === 'width') {
-      // Renamed 2026-09-09. It folds a text every n *characters* and never
-      // said how wide anything is, so `width: 200` meaning units was accepted,
-      // wrapped at 200 characters, and did nothing visible — the silent drop
-      // this vocabulary is otherwise free of. Refused by name for the reason
-      // `stroke:` is: an older file must be told, not quietly drawn unwrapped.
+    if (key === 'subtext') {
       throw new SourceError(
-        '`width:` is now `wrap:`, because it folds the text every n characters and says nothing about how wide anything is',
+        `\`subtext:\` colors a node's later text lines rather than setting them — write them into the text, as in \`"Name / ${valueToken.text}"\`, and \`subtext: muted\` to make them quieter`,
         line,
       );
     }
-    if (valueToken.quoted && (COLOR_KEYS as readonly string[]).includes(key)) {
-      // A quoted value is the author saying "this is text", and every one of
-      // these keys takes a color. Without this the string is passed through as
-      // a color, turns out not to be one, and nothing is drawn and nothing is
-      // said. Name the likely intent rather than only the rule: the qualifier
-      // under a name is a second text line, not a `subtext` value.
-      if (valueToken.text.startsWith('#')) {
-        // A hex color that was merely quoted. The author wrote a color and the
-        // remedy is punctuation, so say that rather than that it is not one.
-        throw new SourceError(
-          `a color is written without quotes — "${key}: ${valueToken.text}"`,
-          line,
-        );
-      }
-      // `text:` is the color of a text, not the text itself, and that is a
-      // mistake worth naming rather than only refusing — the word invites it.
-      if (key === 'text') {
-        throw new SourceError(
-          `\`text:\` colors a node's text rather than setting it — write the words in quotes after the name, as in \`node name ${quoteOf(valueToken.text)}\``,
-          line,
-        );
-      }
-      if (key === 'subtext') {
-        throw new SourceError(
-          `\`subtext:\` colors a node's later text lines rather than setting them — write them into the text, as in \`"Name / ${valueToken.text}"\`, and \`subtext: muted\` to make them quieter`,
-          line,
-        );
-      }
+    throw new SourceError(
+      `"${key}" takes a color and a quoted value is text — drop the quotes if ${valueToken.text} is a color`,
+      line,
+    );
+  }
+  attrs[key] = valueToken.text;
+  return at + 2;
+}
+
+/** Attributes only, for the statements that take no placements. */
+function attrsOnly(tokens: Token[], start: number, line: number, subject: string): Attrs {
+  const attrs: Attrs = {};
+  let i = start;
+  while (i < tokens.length) {
+    const token = tokens[i]!;
+    if (!isAttrKey(token)) {
       throw new SourceError(
-        `"${key}" takes a color and a quoted value is text — drop the quotes if ${valueToken.text} is a color`,
+        `${subject}: expected an attribute like "key: value", found "${token.text}"`,
         line,
       );
     }
-    attrs[key] = valueToken.text;
-    i += 2;
+    i = readAttr(tokens, i, attrs, line);
   }
   return attrs;
 }
@@ -235,7 +267,7 @@ function parseAttrs(tokens: Token[], line: number): Attrs {
  * the price, and it is honest: a file that states no text is saying the name
  * is the text.
  */
-function parseNode(head: Token[], attrs: Attrs, line: number): NodeStmt {
+function parseNode(head: Token[], line: number): NodeStmt {
   const name = requireName(head[1], 'node', line);
   const written = head[2];
   const textToken = written?.quoted ? written : undefined;
@@ -257,27 +289,17 @@ function parseNode(head: Token[], attrs: Attrs, line: number): NodeStmt {
     example: 'at: bottom',
     line,
   });
-  const placements = parsePlacements(head.slice(bracket.next), line, subject);
-  return { kind: 'node', name, text, textAttrs: bracket.values, placements, attrs, line };
-}
-
-/** `note <name> "<text>" [<placement> ...]` */
-function parseNote(head: Token[], attrs: Attrs, line: number): NoteStmt {
-  const name = requireName(head[1], 'note', line);
-  const textToken = head[2];
-  if (!textToken || !textToken.quoted) {
-    throw new SourceError(`note "${name}" needs quoted text`, line);
-  }
-  // A note is bare text with no box, so it has no band for a text to sit in
-  // and nowhere for `at:` to put one. Refused by name rather than ignored.
-  if (follows(head, 3, '(')) {
-    throw new SourceError(
-      `note "${name}" carries text modifiers. A note is bare text, so there is no box for its text to sit anywhere in`,
-      line,
-    );
-  }
-  const placements = parsePlacements(head.slice(3), line, `note "${name}"`);
-  return { kind: 'note', name, text: textToken.text, placements, attrs, line };
+  const tail = parseTail(head, bracket.next, line, subject);
+  return {
+    kind: 'node',
+    name,
+    text,
+    statedText: textToken !== undefined,
+    textAttrs: bracket.values,
+    placements: tail.placements,
+    attrs: tail.attrs,
+    line,
+  };
 }
 
 /**
@@ -290,7 +312,7 @@ function parseNote(head: Token[], attrs: Attrs, line: number): NoteStmt {
  */
 const ARROWS = ['->', '<->', '<-'];
 
-function parseEdge(head: Token[], attrs: Attrs, line: number): EdgeStmt {
+function parseEdge(head: Token[], line: number): EdgeStmt {
   const left = requireName(head[1], 'edge', line);
   const arrow = head[2];
   if (!arrow || arrow.quoted || !ARROWS.includes(arrow.text)) {
@@ -306,35 +328,44 @@ function parseEdge(head: Token[], attrs: Attrs, line: number): EdgeStmt {
   const textToken = head[at]?.quoted ? head[at] : undefined;
   if (textToken) at += 1;
 
-  // A gap has two sides, so `between` takes exactly two targets rather than the
-  // open list a placement takes. `right of a and b` means "clear of both", and
-  // there is no matching reading of "pass between three things".
+  const subject = `edge ${left} ${arrow.text} ${rightToken.text}`;
   let between: Passage | undefined;
-  if (at < head.length) {
-    const word = head[at]!;
-    if (word.quoted || word.text !== 'between') {
-      throw new SourceError(`unexpected "${word.text}" after the edge`, line);
-    }
-    const read = readTargets(head, at + 1, 'edge', 'between', line);
+
+  // An edge is not placed, so its tail holds attributes and the one clause that
+  // is neither: `between`, which says which gap the line travels down.
+  const tail = parseTail(head, at, line, subject, (tokens, index) => {
+    const word = tokens[index]!;
+    if (word.quoted || word.text !== 'between') return undefined;
+    if (between) throw new SourceError(`${subject}: "between" is written twice`, line);
+
+    // A gap has two sides, so `between` takes exactly two targets rather than
+    // the open list a placement takes. `right of a and b` means "clear of
+    // both", and there is no matching reading of "pass between three things".
+    const read = readTargets(tokens, index + 1, subject, 'between', line);
     if (read.targets.length !== 2) {
       throw new SourceError(
         `"between" takes two nodes, one for each side of the gap — found ${read.targets.length}`,
         line,
       );
     }
-    at = read.next;
+    let next = read.next;
 
     // Two targets sitting diagonally have two gaps between them, and this is
     // the only way to say which. It is optional because most pairs have one.
-    const trailing = head[at];
-    const axis =
-      trailing && !trailing.quoted ? PASSAGE_AXES[trailing.text] : undefined;
-    if (axis !== undefined) at += 1;
+    const trailing = tokens[next];
+    const axis = trailing && !trailing.quoted ? PASSAGE_AXES[trailing.text] : undefined;
+    if (axis !== undefined) next += 1;
 
     between = { targets: read.targets, ...(axis !== undefined ? { axis } : {}) };
-  }
-  if (at < head.length) {
-    throw new SourceError(`unexpected "${head[at]!.text}" after the edge`, line);
+    return next;
+  });
+
+  if (tail.placements.length > 0) {
+    throw new SourceError(
+      `${subject}: "${describePlacement(tail.placements[0]!)}" places a node, and an edge is not ` +
+        'placed — it joins two things that are',
+      line,
+    );
   }
 
   return {
@@ -344,7 +375,7 @@ function parseEdge(head: Token[], attrs: Attrs, line: number): EdgeStmt {
     both: arrow.text === '<->',
     ...(textToken ? { text: textToken.text } : {}),
     ...(between ? { between } : {}),
-    attrs,
+    attrs: tail.attrs,
     line,
   };
 }
@@ -355,6 +386,15 @@ function parseDeck(head: Token[], line: number): DeckStmt {
   const texts: string[] = [];
   for (const token of head.slice(2)) {
     if (!token.quoted) {
+      // Until 0.3.0 the head/attributes split cut these off and threw them
+      // away, so `deck d "one" fill: red` drew an uncolored deck in silence.
+      if (isAttrKey(token)) {
+        throw new SourceError(
+          `deck "${name}" has ${token.text} — a deck says how many copies a node has and what ` +
+            `each one reads, so write attributes on \`node ${name}\` itself`,
+          line,
+        );
+      }
       throw new SourceError(`deck "${name}" takes quoted texts only`, line);
     }
     texts.push(token.text);
@@ -366,11 +406,9 @@ function parseDeck(head: Token[], line: number): DeckStmt {
 }
 
 /** `style <name> <attributes>` */
-function parseStyle(head: Token[], attrs: Attrs, line: number): StyleStmt {
+function parseStyle(head: Token[], line: number): StyleStmt {
   const name = requireName(head[1], 'style', line);
-  if (head.length > 2) {
-    throw new SourceError(`unexpected "${head[2]!.text}" after style name`, line);
-  }
+  const attrs = attrsOnly(head, 2, line, `style "${name}"`);
   if (Object.keys(attrs).length === 0) {
     throw new SourceError(`style "${name}" sets nothing`, line);
   }
@@ -382,10 +420,8 @@ function parseStyle(head: Token[], attrs: Attrs, line: number): StyleStmt {
  * keys are refused rather than ignored: a misspelt diagram-wide setting that
  * silently does nothing is the kind of thing an author stares at for a while.
  */
-function parseDiagram(head: Token[], attrs: Attrs, line: number): DiagramStmt {
-  if (head.length > 1) {
-    throw new SourceError(`unexpected "${head[1]!.text}" after diagram`, line);
-  }
+function parseDiagram(head: Token[], line: number): DiagramStmt {
+  const attrs = attrsOnly(head, 1, line, 'diagram');
   if (Object.keys(attrs).length === 0) {
     throw new SourceError('diagram sets nothing', line);
   }
@@ -408,78 +444,147 @@ function requireName(token: Token | undefined, keyword: string, line: number): s
 }
 
 /**
- * Read however many placements the author wrote. Each is a direction and a target
- * (`right of docker`, `below deploy`) or an alignment (`level with docker`).
- * None at all is fine — that node is the anchor.
+ * Read one placement. A direction and a target (`right of docker`, `below
+ * deploy`), an alignment (`level with docker`), or an overlay (`on hub at
+ * top-right`).
  *
  * `of` is optional after every direction. "left of X" and "below X" are both
  * good English and "below of X" is not, so the word is accepted wherever it
- * helps and never demanded. Shorthands added later — chaining targets with
- * `and`, say — extend this loop without disturbing what it already reads.
+ * helps and never demanded. Shorthands added later extend this without
+ * disturbing what it already reads.
  */
-function parsePlacements(tokens: Token[], line: number, subject: string): Placement[] {
-  const placements: Placement[] = [];
-  let i = 0;
+function readPlacement(
+  tokens: Token[],
+  at: number,
+  line: number,
+  subject: string,
+): { placement: Placement; next: number } {
+  const word = tokens[at]!;
+  if (word.quoted) {
+    throw new SourceError(`${subject}: unexpected text "${word.text}"`, line);
+  }
 
-  while (i < tokens.length) {
-    const word = tokens[i]!;
-    if (word.quoted) {
-      throw new SourceError(`${subject}: unexpected text "${word.text}"`, line);
+  if (word.text === 'on') return readOn(tokens, at, line, subject);
+
+  // `top level with media` names a side rather than the center line. `left`
+  // and `right` are sides as well as directions, so it is the word after them
+  // that says which was meant — "left of drive" against "left level with drive".
+  const side = isSideWord(word.text) && follows(tokens, at + 1, 'level') ? word.text : undefined;
+  const head = side ? tokens[at + 1]! : word;
+
+  if (head.text === 'level' && !head.quoted) {
+    const from = side ? at + 1 : at;
+    const written = side ? `${side} level with` : 'level with';
+    if (!follows(tokens, from + 1, 'with')) {
+      throw new SourceError(`${subject}: an alignment reads "${written} <node>"`, line);
     }
-
-    // `top level with media` names a side rather than the center line. `left`
-    // and `right` are sides as well as directions, so it is the word after them
-    // that says which was meant — "left of drive" against "left level with drive".
-    const side = isSideWord(word.text) && follows(tokens, i + 1, 'level') ? word.text : undefined;
-    const head = side ? tokens[i + 1]! : word;
-
-    if (head.text === 'level' && !head.quoted) {
-      const at = side ? i + 1 : i;
-      const written = side ? `${side} level with` : 'level with';
-      if (!follows(tokens, at + 1, 'with')) {
-        throw new SourceError(`${subject}: an alignment reads "${written} <node>"`, line);
-      }
-      const read = readTargets(tokens, at + 2, subject, written, line);
-      const modifiers = readModifiers(tokens, read.next, subject, written, line);
-      // An alignment shares a line outright, so there is no distance in it for
-      // a gap to set. Refusing rather than dropping it, for the reason unknown
-      // modifier names are refused: a word that quietly does nothing reads as a
-      // fault in the tool.
-      if (modifiers.gap !== undefined) {
-        throw new SourceError(
-          `${subject}: "${written} ${listTargets(read.targets)}" shares a line rather than leaving a space, so it takes no gap`,
-          line,
-        );
-      }
-      placements.push({
+    const read = readTargets(tokens, from + 2, subject, written, line);
+    const modifiers = readModifiers(tokens, read.next, subject, written, line);
+    // An alignment shares a line outright, so there is no distance in it for
+    // a gap to set. Refusing rather than dropping it, for the reason unknown
+    // modifier names are refused: a word that quietly does nothing reads as a
+    // fault in the tool.
+    if (modifiers.gap !== undefined) {
+      throw new SourceError(
+        `${subject}: "${written} ${listTargets(read.targets)}" shares a line rather than leaving a space, so it takes no gap`,
+        line,
+      );
+    }
+    return {
+      placement: {
         kind: 'align',
         axis: SIDE_AXIS[side ?? 'center'],
         side: side ?? 'center',
         targets: read.targets,
         line,
-      });
-      i = modifiers.next;
-      continue;
-    }
+      },
+      next: modifiers.next,
+    };
+  }
 
-    if (!isDirection(word.text)) {
-      throw new SourceError(`${subject}: "${word.text}" is not a direction`, line);
+  if (!isDirection(word.text)) {
+    // A position word where a direction belongs is the one confusable pair, and
+    // it is worth naming rather than only refusing: the two vocabularies reach
+    // the same corner with different words and only one of them takes `of`.
+    if (isPosition(word.text)) {
+      throw new SourceError(
+        `${subject}: "${word.text}" is a position on a box rather than a direction from one — ` +
+          `write \`on <node> at ${word.text}\` to put this on that box, or a direction like ` +
+          `${DIRECTIONS.join(', ')} to put it outside`,
+        line,
+      );
     }
-    let next = i + 1;
-    if (follows(tokens, next, 'of')) next += 1;
-    const read = readTargets(tokens, next, subject, word.text, line);
-    const modifiers = readModifiers(tokens, read.next, subject, word.text, line);
-    placements.push({
+    throw new SourceError(`${subject}: "${word.text}" is not a direction`, line);
+  }
+  let next = at + 1;
+  if (follows(tokens, next, 'of')) next += 1;
+  const read = readTargets(tokens, next, subject, word.text, line);
+  const modifiers = readModifiers(tokens, read.next, subject, word.text, line);
+  return {
+    placement: {
       kind: 'offset',
       direction: word.text,
       targets: read.targets,
       ...(modifiers.gap !== undefined ? { gap: modifiers.gap } : {}),
       line,
-    });
-    i = modifiers.next;
-  }
+    },
+    next: modifiers.next,
+  };
+}
 
-  return placements;
+/**
+ * `on hub at top-right [(gap: none)]` — the overlay placement.
+ *
+ * One target, and the `and` list the other placements take is refused by name.
+ * A direction against several targets means "clear of the box that bounds them
+ * all", which is a floor and decomposes into one constraint per target; an
+ * overlay names an exact point on a box, and the box bounding two things is not
+ * a box anybody drew.
+ */
+function readOn(
+  tokens: Token[],
+  at: number,
+  line: number,
+  subject: string,
+): { placement: Placement; next: number } {
+  const read = readTargets(tokens, at + 1, subject, 'on', line);
+  if (read.targets.length > 1) {
+    throw new SourceError(
+      `${subject}: "on ${listTargets(read.targets)}" names ${read.targets.length} nodes, and an ` +
+        'overlay sits on one box — name the one it is stamped on',
+      line,
+    );
+  }
+  if (!follows(tokens, read.next, 'at')) {
+    throw new SourceError(
+      `${subject}: an overlay reads "on ${read.targets[0]} at <position>", where a position is ` +
+        `one of ${POSITIONS.join(', ')}`,
+      line,
+    );
+  }
+  const wordToken = tokens[read.next + 1];
+  const word = wordToken && !wordToken.quoted ? wordToken.text : undefined;
+  if (word === undefined || !isPosition(word)) {
+    throw new SourceError(
+      `${subject}: ` +
+        (word === undefined
+          ? '"at" names no position'
+          : `"at ${word}" is not a position`) +
+        ` — a position is one of ${POSITIONS.join(', ')}`,
+      line,
+    );
+  }
+  const modifiers = readModifiers(tokens, read.next + 2, subject, `on ${read.targets[0]} at ${word}`, line);
+  return {
+    placement: {
+      kind: 'on',
+      position: word,
+      targets: read.targets,
+      ...(modifiers.gap !== undefined ? { gap: modifiers.gap } : {}),
+      line,
+    },
+    next: modifiers.next,
+  };
 }
 
 /**
@@ -567,12 +672,17 @@ function follows(tokens: Token[], at: number, word: string): boolean {
   return token !== undefined && !token.quoted && token.text === word;
 }
 
-/** Could this token open a placement? `top` and `left` open the side alignments. */
+/**
+ * Could this token open a placement? `top` and `left` open the side alignments,
+ * `on` opens an overlay. Used only to tell a forgotten pair of quotes after a
+ * node's name from a placement, so a word that is nearly one counts.
+ */
 function startsPlacement(token: Token): boolean {
   if (token.quoted) return false;
   return (
     isDirection(token.text) ||
     token.text === 'level' ||
+    token.text === 'on' ||
     (SIDES as readonly string[]).includes(token.text)
   );
 }

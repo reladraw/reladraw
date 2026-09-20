@@ -2,23 +2,23 @@
 
 diagram  background: #111111
 
-// A style can carry an icon, so every store in a diagram looks alike without
+// A style can carry a badge, so every store in a diagram looks alike without
 // anyone typing the word twice.
-style store  fill: #142814  border: #486544  icon: database
+style store  fill: #142814  border: #486544  badge: database
 
 node row1 ""  fill: none  border: none
-node row1.disk     "Spinning disk"     icon: disk
-node row1.desktop  "Workstation"       right of row1.disk     gap: tight  icon: desktop
-node row1.laptop   "Portable"          right of row1.desktop  gap: tight  icon: laptop
+node row1.disk     "Spinning disk"     badge: disk
+node row1.desktop  "Workstation"       right of row1.disk     gap: tight  badge: desktop
+node row1.laptop   "Portable"          right of row1.desktop  gap: tight  badge: laptop
 
 node row2 ""  below row1  gap: tight  fill: none  border: none
-node row2.package  "Archive"           icon: package
-node row2.cubes    "Service instances" right of row2.package  gap: tight  icon: cubes
+node row2.package  "Archive"           badge: package
+node row2.cubes    "Service instances" right of row2.package  gap: tight  badge: cubes
 node row2.db       "Records"           right of row2.cubes    gap: tight  style: store
 
-// No text, so the node is just the icon and its padding.
-node bare ""  below row2  gap: tight  icon: disk
+// No text, so the node is just the badge and its padding.
+node bare ""  below row2  gap: tight  badge: disk
 
-// An icon is two lines tall, so it shrinks and grows with the text beside it.
-node small "Small text / and a small icon"  right of bare  gap: tight  size: small  icon: laptop
-node large "Large text / and a large icon"  right of small gap: tight  size: large  icon: laptop
+// A badge is two lines tall, so it shrinks and grows with the text beside it.
+node small "Small text / and a small icon"  right of bare  gap: tight  size: small  badge: laptop
+node large "Large text / and a large icon"  right of small gap: tight  size: large  badge: laptop

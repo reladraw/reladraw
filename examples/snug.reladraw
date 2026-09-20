@@ -4,4 +4,4 @@ node anchor "anchor"
 node far    "far"   right of anchor
 node near   "near"  right of far
 
-note trailing "one tight gap from near"  left of near  below anchor  gap: tight  overlap: allow
+node trailing "one tight gap from near"  left of near  below anchor  gap: tight  overlap: allow  shape: none

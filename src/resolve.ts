@@ -1,4 +1,14 @@
-import type { Attrs, Axis, Side, Kind, OffsetPlacement, Placement, Document, Stmt } from './ast.js';
+import type {
+  Attrs,
+  Axis,
+  Side,
+  Kind,
+  OffsetPlacement,
+  OnPlacement,
+  Placement,
+  Document,
+  Stmt,
+} from './ast.js';
 import {
   ALL_ATTR_KEYS,
   ATTR_KEYS,
@@ -25,7 +35,7 @@ import {
 } from './constants.js';
 import { fix, reachability, tightest, type Constraint, type Contradiction } from './constrain.js';
 import { SourceError } from './errors.js';
-import { iconFor, shapeFor } from './icons.js';
+import { type Body, badgeFor, bodyFor } from './icons.js';
 import { monospaceMeasurer, splitLines, type Measurer } from './measure.js';
 import type { Layout, LayoutEdge, LayoutNode, LayoutPassage } from './model.js';
 
@@ -113,17 +123,29 @@ function buildTree(statements: Stmt[], styles: Map<string, Attrs>) {
   const roots: LayoutNode[] = [];
 
   for (const stmt of statements) {
-    if (stmt.kind !== 'node' && stmt.kind !== 'note') continue;
+    if (stmt.kind !== 'node') continue;
 
     if (byName.has(stmt.name)) {
       throw new SourceError(`"${stmt.name}" is declared twice`, stmt.line);
     }
 
+    const appearance = appearanceOf(stmt.attrs, styles, stmt.line);
+    const body = bodyFor(stmt.attrs, appearance, stmt.line);
+    const kind = KIND_OF_BODY[body.kind];
+    // A node with no text of its own is labelled with its name, because the
+    // first lines anybody types are `node a` and `node b right of a` and they
+    // mean the boxes to read "a" and "b". A node drawn as a *picture* is the
+    // exception: a picture usually is the statement, and the default would
+    // caption a row of cubes a, b, db1, c, db2. `""` then says what writing
+    // nothing says, which is only true here — on a box it carries information.
+    const text = body.kind === 'icon' && !stmt.statedText ? '' : stmt.text;
+
     const node: LayoutNode = {
       name: stmt.name,
-      kind: stmt.kind,
-      text: stmt.text,
-      lines: linesFor(stmt.text, stmt.attrs, stmt.line),
+      kind,
+      body,
+      text,
+      lines: linesFor(text, stmt.attrs, stmt.line),
       children: [],
       x: 0,
       y: 0,
@@ -132,14 +154,13 @@ function buildTree(statements: Stmt[], styles: Map<string, Attrs>) {
       inset: 0,
       deckTexts: [],
       headerHeight: 0,
-      textAttrs: stmt.kind === 'node' ? stmt.textAttrs : {},
+      textAttrs: stmt.textAttrs,
       attrs: stmt.attrs,
-      appearance: appearanceOf(stmt.attrs, styles, stmt.line),
+      appearance,
       placements: stmt.placements,
       line: stmt.line,
     };
 
-    const kind = kindOf(node);
     checkAttrs(kind, node.name, stmt.attrs, stmt.line);
     checkStyleUse(kind, node.name, stmt.attrs, styles, stmt.line);
 
@@ -180,14 +201,26 @@ function capital(phrase: string): string {
   return phrase.charAt(0).toUpperCase() + phrase.slice(1);
 }
 
+/** Which kind a body makes the node. */
+const KIND_OF_BODY: Record<Body['kind'], Exclude<Kind, 'edge'>> = {
+  shape: 'shape',
+  icon: 'icon',
+  none: 'none',
+};
+
 /** How each kind reads in an error, and what it is actually made of. */
-const KIND_WORD = { node: 'node', note: 'note', glyph: 'glyph body', edge: 'edge' } as const;
-const KIND_PARTS = {
-  node: 'a fill, a border and text',
-  note: 'bare text and nothing else',
-  glyph: 'a picture and the text under it',
+const KIND_WORD: Record<Kind, string> = {
+  shape: 'node',
+  icon: 'node drawn as a picture',
+  none: 'node with no body',
+  edge: 'edge',
+};
+const KIND_PARTS: Record<Kind, string> = {
+  shape: 'a fill, a border and text',
+  icon: 'a picture and the text under it',
+  none: 'text and nothing else',
   edge: 'a line and its text',
-} as const;
+};
 
 /**
  * An attribute is refused on a kind that has no use for it — the same rule as
@@ -315,12 +348,6 @@ function listKinds(kinds: Kind[]): string {
   return `${words.slice(0, -1).join(', ')} or ${words[words.length - 1]}`;
 }
 
-/** Which of the four kinds a node is, which its `shape:` may decide. */
-function kindOf(node: { kind: string; appearance: Attrs; line: number }): Kind {
-  if (node.kind === 'note') return 'note';
-  return shapeFor(node.appearance, node.line).body !== undefined ? 'glyph' : 'node';
-}
-
 function appearanceOf(attrs: Attrs, styles: Map<string, Attrs>, line: number): Attrs {
   const named = attrs['style'];
   if (named === undefined) return { ...attrs };
@@ -407,23 +434,29 @@ function sizeNode(
   const textWidth = hasText ? widestLine(node.lines, measurer, textSize) : 0;
   const textHeight = hasText ? node.lines.length * lineHeight : 0;
 
-  if (node.kind === 'note') {
-    // A note is bare text, so it gets no padding and takes no children.
+  const glyphSide = ICON_LINES * lineHeight;
+
+  if (node.body.kind === 'none') {
+    // No body, so the node is its text: no padding, no outline, no children.
+    if (node.children.length > 0) {
+      throw new SourceError(
+        `"${node.name}" has shape: none and has children. With no body there is no box for ` +
+          'anything to go inside',
+        node.line,
+      );
+    }
     node.width = textWidth;
     node.height = textHeight;
     return;
   }
 
-  const shape = shapeFor(node.appearance, node.line);
-  const glyphSide = ICON_LINES * lineHeight;
-
-  if (shape.body !== undefined) {
-    // Drawn as a glyph, so there is no box to pad and the node's size is the
+  if (node.body.kind === 'icon') {
+    // Drawn as a picture, so there is no box to pad and the node's size is the
     // picture's. A text goes under it rather than inside it, which is the
     // arrangement that makes a row of these read as captioned things.
     if (node.children.length > 0) {
       throw new SourceError(
-        `"${node.name}" is drawn as a glyph and has children. A glyph is not a box, so nothing can go inside it`,
+        `"${node.name}" is drawn as a picture and has children. A picture is not a box, so nothing can go inside it`,
         node.line,
       );
     }
@@ -432,11 +465,11 @@ function sizeNode(
     return;
   }
 
-  // An icon takes a column of its own on the right of whatever the box holds,
+  // A badge takes a column of its own on the right of whatever the box holds,
   // so the text never runs underneath it and the box grows to fit both. That
-  // is why an icon is not a renderer-only concern: it is content taking room,
+  // is why a badge is not a renderer-only concern: it is content taking room,
   // like a text, and not appearance like `fill:`.
-  const icon = iconFor(node.appearance, node.line);
+  const icon = badgeFor(node.appearance, node.line);
   const iconSide = icon === undefined ? 0 : glyphSide;
   const iconRoom = icon === undefined ? 0 : iconSide + (hasText ? ICON_GAP : 0);
 
@@ -805,6 +838,8 @@ function positionGroup(
   const constraints: Record<Axis, Constraint[]> = { x: [...extra.x], y: [...extra.y] };
   const indexOf = new Map(members.map((member, index) => [member, index]));
   const pending: Pending[] = [];
+  /** Pairs an overlay put on top of each other, which is the point of it. */
+  const overlaid: Array<[number, number]> = [];
 
   for (const node of members) {
     // Checked here as well as in `gapFor`, so a misspelt node-wide gap is caught
@@ -820,6 +855,10 @@ function positionGroup(
     for (const { placement } of located) {
       if (placement.kind === 'align') {
         spokenFor[placement.axis] = true;
+      } else if (placement.kind === 'on') {
+        // An overlay names a point of a box, so it settles both axes at once.
+        spokenFor.x = true;
+        spokenFor.y = true;
       } else {
         if (/left|right/.test(placement.direction)) spokenFor.x = true;
         if (/above|below/.test(placement.direction)) spokenFor.y = true;
@@ -842,6 +881,22 @@ function positionGroup(
     for (const { placement, targets } of located) {
       if (placement.kind === 'align') {
         alignOn(placement.axis, placement.side, targets, placement);
+        continue;
+      }
+      if (placement.kind === 'on') {
+        // An exact position on one box, on both axes. The target's size is
+        // already settled, so every one of the nine is a fixed distance from
+        // it — no maximum to take and nothing to measure later, which is what
+        // keeps the overlay out of `settle` even though it is not a floor.
+        const target = targets[0]!;
+        const inset = insetFor(node, placement);
+        overlaid.push([me, target.index]);
+        for (const axis of AXES) {
+          const span = { start: target.offset[axis], size: axis === 'x' ? target.width : target.height };
+          constraints[axis].push(
+            ...fix(target.index, me, overlaidAt(placement.position, axis, span, size[axis], inset), placement),
+          );
+        }
         continue;
       }
       // One constraint per target, so the node clears the furthest of them.
@@ -931,7 +986,7 @@ function positionGroup(
   room(corridors, constraints, solved, solveAll);
   settle(pending, members, constraints, solved, solveAll);
   snug(members, constraints, solved, solveAll);
-  separate(members, constraints, solved, solveAll);
+  separate(members, constraints, solved, solveAll, overlaid);
   confirm(pending, solved);
 
   return new Map(
@@ -962,6 +1017,46 @@ function spanOf(
     end = Math.max(end, at + (axis === 'x' ? target.width : target.height));
   }
   return { start, size: end - start };
+}
+
+/**
+ * How far in from the named corner or edge an overlay sits. Its own bracketed
+ * gap, or `tight`.
+ *
+ * Deliberately not `gapFor`, which maxes the node's `gap:` against the target's.
+ * Those say how a node stands off its *neighbours*, and an overlay has no
+ * neighbour — it is on the box. A node marked `gap: wide` so its siblings keep
+ * clear should not thereby wear its badge 110 pixels in from the corner.
+ */
+function insetFor(node: LayoutNode, placement: OnPlacement): number {
+  return namedGap(node, placement.gap ?? 'tight', placement.line);
+}
+
+/**
+ * Where a node of this size sits so it is at the named position of the span.
+ *
+ * Each position is read as two independent halves, one per axis, which is why
+ * nine words need no table of nine entries: `top-right` is "right" across and
+ * "top" down, `top` is "top" down and says nothing across, `center` says
+ * nothing either way. A half that says nothing centres.
+ *
+ * An end is inset from that edge; a centre ignores the inset, because there is
+ * no edge for it to be held off.
+ */
+function overlaidAt(
+  position: string,
+  axis: Axis,
+  span: { start: number; size: number },
+  own: number,
+  inset: number,
+): number {
+  const [near, far] = axis === 'x' ? ['left', 'right'] : ['top', 'bottom'];
+  const parts = position.split('-');
+  if (parts.includes(near!)) return span.start + inset;
+  if (parts.includes(far!)) return span.start + span.size - own - inset;
+  // Neither half named this axis, so the node is centred on it — which is what
+  // `center` says twice and what `bottom-center` says once.
+  return span.start + (span.size - own) / 2;
 }
 
 /** Where a node of this size sits so that the named side of it meets the span's. */
@@ -1204,9 +1299,15 @@ function separate(
   constraints: Record<Axis, Constraint[]>,
   solved: Record<Axis, number[]>,
   solveAll: () => void,
+  overlaid: Array<[number, number]> = [],
 ): void {
   const eligible = members.map(allowsOverlap).map((allowed) => !allowed);
   if (eligible.filter(Boolean).length < 2) return;
+  // An overlay and the box it is on overlap by construction, so that one pair
+  // is exempt while both remain ordinary boxes to everything else. This is a
+  // pair exemption rather than `overlap: allow` on the node for exactly that
+  // reason: a badge sitting on its box says nothing about the box next door.
+  const stamped = new Set(overlaid.map(([a, b]) => pairKey(a, b)));
 
   // Adding only, so the number of separations is bounded; the cap is a
   // backstop against a bug rather than an expected outcome.
@@ -1218,6 +1319,8 @@ function separate(
       if (!eligible[i]) continue;
       for (let j = i + 1; j < members.length; j += 1) {
         if (!eligible[j]) continue;
+
+        if (stamped.has(pairKey(i, j))) continue;
 
         const over = overlapOf(members, solved, i, j);
         if (!over) continue;
@@ -1243,6 +1346,10 @@ function separate(
     if (!added) return;
     solveAll();
   }
+}
+
+function pairKey(a: number, b: number): string {
+  return a < b ? `${a}:${b}` : `${b}:${a}`;
 }
 
 /** How far two members share space on each axis, or nothing if they are clear of each other. */

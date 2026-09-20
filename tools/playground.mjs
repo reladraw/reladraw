@@ -42,6 +42,7 @@ const OFFERED = [
   'separation',
   'shapes',
   'icons',
+  'overlays',
   'labels',
   'lanes',
   'coincident',

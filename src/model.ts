@@ -1,4 +1,5 @@
-import type { Attrs, Axis, Placement } from './ast.js';
+import type { Attrs, Axis, Kind, Placement } from './ast.js';
+import type { Body } from './icons.js';
 
 /** A `between` clause with its targets resolved. Mirrors `Passage` in `ast.ts`. */
 export interface LayoutPassage {
@@ -10,7 +11,13 @@ export interface LayoutPassage {
 /** A node with its geometry solved. Coordinates are absolute, origin top-left. */
 export interface LayoutNode {
   name: string;
-  kind: 'node' | 'note';
+  /** Which set of attributes this node answers to, decided by its body. */
+  kind: Exclude<Kind, 'edge'>;
+  /**
+   * What the node is drawn as, resolved once while the tree is built — so the
+   * resolver, which sizes it, and the renderer, which draws it, cannot disagree.
+   */
+  body: Body;
   /** The text as written, before line splitting. */
   text: string;
   /** The text split into the lines that will be drawn. */

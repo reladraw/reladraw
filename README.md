@@ -86,7 +86,7 @@ Not built yet, roughly in the order they are missed:
 
 - **The diagnostics report.** The scope section below says what it is for. Today the tool either renders or fails; it will not tell you what is wrong with a picture it drew successfully.
 - **Edge routing around nodes.** An edge can be told which side of a node to leave and arrive on, and which gap to run down on the way. An edge that says none of that is a straight line between two centers, and it will cut through whatever stands in the way.
-- **More glyphs.** Icons and shapes are closed sets drawn from path data inside the tool, so a diagram wanting one that is not there has nowhere to go.
+- **More pictures.** Icons and shapes are closed sets drawn from path data inside the tool, so a diagram wanting one that is not there has nowhere to go.
 
 The language is not stable. Expect the syntax to change.
 

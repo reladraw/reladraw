@@ -24,7 +24,7 @@
  * formats need and the reason a `.reladraw` grammar is small in all of them.
  */
 
-import { DIRECTIONS, SIDES, PASSAGE_AXES } from './ast.js';
+import { DIRECTIONS, POSITIONS, SIDES, PASSAGE_AXES } from './ast.js';
 
 /** What a span of source is, for coloring. */
 export type TokenKind =
@@ -64,10 +64,10 @@ export interface Span {
  * it. A word missing here is a word that draws in the plain color, which is a
  * dull page rather than a wrong one.
  */
-export const STATEMENT_KEYWORDS = ['node', 'note', 'edge', 'deck', 'style', 'diagram'] as const;
+export const STATEMENT_KEYWORDS = ['node', 'edge', 'deck', 'style', 'diagram'] as const;
 
 /** Statements whose second word declares a name. `diagram` has none. */
-const DECLARES_NAME = ['node', 'note', 'deck', 'style'];
+const DECLARES_NAME = ['node', 'deck', 'style'];
 
 /**
  * Every word that says something about where a thing goes. Assembled from the
@@ -77,10 +77,16 @@ const DECLARES_NAME = ['node', 'note', 'deck', 'style'];
 export const RELATION_WORDS: string[] = [
   ...DIRECTIONS,
   ...SIDES,
+  ...POSITIONS,
   ...Object.keys(PASSAGE_AXES),
   // The connecting words. `of` is optional after a direction, `and` joins
-  // targets, `between` opens a passage, `level with` is the alignment.
+  // targets, `between` opens a passage, `level with` is the alignment, and
+  // `on ... at ...` is the overlay. Note `of` and `at` are what tell the two
+  // position vocabularies apart: a direction is always followed by `of`, a
+  // named position always preceded by `at`.
   'of',
+  'at',
+  'on',
   'and',
   'level',
   'with',

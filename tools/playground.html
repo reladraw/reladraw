@@ -425,7 +425,6 @@
             <dt>Statements</dt>
             <dd>
               <code>node <i>name</i> <i>["text"]</i> <i>[placements]</i> <i>[key: value …]</i></code><br />
-              <code>note <i>name</i> "text" <i>placements</i></code><br />
               <code>edge <i>a</i> -&gt; <i>b</i> <i>["text"]</i> <i>[key: value …]</i></code>
               &nbsp;<i>(<code>&lt;-</code> to write the target first, <code>&lt;-&gt;</code> for both ends)</i><br />
               <code>deck <i>name</i> "text" <i>["text" …]</i></code><br />
@@ -451,6 +450,11 @@
               <code><b>level with</b> X</code> — share a center line;
               <code><b>top</b>|<b>bottom</b>|<b>left</b>|<b>right</b> <b>level with</b> X</code> shares that edge.<br />
               <code>right of A <b>and</b> B</code> — against the box that just bounds them both.<br />
+              <code><b>on</b> X <b>at</b> top-right</code> — stamped on X's box, overlapping it.
+              The nine positions are
+              <code>top-left</code> <code>top-center</code> <code>top-right</code>
+              <code>left-center</code> <code>center</code> <code>right-center</code>
+              <code>bottom-left</code> <code>bottom-center</code> <code>bottom-right</code>.<br />
               <i>A node takes as many placements as it needs. One on its own binds both axes.</i>
             </dd>
 
@@ -476,13 +480,14 @@
               <code>overlap: allow</code>
             </dd>
 
-            <dt>Icons</dt>
+            <dt>Body</dt>
             <dd>
-              <code>icon: <i>name</i></code> beside the text,
-              <code>shape: <i>name</i></code> instead of the node.
-              Names: <code>disk</code> <code>desktop</code> <code>laptop</code>
-              <code>package</code> <code>cubes</code> <code>instance</code>
-              <code>database</code>, plus <code>box</code> and <code>document</code> for shapes.
+              <code>shape: rectangle|document|none</code> — the outline the node is drawn with;
+              <code>none</code> is text with no box, which is what an annotation is.<br />
+              <code>icon: <i>name</i></code> — the node <i>is</i> that picture, with no box.<br />
+              <code>badge: <i>name</i></code> — the picture sits <i>beside</i> the text and the node keeps its box.<br />
+              Pictures: <code>disk</code> <code>desktop</code> <code>laptop</code>
+              <code>package</code> <code>cubes</code> <code>cube</code> <code>database</code>.
             </dd>
 
             <dt>Labels</dt>

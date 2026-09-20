@@ -112,15 +112,24 @@ export const ICONS: Record<string, Icon> = {
    * than any particular number: this is the symbol for "several", and at two
    * line-heights square a literal count turns to mush. Where the count carries
    * meaning — where one of them is the end of an arrow — they are nodes, and
-   * `shape: instance` is how you draw them.
+   * `icon: cube` is how you draw them.
    */
   cubes: {
     grid: GRID,
     paths: [...cube(6.6, 2.6, 4.4), ...cube(17.4, 2.6, 4.4), ...cube(12, 11.6, 4.4)],
   },
 
-  /** One unit of the kind `cubes` shows several of. */
-  instance: {
+  /**
+   * One unit of the kind `cubes` shows several of.
+   *
+   * Called `instance` until 0.3.0, under the rule that a name says what the
+   * thing is rather than what the picture looks like. That rule works where a
+   * picture has one conventional meaning — a disk, a laptop, a folded corner —
+   * and it misfires here, because a cube has none: it stands for a container in
+   * one diagram, a VM in another, a service in a third, and the diagram assigns
+   * the meaning. `instance` picked one of those and hid the picture.
+   */
+  cube: {
     grid: GRID,
     paths: cube(12, 2.6, 8.4),
   },
@@ -140,9 +149,111 @@ export const ICONS: Record<string, Icon> = {
 export const ICON_NAMES = Object.keys(ICONS);
 
 /**
- * The icon a node asks for, or nothing. Called by the resolver, which reserves
- * the room, and by the renderer, which fills it, so the two cannot disagree
- * about whether there is an icon at all.
+ * The outlines a node's body can take. `rectangle` is the plain one and needs no
+ * word, since it is what a node is when it says nothing.
+ *
+ * Named for what a node *is*, never for the geometry, which is the same rule the
+ * icon names follow: `document` and not `folded-corner`. A shape carrying a
+ * conventional meaning is a second channel alongside color, and a stronger one
+ * — a fill is whatever the author assigned and has to be learnt from the
+ * diagram, while a folded corner has meant "an artifact, not a process" in
+ * flowcharts for decades and reads with no legend at all.
+ *
+ * `circle` and `diamond` join these when a diagram asks. The set being short is
+ * a fact about what has been drawn, not about the key.
+ */
+export const OUTLINES = ['rectangle', 'document'] as const;
+export type Outline = (typeof OUTLINES)[number];
+
+/** Every value `shape:` accepts, `none` included. */
+export const SHAPE_WORDS = [...OUTLINES, 'none'] as const;
+
+/**
+ * What a node is drawn as: an outline, a picture, or nothing at all.
+ *
+ * Two keys name it and each names one part. `shape:` is the outline the node is
+ * drawn with, `none` included; `icon:` is the picture the node is drawn *as*.
+ * Writing both is an error, because a node has one body.
+ *
+ * The test that separates them is whether the node still sizes itself from its
+ * text: a `document` does, a picture does not — its size is the picture's and
+ * its text goes underneath.
+ */
+export type Body =
+  | { kind: 'shape'; outline: Outline }
+  | { kind: 'icon'; icon: Icon }
+  | { kind: 'none' };
+
+const PLAIN: Body = { kind: 'shape', outline: 'rectangle' };
+
+/**
+ * Which body a node has, from what it wrote and what its style carried.
+ *
+ * Called once per node while the tree is built, and the answer is kept on the
+ * node — so the resolver, which sizes the body, and the renderer, which draws
+ * it, cannot disagree about what it is.
+ *
+ * A key the node wrote itself overrules the other key coming from a style. That
+ * is the same permissiveness `checkAttrs` already grants a style: a style is a
+ * bundle meant to be shared across kinds, and a key it carries that this node
+ * has overridden is unused rather than wrong. Both keys from one level is a
+ * genuine contradiction and is refused by name.
+ */
+export function bodyFor(
+  attrs: Record<string, string>,
+  appearance: Record<string, string>,
+  line: number,
+): Body {
+  const wroteShape = attrs['shape'] !== undefined;
+  const wroteIcon = attrs['icon'] !== undefined;
+  let shape = wroteIcon && !wroteShape ? undefined : appearance['shape'];
+  let icon = wroteShape && !wroteIcon ? undefined : appearance['icon'];
+
+  if (shape !== undefined && icon !== undefined) {
+    throw new SourceError(
+      `shape: ${shape} and icon: ${icon} both say what this node is drawn as, and it has one ` +
+        'body — `shape:` is the outline it is drawn with, `icon:` is the picture it is drawn as',
+      line,
+    );
+  }
+
+  if (icon !== undefined) return { kind: 'icon', icon: iconNamed(icon, line) };
+  if (shape === undefined) return PLAIN;
+  if (shape === 'none') return { kind: 'none' };
+  if ((OUTLINES as readonly string[]).includes(shape)) {
+    return { kind: 'shape', outline: shape as Outline };
+  }
+
+  // Until 0.3.0 `shape:` also took an icon name and drew the node as that
+  // picture. The two jobs are two parts and now have two keys, so an older file
+  // is told which one it wanted rather than being drawn as a plain rectangle.
+  if (ICONS[shape] !== undefined) {
+    const now = shape === 'instance' ? 'cube' : shape;
+    return refuse(
+      `\`shape: ${shape}\` drew the node as a picture, and the picture is now \`icon:\` — ` +
+        `try \`icon: ${now}\``,
+      line,
+    );
+  }
+  if (shape === 'instance') {
+    return refuse('`shape: instance` is now `icon: cube` — the icon was renamed with it', line);
+  }
+  if (shape === 'box') {
+    return refuse('`shape: box` is now `shape: rectangle`, since nothing else in the vocabulary is abbreviated', line);
+  }
+  return refuse(
+    `there is no shape called "${shape}". The shapes are ${SHAPE_WORDS.join(', ')}, and a ` +
+      `picture is \`icon:\` rather than \`shape:\`: ${ICON_NAMES.join(', ')}`,
+    line,
+  );
+}
+
+function refuse(message: string, line: number): never {
+  throw new SourceError(message, line);
+}
+
+/**
+ * The icon of that name, or an error listing the set.
  *
  * An unknown name is refused rather than dropped. That is the same rule
  * `DIAGRAM_KEYS` follows and it is here for the same reason: a misspelt
@@ -151,61 +262,21 @@ export const ICON_NAMES = Object.keys(ICONS);
  * the wrong place. Since the vocabulary is closed and short, the error can list
  * the whole of it.
  */
-/**
- * The outlines a box can take. `box` is the plain rectangle and needs no word.
- *
- * Named for what a node *is*, never for the geometry, which is the same rule the
- * icon names follow: `document` and not `folded-corner`. A shape carrying a
- * conventional meaning is a second channel alongside color, and a stronger one
- * — a fill is whatever the author assigned and has to be learnt from the
- * diagram, while a folded corner has meant "an artifact, not a process" in
- * flowcharts for decades and reads with no legend at all.
- */
-export const BOX_SHAPES = ['document'] as const;
-export type BoxShape = 'box' | (typeof BOX_SHAPES)[number];
-
-export interface NodeShape {
-  outline: BoxShape;
-  /**
-   * Set when the node is drawn as a glyph rather than as a box. There is then
-   * no outline, no fill and no padding: the node *is* the picture, and its size
-   * is the picture's. `icon:` decorates a box, this replaces it.
-   */
-  body?: Icon;
-}
-
-const PLAIN: NodeShape = { outline: 'box' };
-
-/**
- * What a node is drawn as. Shared by the resolver, which sizes it, and the
- * renderer, which draws it.
- *
- * The value is either a box outline or the name of a glyph. Those are the two
- * things "what is this drawn as" can answer, and the author has no reason to
- * care which category their answer fell into. The test that separates them is
- * whether the node still sizes itself from its text: a `document` does, a
- * glyph does not.
- */
-export function shapeFor(appearance: Record<string, string>, line: number): NodeShape {
-  const named = appearance['shape'];
-  if (named === undefined) return PLAIN;
-  if (named === 'box') return PLAIN;
-  if ((BOX_SHAPES as readonly string[]).includes(named)) return { outline: named as BoxShape };
-  const glyph = ICONS[named];
-  if (glyph !== undefined) return { outline: 'box', body: glyph };
-  throw new SourceError(
-    `there is no shape called "${named}". The shapes are box, ${BOX_SHAPES.join(', ')}, ` +
-      `and any icon drawn as the node itself: ${ICON_NAMES.join(', ')}`,
-    line,
-  );
-}
-
-export function iconFor(appearance: Record<string, string>, line: number): Icon | undefined {
-  const named = appearance['icon'];
-  if (named === undefined) return undefined;
+export function iconNamed(named: string, line: number): Icon {
   const icon = ICONS[named];
   if (icon === undefined) {
-    throw new SourceError(`there is no icon called "${named}". The icons are ${ICON_NAMES.join(', ')}`, line);
+    const was = named === 'instance' ? ' — the cube was called `instance` until 0.3.0' : '';
+    throw new SourceError(
+      `there is no icon called "${named}". The icons are ${ICON_NAMES.join(', ')}${was}`,
+      line,
+    );
   }
   return icon;
+}
+
+/** The badge a node wears, or nothing. A small picture stamped beside its text. */
+export function badgeFor(appearance: Record<string, string>, line: number): Icon | undefined {
+  const named = appearance['badge'];
+  if (named === undefined) return undefined;
+  return iconNamed(named, line);
 }

@@ -52,7 +52,7 @@ Nothing says how far apart `hub` and `side` are. Delete `wedge` and they close b
 
 One statement per line. No blocks, no continuations, no significant indentation. `//` starts a comment and may trail a statement.
 
-A statement is a positional head — name, then text, then placements — followed by `key: value` attributes. **Attributes end the positional part: once one appears, nothing positional may follow.** This is the mistake to expect; `note n "text" wrap: 30 below worker` is an error, and `note n "text" below worker wrap: 30` is right.
+A statement is a positional head — the keyword, a name, then a text — followed by attributes and placements **in any order**. A token ending in a colon opens an attribute and nothing else does, so `node n "text" wrap: 30 below worker` and `node n "text" below worker wrap: 30` are the same statement.
 
 ### Nodes
 
@@ -72,15 +72,30 @@ node server.worker "Worker"
 
 A container with `""` and `fill: none  border: none` draws nothing and takes no room of its own, which is how you make a group that can be placed against as one shape.
 
-Node attributes: `style`, `fill`, `border` and `text` (each a color), `subtext` (**a color, not text** — it colors every text line after the first, so a node carries its qualifier as a second line of its own text and `subtext` only makes that line quieter; `muted` is the usual value), `size` (`small | normal | large`), `icon`, `shape`, `wrap` (fold the text every n characters), `gap`, `overlap: allow`, and `align: widths` on a container.
+Node attributes: `style`, `fill`, `border` and `text` (each a color), `subtext` (**a color, not text** — it colors every text line after the first, so a node carries its qualifier as a second line of its own text and `subtext` only makes that line quieter; `muted` is the usual value), `size` (`small | normal | large`), `shape`, `icon`, `badge`, `wrap` (fold the text every n characters), `gap`, `overlap: allow`, and `align: widths` on a container.
 
-A color attribute names the part it colors: `fill` is the area, `border` the outline, `text` the text, and `line` the drawn line of an edge. A word is refused on a kind that has no such part, so `border:` on a note is an error. A note and a glyph body are text and nothing else, so `text:` is their only color.
+### The body
+
+Every node has one body and two keys can name it. `shape: rectangle | document | none` is the outline it is drawn with — `rectangle` is the default and `none` is text with no box at all, which is what an annotation is. `icon: <name>` draws the node **as** a picture, with no box: `disk`, `desktop`, `laptop`, `package`, `cubes`, `cube`, `database`. Writing both is an error.
+
+`badge: <name>` is different again: it puts one of those pictures *beside* a node's text, and the node keeps its own body and grows to hold both.
+
+```
+node dump  "nightly dump"  shape: document
+node aside "a remark"      shape: none  wrap: 30
+node unit  icon: cube
+node drive "External HD"   badge: disk
+```
+
+A node drawn as a picture and given no text shows none — everywhere else a node with no text takes its name, but a picture usually is the statement.
+
+A color attribute names the part it colors: `fill` is the area, `border` the outline, `text` the text, and `line` the drawn line of an edge. A word is refused on a kind that has no such part, so `border:` on a `shape: none` node is an error — with no body there is no outline, and `text:` is its only color.
 
 A style contributes a part only to the kinds that have it, so a style shared between nodes and edges writes one key for each — `style backup  border: #d2904e  line: #d2904e` colors the nodes' borders and the edges' lines from one name.
 
-There is no `stroke` attribute. It was removed because it named no part; if you have seen it in an older file, it is `border` on a node, `text` on a note or a glyph body, and `line` on an edge.
+There is no `stroke` attribute. It was removed because it named no part; if you have seen it in an older file, it is `border` on a node, `text` on one with no body or a picture body, and `line` on an edge.
 
-**Every attribute is checked by name, so do not invent one.** A word the tool does not know is an error, and so is a real word on a kind that has no use for it — `icon:` on a node already drawn as a glyph, `gap:` or `overlap:` on an edge, `align:` on a note. The error says either what the kind takes or where the word does belong. A key handed over by a style is exempt, which is what lets one style dress both nodes and edges.
+**Every attribute is checked by name, so do not invent one.** A word the tool does not know is an error, and so is a real word on a kind that has no use for it — `fill:` on a node with no body, `gap:` or `overlap:` on an edge, `align:` on a node that can have no children. The error says either what the kind takes or where the word does belong. A key handed over by a style is exempt, which is what lets one style dress both nodes and edges.
 
 A qualifier under a name is written with the line break, not with `subtext`:
 
@@ -127,18 +142,28 @@ edge <from> -> <to> ["<text>"] [between <a> and <b> [vertically|horizontally]] [
 
 An edge with text widens the corridor between its own two ends by what the text needs, so texts are safe to add.
 
-### Notes
+### Annotations
 
 ```
-note <name> "<text>" <placement> ...  wrap: 30
+node <name> "<text>"  shape: none  <placement> ...  wrap: 30
 ```
 
-Text with no node, anchored to a node. **Always give a note a `wrap:`** — without one a sentence is drawn as one very long line across whatever is beside it.
+There is no `note` statement — an annotation is a node with no body, anchored to a node so it travels with it. **Always give one a `wrap:`** — without one a sentence is drawn as one very long line across whatever is beside it.
+
+### On a box
+
+```
+node <name> "<text>"  on <node> at <position>
+```
+
+Holds a node on another's box at one of nine named points — `top-left`, `top-center`, `top-right`, `left-center`, `center`, `right-center`, `bottom-left`, `bottom-center`, `bottom-right` — inset from that corner or edge and overlapping it on purpose. `(gap: none)` puts it hard against the edge.
+
+This is not containment: a dotted name puts something *inside* a box and widens it, an overlay is stamped *on* it and changes nothing. Use it for a mark, a count, or a link line at the bottom of a box.
 
 ### Styles
 
 ```
-style store  fill: #142814  border: #486544  icon: database
+style store  fill: #142814  border: #486544  badge: database
 node records "Records"  style: store
 ```
 
@@ -148,7 +173,7 @@ Colors are written directly — any hex or CSS color, or `none`. There is no lis
 
 ```
 // A request path, left to right.
-style store  fill: #142814  border: #486544  icon: database
+style store  fill: #142814  border: #486544  badge: database
 
 node browser  "Browser"
 node api      "API server"  right of browser
@@ -159,18 +184,18 @@ edge browser -> api  "HTTP"    from: right  to: left
 edge api -> db       "SQL"     from: right  to: left
 edge worker -> db    "writes"  from: right  to: bottom
 
-note aside "The worker shares the database / but takes no HTTP traffic."  below worker (gap: tight)  wrap: 30
+node aside "The worker shares the database / but takes no HTTP traffic."  shape: none  below worker (gap: tight)  wrap: 30
 ```
 
 ## What will bite you
 
-- **A placement written after an attribute.** Positionals first, always.
+- **Reaching for `note`, `box` or `link`.** They are not statements. A note is `node … shape: none`; the keywords are `node` and `edge`. Each gets an error naming the replacement.
 - **Nodes that nothing orders.** Every pair of nodes must clear the other, and where the file says nothing about which side of what, it is an error naming the pair: `"b" and "c" overlap, and nothing says which side of the other either one sits on`. Hanging two children off the same side of the same target is the usual cause. Place one against the other.
-- **A note with no wrap.**
+- **An annotation with no wrap.**
 - **Reaching for a coordinate, an offset, or a waypoint.** None exist. If a line goes somewhere wrong, say more about it with `between` and `from:`/`to:`; if a node is in the wrong place, add a placement.
 - **`#` is not a comment.** It opens a hex color. Comments are `//`.
 - **Guessing at syntax from another language.** There are no braces, no semicolons, no `-->`, no subgraphs. If you want something not written here, check `reference/syntax.md` before inventing it.
 
 ## Reference
 
-[reference/syntax.md](reference/syntax.md) is the full syntax reference — every construct, the icon and shape sets, how edges sharing a side or a channel are ordered, what the language deliberately refuses and why, and the known defects. Read it when you need a construct this page does not cover, or when an error message points at behavior you did not expect.
+[reference/syntax.md](reference/syntax.md) is the full syntax reference — every construct, the shape, icon and position sets, how edges sharing a side or a channel are ordered, what the language deliberately refuses and why, and the known defects. Read it when you need a construct this page does not cover, or when an error message points at behavior you did not expect.

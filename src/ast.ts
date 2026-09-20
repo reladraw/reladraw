@@ -40,6 +40,47 @@ export const SIDE_AXIS: Record<Side, Axis> = {
 };
 
 /**
+ * The nine points of a box anybody can name without measuring: the four
+ * corners, the four side midpoints, and the centre. One closed set, accepted
+ * everywhere the language has a position — which is the rule that replaced a
+ * scatter of one-position slots, each decided on its own and each a little
+ * piece of the same expressiveness loss.
+ *
+ * Closed-and-meaningful is allowed where open-and-ordinal is not: these are
+ * words a reader decodes, and a diagram written in them still moves correctly
+ * when a box moves, which is the property the refusal of `x: 140` protects.
+ *
+ * A compound position is hyphenated and is one token, matching the diagonal
+ * directions above. A *phrase* of separate keywords stays spaced (`level
+ * with`); a compound *word* does not.
+ *
+ * Every midpoint carries `-center` rather than standing alone as `top` or
+ * `left`. Two reasons, and the second is the binding one. A side midpoint reads
+ * as "the bottom edge, centred along it", which is what the word says. And
+ * `top`, `bottom`, `left` and `right` already name a *side* in this language —
+ * an edge's `from:` and an alignment's `top level with` — so a bare `bottom`
+ * would mean a side in one place and a point in another. `from: bottom` spreads
+ * attachments along the side; `from: bottom-center` will pin one to the point.
+ */
+export const POSITIONS = [
+  'top-left',
+  'top-center',
+  'top-right',
+  'left-center',
+  'center',
+  'right-center',
+  'bottom-left',
+  'bottom-center',
+  'bottom-right',
+] as const;
+
+export type Position = (typeof POSITIONS)[number];
+
+export function isPosition(word: string): word is Position {
+  return (POSITIONS as readonly string[]).includes(word);
+}
+
+/**
  * Naming more than one target places the node against the box that just bounds
  * them all — `right of borg and bare` clears both. It is a single target that
  * nobody had to declare, which is why it is a list on one placement rather than
@@ -77,10 +118,39 @@ export interface AlignPlacement {
 }
 
 /**
+ * `on hub at top-right` — the node is held on the target's box at one of the
+ * nine named positions, inset from that corner or edge, overlapping it by
+ * construction.
+ *
+ * The word is `on` rather than `in` because the language already has a word for
+ * inside: the dotted name. `server.docs` is a child — padded, widening its
+ * container, a member of its constraint system. An overlay is none of those. It
+ * is stamped on the box regardless of what the box holds.
+ *
+ * One target only, unlike the other two. An overlay names an exact position on
+ * a box, and the box that bounds two things is not a box anybody drew.
+ */
+export interface OnPlacement {
+  kind: 'on';
+  position: Position;
+  targets: Targets;
+  /**
+   * How far in from the named corner or edge, as a named gap, from `(gap: none)`
+   * written after the target. Absent means `tight`.
+   *
+   * Deliberately not the node's own `gap:`, which says how this node stands off
+   * its neighbours. An inset is a statement about one pair and is written on the
+   * placement or not at all.
+   */
+  gap?: string;
+  line: number;
+}
+
+/**
  * One thing the author said about where a node goes. A node carries as many as
  * it needs; the resolver intersects them.
  */
-export type Placement = OffsetPlacement | AlignPlacement;
+export type Placement = OffsetPlacement | AlignPlacement | OnPlacement;
 
 /**
  * The modifiers a placement understands, in brackets after its targets. Refused
@@ -92,6 +162,10 @@ export const PLACEMENT_KEYS = ['gap'] as const;
 /** How a placement reads back in the author's own words, for error messages. */
 export function describePlacement(placement: Placement): string {
   const targets = listTargets(placement.targets);
+  if (placement.kind === 'on') {
+    const gap = placement.gap === undefined ? '' : ` (gap: ${placement.gap})`;
+    return `on ${targets} at ${placement.position}${gap}`;
+  }
   if (placement.kind === 'align') {
     const side = placement.side === 'center' ? '' : `${placement.side} `;
     return `${side}level with ${targets}`;
@@ -159,6 +233,12 @@ export interface NodeStmt {
   kind: 'node';
   name: string;
   text: string;
+  /**
+   * Whether that text was written, or is the name standing in for it. A node
+   * drawn as a picture takes no such default — see `buildTree` — and only this
+   * flag can tell `node cube_a` from `node cube_a "cube_a"`.
+   */
+  statedText: boolean;
   /** The text's bracketed modifiers, as written. Usually empty. */
   textAttrs: Attrs;
   /** Everything the author said about where this goes. Empty for the anchor. */
@@ -176,16 +256,6 @@ export interface EdgeStmt {
   text?: string;
   /** `between desktop1 and laptop1` — the gap the line passes through. */
   between?: Passage;
-  attrs: Attrs;
-  line: number;
-}
-
-export interface NoteStmt {
-  kind: 'note';
-  name: string;
-  text: string;
-  /** Everything the author said about where this goes. Empty for the anchor. */
-  placements: Placement[];
   attrs: Attrs;
   line: number;
 }
@@ -248,19 +318,20 @@ export const COLOR_KEYS = [
  * wrong, and which is why a node's text had no word of its own until now.
  */
 export const COLOR_PARTS: Record<Kind, readonly string[]> = {
-  node: ['fill', 'border', 'text', 'subtext'],
-  note: ['text'],
-  glyph: ['text', 'subtext'],
+  shape: ['fill', 'border', 'text', 'subtext'],
+  icon: ['text', 'subtext'],
+  none: ['text'],
   edge: ['line', 'text'],
 };
 
 /**
- * The four things an attribute can be written on. A glyph is a node whose
- * `shape:` names an icon, so it is not a statement keyword — but it takes a
- * different set of attributes from an ordinary box, which is what makes it a
- * kind here.
+ * The four things an attribute can be written on. Three of them are nodes, and
+ * which one a node is, is what its body says: `shape:` draws an outline,
+ * `icon:` draws a picture, and `shape: none` draws neither. None of the three
+ * is a statement keyword — a node is a node — but each takes a different set of
+ * attributes, which is what makes it a kind here.
  */
-export type Kind = 'node' | 'note' | 'glyph' | 'edge';
+export type Kind = 'shape' | 'icon' | 'none' | 'edge';
 
 /**
  * Every attribute each kind understands. An attribute a kind has no use for is
@@ -274,33 +345,36 @@ export type Kind = 'node' | 'note' | 'glyph' | 'edge';
  * may I write here", and a reader of it should not have to assemble the list
  * from two places.
  *
- * Three of the exclusions are the whole of what this table decides, and each is
- * a place the old silence hid something:
+ * The exclusions are the whole of what this table decides, and each is a place
+ * the old silence hid something:
  *
- * - A glyph takes no `icon:`. It is drawn *as* a picture and has no box for a
- *   second one to sit in; `sizeNode` returns before it would ever be read.
- * - A glyph and a note take no `align:`, which widens a node's children, and
+ * - A node drawn as a picture, or with no body at all, takes no `fill:` or
+ *   `border:`. There is no outline for either to reach.
+ * - Neither of those takes `align:` either, which widens a node's children, and
  *   neither may have any.
+ * - `shape:` and `icon:` each name the body, so each appears only on the kind it
+ *   makes. `shape:` is on `none` as well, because `shape: none` is how that kind
+ *   is written in the first place.
  * - An edge takes no `gap:` or `overlap:`. Those are about where a box sits, and
  *   an edge is not placed — it joins two things that are.
  */
 export const ATTR_KEYS: Record<Kind, readonly string[]> = {
-  node: [
+  shape: [
     'style',
     'size',
     'gap',
     'overlap',
     'align',
     'wrap',
-    'icon',
+    'badge',
     'shape',
     'fill',
     'border',
     'text',
     'subtext',
   ],
-  note: ['style', 'size', 'gap', 'overlap', 'wrap', 'text'],
-  glyph: ['style', 'size', 'gap', 'overlap', 'wrap', 'shape', 'text', 'subtext'],
+  icon: ['style', 'size', 'gap', 'overlap', 'wrap', 'badge', 'icon', 'text', 'subtext'],
+  none: ['style', 'size', 'gap', 'overlap', 'wrap', 'badge', 'shape', 'text'],
   edge: ['style', 'size', 'from', 'to', 'line', 'text'],
 };
 
@@ -325,7 +399,7 @@ export interface StyleStmt {
   line: number;
 }
 
-export type Stmt = NodeStmt | EdgeStmt | NoteStmt | DeckStmt | StyleStmt | DiagramStmt;
+export type Stmt = NodeStmt | EdgeStmt | DeckStmt | StyleStmt | DiagramStmt;
 
 export interface Document {
   statements: Stmt[];

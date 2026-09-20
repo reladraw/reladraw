@@ -137,13 +137,13 @@ export const TEXT_SIZES: Record<string, number> = {
 };
 
 /**
- * What each kind of text is set at when the file says nothing. A note annotates
- * the diagram rather than being part of it, and at the size of a box text an
- * aside reads as a statement — so `note` starts small and says so by being a
- * note. This is a default and not a ceiling: `size:` overrides it, the same way
- * `fill:` overrides the theme's color.
+ * What each kind of text is set at when the file says nothing. A node with no
+ * body annotates the diagram rather than being part of it, and at the size of a
+ * box text an aside reads as a statement — so `shape: none` starts small and
+ * says so by having no body. This is a default and not a ceiling: `size:`
+ * overrides it, the same way `fill:` overrides the theme's color.
  */
-const DEFAULT_TEXT_SIZE: Record<string, string> = { note: 'small' };
+const DEFAULT_TEXT_SIZE: Record<string, string> = { none: 'small' };
 
 /**
  * The size a piece of text is set at. Shared by the resolver, which reserves
