@@ -7,34 +7,34 @@ style artifact  fill: #460000  border: #4e4e4e  shape: document
 
 // The fold is a fixed size rather than a fraction of the box, so it looks the
 // same on all three of these.
-box narrow "Report"  style: artifact
-box medium "Nightly database dump"        right of narrow  gap: tight  style: artifact
-box wide   "A very much longer file name than either of the other two"  right of medium  gap: tight  style: artifact
+node narrow "Report"  style: artifact
+node medium "Nightly database dump"        right of narrow  gap: tight  style: artifact
+node wide   "A very much longer file name than either of the other two"  right of medium  gap: tight  style: artifact
 
-// A glyph has no outline, no fill and no padding. The label goes underneath.
-box services ""  below narrow  gap: normal  fill: none  border: none
-box services.web    "web"                          shape: instance
-box services.api    "api"     right of services.web  gap: tight  shape: instance
-box services.worker "worker"  right of services.api  gap: tight  shape: instance
+// A glyph has no outline, no fill and no padding. The text goes underneath.
+node services ""  below narrow  gap: normal  fill: none  border: none
+node services.web    "web"                          shape: instance
+node services.api    "api"     right of services.web  gap: tight  shape: instance
+node services.worker "worker"  right of services.api  gap: tight  shape: instance
 
-// Unlabeled, so the node is exactly the glyph.
-box bare1 ""  below services (gap: normal)  shape: instance
-box bare2 ""  below bare1     gap: tight  shape: instance
+// No text, so the node is exactly the glyph.
+node bare1 ""  below services (gap: normal)  shape: instance
+node bare2 ""  below bare1     gap: tight  shape: instance
 
-// A glyph is an ordinary node, so it takes links and sides like any other. That
+// A glyph is an ordinary node, so it takes edges and sides like any other. That
 // is what it buys over an icon, which cannot be the end of an arrow.
-box sink "collector"  right of bare1 and bare2 (gap: wide)  level with bare1, bare2
-link bare1 -> sink  from: right  to: left
-link bare2 -> sink  from: right  to: left
+node sink "collector"  right of bare1 and bare2 (gap: wide)  level with bare1, bare2
+edge bare1 -> sink  from: right  to: left
+edge bare2 -> sink  from: right  to: left
 
 // Any icon works as a body, not just the cube.
-box store ""  below bare2 (gap: normal)  shape: database
-box drive ""  right of store  gap: tight  shape: disk
+node store ""  below bare2 (gap: normal)  shape: database
+node drive ""  right of store  gap: tight  shape: disk
 
-// `at: bottom` puts the label under the contents and `align: center` centers
+// `at: bottom` puts the text under the contents and `align: center` centers
 // it; neither implies the other. The lower cube is centered under the upper
 // pair by naming both of them and nothing else.
-box pool "Worker pool" (at: bottom, align: center)  right of store and drive (gap: wide)  level with store, drive 
-box pool.one    ""  shape: instance
-box pool.two    ""  right of pool.one  gap: tight  shape: instance
-box pool.three  ""  below pool.one and pool.two  gap: tight  shape: instance
+node pool "Worker pool" (at: bottom, align: center)  right of store and drive (gap: wide)  level with store, drive 
+node pool.one    ""  shape: instance
+node pool.two    ""  right of pool.one  gap: tight  shape: instance
+node pool.three  ""  below pool.one and pool.two  gap: tight  shape: instance

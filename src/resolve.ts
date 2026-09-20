@@ -1,4 +1,4 @@
-import type { Attrs, Axis, Edge, Kind, OffsetPlacement, Placement, Document, Stmt } from './ast.js';
+import type { Attrs, Axis, Side, Kind, OffsetPlacement, Placement, Document, Stmt } from './ast.js';
 import {
   ALL_ATTR_KEYS,
   ATTR_KEYS,
@@ -16,18 +16,18 @@ import {
   HEADER_GAP,
   ICON_GAP,
   ICON_LINES,
-  LABEL_CLEARANCE,
+  TEXT_CLEARANCE,
   PAD,
   SEPARATION_GAP,
   fontSizeFor,
-  labelExtent,
-  labelStyleFor,
+  textExtent,
+  textStyleFor,
 } from './constants.js';
 import { fix, reachability, tightest, type Constraint, type Contradiction } from './constrain.js';
 import { SourceError } from './errors.js';
 import { iconFor, shapeFor } from './icons.js';
 import { monospaceMeasurer, splitLines, type Measurer } from './measure.js';
-import type { Layout, LayoutLink, LayoutNode, LayoutPassage } from './model.js';
+import type { Layout, LayoutEdge, LayoutNode, LayoutPassage } from './model.js';
 
 export interface ResolveOptions {
   measurer?: Measurer;
@@ -58,15 +58,15 @@ export function resolve(doc: Document, options: ResolveOptions = {}): Layout {
   const { nodes, byName, roots } = buildTree(doc.statements, styles);
   applyDecks(doc.statements, byName);
 
-  // Links are resolved to nodes before anything is sized, because a labeled
-  // link claims room in the gap it crosses and so has to be in hand while the
+  // Edges are resolved to nodes before anything is sized, because a labeled
+  // edge claims room in the gap it crosses and so has to be in hand while the
   // gaps are being worked out. Nothing here reads geometry.
-  const links = buildLinks(doc.statements, byName, styles);
+  const edges = buildEdges(doc.statements, byName, styles);
 
   const local = new Map<LayoutNode, { x: number; y: number }>();
-  for (const root of roots) sizeNode(root, links, measurer, fontSize, local);
+  for (const root of roots) sizeNode(root, edges, measurer, fontSize, local);
 
-  placeRoots(roots, byName, links, measurer, fontSize, local);
+  placeRoots(roots, byName, edges, measurer, fontSize, local);
   normalize(nodes, margin);
 
   const extent = bounds(nodes);
@@ -74,7 +74,7 @@ export function resolve(doc: Document, options: ResolveOptions = {}): Layout {
   return {
     nodes,
     roots,
-    links,
+    edges,
     diagram: collectDiagram(doc.statements),
     width: Math.ceil(extent.maxX + margin),
     height: Math.ceil(extent.maxY + margin),
@@ -113,7 +113,7 @@ function buildTree(statements: Stmt[], styles: Map<string, Attrs>) {
   const roots: LayoutNode[] = [];
 
   for (const stmt of statements) {
-    if (stmt.kind !== 'box' && stmt.kind !== 'note') continue;
+    if (stmt.kind !== 'node' && stmt.kind !== 'note') continue;
 
     if (byName.has(stmt.name)) {
       throw new SourceError(`"${stmt.name}" is declared twice`, stmt.line);
@@ -130,9 +130,9 @@ function buildTree(statements: Stmt[], styles: Map<string, Attrs>) {
       width: 0,
       height: 0,
       inset: 0,
-      deckLabels: [],
+      deckTexts: [],
       headerHeight: 0,
-      label: stmt.kind === 'box' ? stmt.label : {},
+      textAttrs: stmt.kind === 'node' ? stmt.textAttrs : {},
       attrs: stmt.attrs,
       appearance: appearanceOf(stmt.attrs, styles, stmt.line),
       placements: stmt.placements,
@@ -166,13 +166,27 @@ function buildTree(statements: Stmt[], styles: Map<string, Attrs>) {
   return { nodes, byName, roots };
 }
 
+/**
+ * "a node", "an edge". Only the kind words are ever passed here and only `edge`
+ * begins with a vowel, but writing `a ${word}` produced "a edge" the day the
+ * keyword changed, so the article follows the word rather than being assumed.
+ */
+function article(word: string): string {
+  return `${/^[aeiou]/.test(word) ? 'an' : 'a'} ${word}`;
+}
+
+/** The same phrase opening a sentence. */
+function capital(phrase: string): string {
+  return phrase.charAt(0).toUpperCase() + phrase.slice(1);
+}
+
 /** How each kind reads in an error, and what it is actually made of. */
-const KIND_WORD = { box: 'box', note: 'note', glyph: 'glyph body', link: 'link' } as const;
+const KIND_WORD = { node: 'node', note: 'note', glyph: 'glyph body', edge: 'edge' } as const;
 const KIND_PARTS = {
-  box: 'a fill, a border and text',
+  node: 'a fill, a border and text',
   note: 'bare text and nothing else',
   glyph: 'a picture and the text under it',
-  link: 'a line and its label',
+  edge: 'a line and its text',
 } as const;
 
 /**
@@ -184,7 +198,7 @@ const KIND_PARTS = {
  * What is checked is what the author wrote *on this statement*, not what a
  * style contributed. A style is a bundle meant to be shared across kinds — the
  * benchmark's `synced` carries a fill and a border for the green boxes and a
- * line for the four links joining them — so a key it carries that this kind has
+ * line for the four edges joining them — so a key it carries that this kind has
  * no part for is simply unused, and is not a mistake anybody made here. That is
  * forced rather than chosen: checking the merged appearance would refuse the
  * benchmark's own central idiom four times over. `checkStyleUse` is what keeps
@@ -201,7 +215,7 @@ function checkAttrs(kind: Kind, name: string, attrs: Attrs, line: number): void 
       // Nothing anywhere in the language answers to this word, so the only
       // remedy is the vocabulary itself.
       throw new SourceError(
-        `"${name}" has ${key}: ${value}, which is not an attribute. A ${KIND_WORD[kind]} takes ${allowed.join(', ')}`,
+        `"${name}" has ${key}: ${value}, which is not an attribute. ${capital(article(KIND_WORD[kind]))} takes ${allowed.join(', ')}`,
         line,
       );
     }
@@ -214,7 +228,7 @@ function checkAttrs(kind: Kind, name: string, attrs: Attrs, line: number): void 
     if ((COLOR_KEYS as readonly string[]).includes(key)) {
       const parts = COLOR_PARTS[kind].map((part) => `\`${part}:\``).join(', ');
       throw new SourceError(
-        `"${name}" is a ${KIND_WORD[kind]} and has ${key}: ${value}. A ${KIND_WORD[kind]} is ${KIND_PARTS[kind]}, so it has no ${key} — it takes ${parts}`,
+        `"${name}" is ${article(KIND_WORD[kind])} and has ${key}: ${value}. ${capital(article(KIND_WORD[kind]))} is ${KIND_PARTS[kind]}, so it has no ${key} — it takes ${parts}`,
         line,
       );
     }
@@ -224,8 +238,8 @@ function checkAttrs(kind: Kind, name: string, attrs: Attrs, line: number): void 
     // also the more useful thing to be told: the author has usually written a
     // real statement about the wrong half of the diagram.
     throw new SourceError(
-      `"${name}" is a ${KIND_WORD[kind]} and has ${key}: ${value}. \`${key}:\` belongs to ` +
-        `${listKinds(belongTo(key))} — a ${KIND_WORD[kind]} takes ${allowed.join(', ')}`,
+      `"${name}" is ${article(KIND_WORD[kind])} and has ${key}: ${value}. \`${key}:\` belongs to ` +
+        `${listKinds(belongTo(key))} — ${article(KIND_WORD[kind])} takes ${allowed.join(', ')}`,
       line,
     );
   }
@@ -264,7 +278,7 @@ function checkStyleUse(
 
   throw new SourceError(
     `style "${named}" gives "${name}" nothing. It carries ${carried.join(' and ')}; ` +
-      `a ${KIND_WORD[kind]} is ${KIND_PARTS[kind]}`,
+      `${article(KIND_WORD[kind])} is ${KIND_PARTS[kind]}`,
     line,
   );
 }
@@ -294,9 +308,9 @@ function belongTo(key: string): Kind[] {
   return (Object.keys(ATTR_KEYS) as Kind[]).filter((kind) => ATTR_KEYS[kind].includes(key));
 }
 
-/** "a link", "a box or a glyph body", "a box, a note or a glyph body". */
+/** "an edge", "a node or a glyph body", "a node, a note or a glyph body". */
 function listKinds(kinds: Kind[]): string {
-  const words = kinds.map((kind) => `a ${KIND_WORD[kind]}`);
+  const words = kinds.map((kind) => article(KIND_WORD[kind]));
   if (words.length <= 1) return words[0] ?? 'nothing';
   return `${words.slice(0, -1).join(', ')} or ${words[words.length - 1]}`;
 }
@@ -304,7 +318,7 @@ function listKinds(kinds: Kind[]): string {
 /** Which of the four kinds a node is, which its `shape:` may decide. */
 function kindOf(node: { kind: string; appearance: Attrs; line: number }): Kind {
   if (node.kind === 'note') return 'note';
-  return shapeFor(node.appearance, node.line).body !== undefined ? 'glyph' : 'box';
+  return shapeFor(node.appearance, node.line).body !== undefined ? 'glyph' : 'node';
 }
 
 function appearanceOf(attrs: Attrs, styles: Map<string, Attrs>, line: number): Attrs {
@@ -320,27 +334,27 @@ function applyDecks(statements: Stmt[], byName: Map<string, LayoutNode>): void {
     if (stmt.kind !== 'deck') continue;
     const node = byName.get(stmt.name);
     if (!node) throw new SourceError(`deck names "${stmt.name}", which does not exist`, stmt.line);
-    node.deckLabels = stmt.labels;
+    node.deckTexts = stmt.texts;
   }
 }
 
-function buildLinks(
+function buildEdges(
   statements: Stmt[],
   byName: Map<string, LayoutNode>,
   styles: Map<string, Attrs>,
-): LayoutLink[] {
-  const links: LayoutLink[] = [];
+): LayoutEdge[] {
+  const edges: LayoutEdge[] = [];
   for (const stmt of statements) {
-    if (stmt.kind !== 'link') continue;
+    if (stmt.kind !== 'edge') continue;
     const from = byName.get(stmt.from);
     const to = byName.get(stmt.to);
-    if (!from) throw new SourceError(`link from "${stmt.from}", which does not exist`, stmt.line);
-    if (!to) throw new SourceError(`link to "${stmt.to}", which does not exist`, stmt.line);
+    if (!from) throw new SourceError(`edge from "${stmt.from}", which does not exist`, stmt.line);
+    if (!to) throw new SourceError(`edge to "${stmt.to}", which does not exist`, stmt.line);
     const between: LayoutPassage | undefined = stmt.between && {
       nodes: stmt.between.targets.map((name) => {
         const node = byName.get(name);
         if (!node) {
-          throw new SourceError(`link passes between "${name}", which does not exist`, stmt.line);
+          throw new SourceError(`edge passes between "${name}", which does not exist`, stmt.line);
         }
         return node;
       }) as [LayoutNode, LayoutNode],
@@ -348,20 +362,20 @@ function buildLinks(
     };
     const appearance = appearanceOf(stmt.attrs, styles, stmt.line);
     const what = `${stmt.from} -> ${stmt.to}`;
-    checkAttrs('link', what, stmt.attrs, stmt.line);
-    checkStyleUse('link', what, stmt.attrs, styles, stmt.line);
-    links.push({
+    checkAttrs('edge', what, stmt.attrs, stmt.line);
+    checkStyleUse('edge', what, stmt.attrs, styles, stmt.line);
+    edges.push({
       from,
       to,
       both: stmt.both,
-      ...(stmt.label !== undefined ? { label: stmt.label } : {}),
+      ...(stmt.text !== undefined ? { text: stmt.text } : {}),
       ...(between ? { between } : {}),
       attrs: stmt.attrs,
       appearance,
       line: stmt.line,
     });
   }
-  return links;
+  return edges;
 }
 
 // --- pass two: sizes, bottom-up ---------------------------------------------
@@ -375,12 +389,12 @@ type Local = Map<LayoutNode, { x: number; y: number }>;
  */
 function sizeNode(
   node: LayoutNode,
-  links: LayoutLink[],
+  edges: LayoutEdge[],
   measurer: Measurer,
   fontSize: number,
   local: Local,
 ): void {
-  for (const child of node.children) sizeNode(child, links, measurer, fontSize, local);
+  for (const child of node.children) sizeNode(child, edges, measurer, fontSize, local);
 
   // Text is measured at the size it will be drawn at — the size lives in
   // `constants.ts` precisely so the resolver reserving the room and the
@@ -389,14 +403,14 @@ function sizeNode(
   const lineHeight = measurer.lineHeight(textSize);
   // A node with empty text takes no room for it. This is what makes an
   // invisible grouping container size to exactly its contents.
-  const hasLabel = node.lines.some((line) => line.length > 0);
-  const labelWidth = hasLabel ? widestLine(node.lines, measurer, textSize) : 0;
-  const labelHeight = hasLabel ? node.lines.length * lineHeight : 0;
+  const hasText = node.lines.some((line) => line.length > 0);
+  const textWidth = hasText ? widestLine(node.lines, measurer, textSize) : 0;
+  const textHeight = hasText ? node.lines.length * lineHeight : 0;
 
   if (node.kind === 'note') {
     // A note is bare text, so it gets no padding and takes no children.
-    node.width = labelWidth;
-    node.height = labelHeight;
+    node.width = textWidth;
+    node.height = textHeight;
     return;
   }
 
@@ -405,7 +419,7 @@ function sizeNode(
 
   if (shape.body !== undefined) {
     // Drawn as a glyph, so there is no box to pad and the node's size is the
-    // picture's. A label goes under it rather than inside it, which is the
+    // picture's. A text goes under it rather than inside it, which is the
     // arrangement that makes a row of these read as captioned things.
     if (node.children.length > 0) {
       throw new SourceError(
@@ -413,46 +427,46 @@ function sizeNode(
         node.line,
       );
     }
-    node.width = Math.max(glyphSide, labelWidth);
-    node.height = glyphSide + (hasLabel ? ICON_GAP + labelHeight : 0);
+    node.width = Math.max(glyphSide, textWidth);
+    node.height = glyphSide + (hasText ? ICON_GAP + textHeight : 0);
     return;
   }
 
   // An icon takes a column of its own on the right of whatever the box holds,
-  // so the label never runs underneath it and the box grows to fit both. That
+  // so the text never runs underneath it and the box grows to fit both. That
   // is why an icon is not a renderer-only concern: it is content taking room,
-  // like a label, and not appearance like `fill:`.
+  // like a text, and not appearance like `fill:`.
   const icon = iconFor(node.appearance, node.line);
   const iconSide = icon === undefined ? 0 : glyphSide;
-  const iconRoom = icon === undefined ? 0 : iconSide + (hasLabel ? ICON_GAP : 0);
+  const iconRoom = icon === undefined ? 0 : iconSide + (hasText ? ICON_GAP : 0);
 
   if (node.children.length === 0) {
     // A band only exists because contents have to sit clear of it, and a leaf
     // has none, so `at` has no end to name. `align` is a different question and
-    // is allowed: a label of several lines has lines of unequal length in any
+    // is allowed: a text of several lines has lines of unequal length in any
     // box, and ranging them left rather than centering them is a real thing to
     // want. It was refused here too until 2026-09-09, purely because the two
     // words arrive in the same brackets.
-    if (node.label['at'] !== undefined) {
+    if (node.textAttrs['at'] !== undefined) {
       throw new SourceError(
-        `"${node.name}" holds nothing and its label carries at: ${node.label['at']}. ` +
-          `A label sits at one end of a box so its contents can have the other; with no contents there is no band for it to sit at either end of`,
+        `"${node.name}" holds nothing and its text carries at: ${node.textAttrs['at']}. ` +
+          `A text sits at one end of a box so its contents can have the other; with no contents there is no band for it to sit at either end of`,
         node.line,
       );
     }
-    node.width = labelWidth + iconRoom + PAD * 2;
-    node.height = Math.max(labelHeight, iconSide) + PAD * 2;
+    node.width = textWidth + iconRoom + PAD * 2;
+    node.height = Math.max(textHeight, iconSide) + PAD * 2;
   } else {
     applyAlign(node);
-    const content = layoutChildren(node, links, measurer, fontSize, local);
-    const band = Math.max(labelHeight, iconSide);
-    // `headerHeight` is the band the label and icon take, whichever end of the
+    const content = layoutChildren(node, edges, measurer, fontSize, local);
+    const band = Math.max(textHeight, iconSide);
+    // `headerHeight` is the band the text and icon take, whichever end of the
     // box that band is at. Only the contents' offset depends on the side.
-    node.headerHeight = hasLabel || icon !== undefined ? band + HEADER_GAP : 0;
-    node.width = Math.max(labelWidth + iconRoom, content.width) + PAD * 2;
+    node.headerHeight = hasText || icon !== undefined ? band + HEADER_GAP : 0;
+    node.width = Math.max(textWidth + iconRoom, content.width) + PAD * 2;
     node.height = node.headerHeight + content.height + PAD * 2;
 
-    const above = labelStyleFor(node.label, node.line).at === 'top' ? node.headerHeight : 0;
+    const above = textStyleFor(node.textAttrs, node.line).at === 'top' ? node.headerHeight : 0;
     for (const child of node.children) {
       const offset = local.get(child)!;
       offset.x += PAD;
@@ -460,10 +474,10 @@ function sizeNode(
     }
   }
 
-  if (node.deckLabels.length > 0) {
+  if (node.deckTexts.length > 0) {
     // The copies sit behind and above-left, so the whole node grows by the
     // depth of the stack and its own face moves down and right by the same.
-    node.inset = node.deckLabels.length * DECK_STEP;
+    node.inset = node.deckTexts.length * DECK_STEP;
     node.width += node.inset;
     node.height += node.inset;
     for (const child of node.children) {
@@ -497,7 +511,7 @@ function applyAlign(node: LayoutNode): void {
  */
 function layoutChildren(
   parent: LayoutNode,
-  links: LayoutLink[],
+  edges: LayoutEdge[],
   measurer: Measurer,
   fontSize: number,
   local: Local,
@@ -541,7 +555,7 @@ function layoutChildren(
         };
       }),
     { x: alignment, y: stack },
-    corridorsIn(links, (node) => liftTo(node, indexOf, local), measurer, fontSize),
+    corridorsIn(edges, (node) => liftTo(node, indexOf, local), measurer, fontSize),
   );
 
   for (const child of parent.children) local.set(child, positions.get(child)!);
@@ -576,7 +590,7 @@ function extentOf(children: LayoutNode[], local: Local): { width: number; height
 function placeRoots(
   roots: LayoutNode[],
   byName: Map<string, LayoutNode>,
-  links: LayoutLink[],
+  edges: LayoutEdge[],
   measurer: Measurer,
   fontSize: number,
   local: Local,
@@ -627,7 +641,7 @@ function placeRoots(
         };
       }),
     { x: [], y: [] },
-    corridorsIn(links, (node) => liftTo(node, indexOf, local), measurer, fontSize),
+    corridorsIn(edges, (node) => liftTo(node, indexOf, local), measurer, fontSize),
   );
 
   for (const root of roots) {
@@ -670,31 +684,31 @@ interface Target {
 }
 
 /**
- * A labeled link's claim on the gap between its two ends.
+ * An edge with text's claim on the gap between its two ends.
  *
- * A link is not a placement and never says where anything goes. But its label is
+ * An edge is not a placement and never says where anything goes. But its text is
  * drawn in the gap it crosses, and a gap sized for two boxes to breathe is not a
  * gap sized to hold a word — which is how a diagram that says nothing wrong ends
- * up with `rclone` written across the box it points at. So a labeled link is
+ * up with `rclone` written across the box it points at. So an edge with text is
  * treated the way anything else put between two things is: it widens the space
- * between them by exactly what it needs, and closes it again when the label goes.
+ * between them by exactly what it needs, and closes it again when the text goes.
  *
  * The room is worked out per axis here, before anything is solved, because which
- * axis the label ends up crossing is not known until the boxes have landed once.
+ * axis the text ends up crossing is not known until the boxes have landed once.
  */
 interface Corridor {
-  link: LayoutLink;
+  edge: LayoutEdge;
   from: Target;
   to: Target;
-  /** Room the label needs in a gap on each axis, clearance included. */
+  /** Room the text needs in a gap on each axis, clearance included. */
   need: Record<Axis, number>;
 }
 
 /**
  * Where a node sits within the group being solved: which member holds it, and
- * where inside that member. A link may name anything at any depth, so its ends
+ * where inside that member. An edge may name anything at any depth, so its ends
  * are lifted to the members of whichever group is being solved — and a node
- * outside that group has no answer, which is how a link is sorted into the one
+ * outside that group has no answer, which is how an edge is sorted into the one
  * group where its two ends are different members.
  */
 function liftTo(
@@ -721,32 +735,32 @@ function liftTo(
   };
 }
 
-/** The labeled links whose two ends are different members of this group. */
+/** The edges with text whose two ends are different members of this group. */
 function corridorsIn(
-  links: LayoutLink[],
+  edges: LayoutEdge[],
   locate: (node: LayoutNode) => Target | undefined,
   measurer: Measurer,
   fontSize: number,
 ): Corridor[] {
   const corridors: Corridor[] = [];
-  for (const link of links) {
-    // An unlabeled link asks for nothing: every gap holds an arrowhead. And a
-    // link told to pass between two named things carries its label in *that*
+  for (const edge of edges) {
+    // An edge with no text asks for nothing: every gap holds an arrowhead. And a
+    // edge told to pass between two named things carries its text in *that*
     // corridor rather than in the gap between its own ends, so widening this one
-    // would make room where the label never goes.
-    if (link.label === undefined || link.between) continue;
-    const from = locate(link.from);
-    const to = locate(link.to);
+    // would make room where the text never goes.
+    if (edge.text === undefined || edge.between) continue;
+    const from = locate(edge.from);
+    const to = locate(edge.to);
     if (!from || !to || from.index === to.index) continue;
-    // The clearance is doubled because the label is drawn at the *midpoint* of
+    // The clearance is doubled because the text is drawn at the *midpoint* of
     // the line, so the room it needs is symmetric about that point whatever sits
     // at either end. The arrowhead is charged on both sides for the same reason:
     // it covers `ARROW_LENGTH` of the line it arrives on, and reserving that at
     // one end only would move the midpoint rather than lengthen the run.
     const extent = (axis: Axis): number =>
-      labelExtent(link.label!, link.appearance, axis, measurer, fontSize, link.line) +
-      (LABEL_CLEARANCE + ARROW_LENGTH) * 2;
-    corridors.push({ link, from, to, need: { x: extent('x'), y: extent('y') } });
+      textExtent(edge.text!, edge.appearance, axis, measurer, fontSize, edge.line) +
+      (TEXT_CLEARANCE + ARROW_LENGTH) * 2;
+    corridors.push({ edge, from, to, need: { x: extent('x'), y: extent('y') } });
   }
   return corridors;
 }
@@ -757,7 +771,7 @@ function corridorsIn(
  * Naming several targets aligns a node to the box that just bounds them, and
  * where those targets sit at fixed offsets from one another — siblings in a
  * container, say — that box is a constant and the alignment is an ordinary
- * constraint. Where they do not, its edges are a minimum and a maximum over
+ * constraint. Where they do not, its sides are a minimum and a maximum over
  * positions the solve has yet to produce, which is not a distance the solver
  * can be told in advance. So it is measured off the first solution instead.
  */
@@ -765,7 +779,7 @@ interface Pending {
   node: LayoutNode;
   me: number;
   axis: Axis;
-  edge: Edge;
+  side: Side;
   targets: Target[];
   placement: Placement;
 }
@@ -815,19 +829,19 @@ function positionGroup(
     // Aligning to several targets means aligning to the box that just bounds
     // them. That box is a constant only while its members hold still relative
     // to one another; otherwise the alignment waits for the first solution.
-    const alignOn = (axis: Axis, edge: Edge, targets: Target[], placement: Placement): void => {
+    const alignOn = (axis: Axis, side: Side, targets: Target[], placement: Placement): void => {
       const anchor = sharedMember(targets);
       if (anchor === undefined) {
-        pending.push({ node, me, axis, edge, targets, placement });
+        pending.push({ node, me, axis, side, targets, placement });
         return;
       }
       const span = spanOf(targets, axis, () => 0);
-      constraints[axis].push(...fix(anchor, me, alignedAt(edge, span, size[axis]), placement));
+      constraints[axis].push(...fix(anchor, me, alignedAt(side, span, size[axis]), placement));
     };
 
     for (const { placement, targets } of located) {
       if (placement.kind === 'align') {
-        alignOn(placement.axis, placement.edge, targets, placement);
+        alignOn(placement.axis, placement.side, targets, placement);
         continue;
       }
       // One constraint per target, so the node clears the furthest of them.
@@ -950,34 +964,34 @@ function spanOf(
   return { start, size: end - start };
 }
 
-/** Where a node of this size sits so that the named edge of it meets the span's. */
-function alignedAt(edge: Edge, span: { start: number; size: number }, own: number): number {
-  if (edge === 'center') return span.start + (span.size - own) / 2;
-  if (edge === 'top' || edge === 'left') return span.start;
+/** Where a node of this size sits so that the named side of it meets the span's. */
+function alignedAt(side: Side, span: { start: number; size: number }, own: number): number {
+  if (side === 'center') return span.start + (span.size - own) / 2;
+  if (side === 'top' || side === 'left') return span.start;
   return span.start + span.size - own;
 }
 
 /**
- * Widen a corridor to hold the label of the link crossing it.
+ * Widen a corridor to hold the text of the edge crossing it.
  *
- * This is the one place a link reaches the constraint system, and it is the same
- * measure-then-constrain move `settle` makes rather than links joining the graph
- * outright: the first solution says which gap each label actually falls in, and
+ * This is the one place an edge reaches the constraint system, and it is the same
+ * measure-then-constrain move `settle` makes rather than edges joining the graph
+ * outright: the first solution says which gap each text actually falls in, and
  * from there the room it needs is an ordinary minimum distance like any other.
  * Nothing is nudged and no layout is repaired — a constraint the file already
  * implied is derived and the whole system is solved again.
  *
  * Which gap that is, is derived and never chosen. A pair clear of each other on
- * exactly one axis has exactly one corridor between them, and the label is in
+ * exactly one axis has exactly one corridor between them, and the text is in
  * it. A pair clear on *both* axes sits corner to corner, so the line runs
  * diagonally through open space and there is no corridor to widen; a pair clear
  * on neither overlaps, which is the separation pass's business and not this
  * one's. Both are left alone, which is why this only ever moves boxes that a
- * label is genuinely wedged between.
+ * text is genuinely wedged between.
  *
  * A gap being a minimum does the rest. Where the corridor is already wide enough
  * — because the author said `gap: wide`, or because something else is in there
- * — the constraint is slack and nothing moves; delete the label and the corridor
+ * — the constraint is slack and nothing moves; delete the text and the corridor
  * closes back to whatever the file asked for.
  */
 function room(
@@ -1060,7 +1074,7 @@ function settle(
       const own = axis === 'x' ? entry.node.width : entry.node.height;
       const anchor = entry.targets[0]!.index;
       constraints[axis].push(
-        ...fix(anchor, entry.me, alignedAt(entry.edge, span, own) - solved[axis][anchor]!, entry.placement),
+        ...fix(anchor, entry.me, alignedAt(entry.side, span, own) - solved[axis][anchor]!, entry.placement),
       );
     }
   }
@@ -1082,7 +1096,7 @@ function confirm(pending: Pending[], solved: Record<Axis, number[]>): void {
     const { axis } = entry;
     const span = spanOf(entry.targets, axis, (target) => solved[axis][target.index]!);
     const own = axis === 'x' ? entry.node.width : entry.node.height;
-    if (Math.abs(alignedAt(entry.edge, span, own) - solved[axis][entry.me]!) <= 0.5) continue;
+    if (Math.abs(alignedAt(entry.side, span, own) - solved[axis][entry.me]!) <= 0.5) continue;
     throw new SourceError(
       `"${entry.node.name}" cannot be ${describePlacement(entry.placement)}: keeping boxes off ` +
         `each other moved them apart after that region was measured`,
@@ -1358,7 +1372,7 @@ function widestLine(lines: string[], measurer: Measurer, fontSize: number): numb
 }
 
 /**
- * Split a label into the lines that get drawn. `/` always breaks a line. A
+ * Split a text into the lines that get drawn. `/` always breaks a line. A
  * `width` attribute additionally folds each of those at word boundaries, which
  * is what stops a long note running across the whole diagram.
  *

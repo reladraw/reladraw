@@ -13,75 +13,75 @@ diagram  background: #111111
 // The cluster is wrapped in an invisible container so things outside it can be
 // placed against the whole cluster rather than against the hub alone.
 
-box cluster ""  style: invisible
+node cluster ""  style: invisible
 
-box cluster.hub "Cloud sync"  icon: package  style: synced
+node cluster.hub "Cloud sync"  icon: package  style: synced
 
-box cluster.desktop1       "Desktop 1 / Linux"    above-left of cluster.hub   gap: tight  icon: desktop
-box cluster.desktop1.files "shared folder / synced"  style: synced
+node cluster.desktop1       "Desktop 1 / Linux"    above-left of cluster.hub   gap: tight  icon: desktop
+node cluster.desktop1.files "shared folder / synced"  style: synced
 
-box cluster.desktop2       "Desktop 2 / Windows"  above-right of cluster.hub  gap: tight  icon: desktop
-box cluster.desktop2.files "shared folder / synced"  style: synced
+node cluster.desktop2       "Desktop 2 / Windows"  above-right of cluster.hub  gap: tight  icon: desktop
+node cluster.desktop2.files "shared folder / synced"  style: synced
 
-box cluster.laptop1        "Laptop 1 / macOS"     below-left of cluster.hub   gap: tight  icon: laptop
-box cluster.laptop1.files  "shared folder / synced"  style: synced
+node cluster.laptop1        "Laptop 1 / macOS"     below-left of cluster.hub   gap: tight  icon: laptop
+node cluster.laptop1.files  "shared folder / synced"  style: synced
 
-box cluster.laptop2        "Laptop 2 / macOS"     below-right of cluster.hub  gap: tight  icon: laptop
-box cluster.laptop2.files  "shared folder / synced"  style: synced
+node cluster.laptop2        "Laptop 2 / macOS"     below-right of cluster.hub  gap: tight  icon: laptop
+node cluster.laptop2.files  "shared folder / synced"  style: synced
 
-link cluster.desktop1.files <-> cluster.hub  style: synced  from: right  to: top
-link cluster.desktop2.files <-> cluster.hub  style: synced  from: left   to: top
-link cluster.laptop1.files  <-> cluster.hub  style: synced  from: right  to: bottom
-link cluster.laptop2.files  <-> cluster.hub  style: synced  from: left   to: bottom
+edge cluster.desktop1.files <-> cluster.hub  style: synced  from: right  to: top
+edge cluster.desktop2.files <-> cluster.hub  style: synced  from: left   to: top
+edge cluster.laptop1.files  <-> cluster.hub  style: synced  from: right  to: bottom
+edge cluster.laptop2.files  <-> cluster.hub  style: synced  from: left   to: bottom
 
 
 // --- The database dumps -----------------------------------------------------
 // Nothing says how wide the corridor between the server and the machines is.
 // Putting the dumps in between is what pushes those two apart.
 
-box dumps ""  right of server.docker  left of cluster (gap: wide)  level with server.docker  style: invisible
-box dumps.db1 "db dump / (app 1)"  style: dump
-box dumps.db2 "db dump / (app 2)"  style: dump
+node dumps ""  right of server.docker  left of cluster (gap: wide)  level with server.docker  style: invisible
+node dumps.db1 "db dump / (app 1)"  style: dump
+node dumps.db2 "db dump / (app 2)"  style: dump
 
 note dumps_note "Written by nightly cron job."  below dumps  gap: tight  wrap: 30
 
 
 // --- The server -------------------------------------------------------------
 
-box server         "Home Server"  left of cluster  icon: desktop  align: widths
-box server.mirror  "shared folder / mirror"  style: backup
-box server.deploy  "deploy dir"  below server.mirror  gap: normal
+node server         "Home Server"  left of cluster  icon: desktop  align: widths
+node server.mirror  "shared folder / mirror"  style: backup
+node server.deploy  "deploy dir"  below server.mirror  gap: normal
 
 // The cubes are nodes rather than ornament: two of them are where the dump
 // arrows start. The lower pair is centered under the upper three by naming two
 // targets and nothing else.
-box server.docker  "Docker" (at: bottom, align: center)  below server.deploy  gap: normal
-box server.docker.a    ""  shape: instance
-box server.docker.b    ""  right of server.docker.a  gap: tight  shape: instance
-box server.docker.db1  ""  right of server.docker.b  gap: tight  shape: instance
-box server.docker.c    ""  below server.docker.a and server.docker.b    gap: tight  shape: instance
-box server.docker.db2  ""  below server.docker.b and server.docker.db1  gap: tight  shape: instance
+node server.docker  "Docker" (at: bottom, align: center)  below server.deploy  gap: normal
+node server.docker.a    ""  shape: instance
+node server.docker.b    ""  right of server.docker.a  gap: tight  shape: instance
+node server.docker.db1  ""  right of server.docker.b  gap: tight  shape: instance
+node server.docker.c    ""  below server.docker.a and server.docker.b    gap: tight  shape: instance
+node server.docker.db2  ""  below server.docker.b and server.docker.db1  gap: tight  shape: instance
 
-link server.deploy -> server.docker  "compose up"
+edge server.deploy -> server.docker  "compose up"
 
-link server.docker.db1 -> dumps.db1  from: right  to: left
-link server.docker.db2 -> dumps.db2  from: right  to: left
+edge server.docker.db1 -> dumps.db1  from: right  to: left
+edge server.docker.db2 -> dumps.db2  from: right  to: left
 
 // The rclone lines run up the channel between the two left-hand machines, so
 // the dumps arrive through the middle of the cluster rather than across one.
-link dumps.db1 -> cluster.hub  "rclone"  between cluster.desktop1 and cluster.laptop1  from: right  to: left
-link dumps.db2 -> cluster.hub  "rclone"  between cluster.desktop1 and cluster.laptop1  from: right  to: left
+edge dumps.db1 -> cluster.hub  "rclone"  between cluster.desktop1 and cluster.laptop1  from: right  to: left
+edge dumps.db2 -> cluster.hub  "rclone"  between cluster.desktop1 and cluster.laptop1  from: right  to: left
 
-link cluster.desktop1.files -> server.mirror  "backup script"  style: backup  from: left  to: right
-link cluster.desktop1.files -> server.deploy  "deploy script"                 from: left  to: right
+edge cluster.desktop1.files -> server.mirror  "backup script"  style: backup  from: left  to: right
+edge cluster.desktop1.files -> server.deploy  "deploy script"                 from: left  to: right
 
 
 // --- The backup drive -------------------------------------------------------
 
-box drive          "External HD"  left of server  top level with server  icon: disk  align: widths
-box drive.mirror   "shared folder / backup"  style: backup
-box drive.archive  "archive"
+node drive          "External HD"  left of server  top level with server  icon: disk  align: widths
+node drive.mirror   "shared folder / backup"  style: backup
+node drive.archive  "archive"
 
-link server.mirror -> drive.mirror  style: backup  from: left  to: right
+edge server.mirror -> drive.mirror  style: backup  from: left  to: right
 
 note drive_note "Swapped with a second drive weekly."  left of drive.mirror  gap: tight  wrap: 22

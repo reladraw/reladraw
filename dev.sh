@@ -22,6 +22,10 @@ Commands:
   build                         Compile TypeScript (npx tsc)
   clean-build                   rm -rf dist and examples/out, then compile
   render <file> <out.svg>       Run the compiled CLI on a .reladraw file
+  try '<statements>'            Parse and render source given on the command
+                                 line, printing whatever the tool says about it.
+                                 For checking one statement, and especially for
+                                 reading an error message back in full.
   out <file>                    Render to examples/out/<basename>.svg and .png,
                                  both regenerated together so the PNG can never
                                  go stale against its SVG. The name comes from
@@ -77,9 +81,13 @@ Commands:
                                  holds the sources fixed to isolate the code, so
                                  it cannot see an edit to an example file; this
                                  is the other half.
-  boxes <file>                  Print the solved geometry of every node
-  overlaps <file>               List box pairs that share space (exit 1 if any)
+  nodes <file>                  Print the solved geometry of every node
+  overlaps <file>               List node pairs that share space (exit 1 if any)
   tokens <file>                 Print how the syntax scanner classifies each
+  blocks <file.md ...>          Parse every fenced diagram in a Markdown file
+                                 and report the ones the language will not
+                                 accept. SYNTAX.md, README.md and the skill are
+                                 the files this is for.
                                  line, and check the spans cover it exactly.
                                  The playground draws its coloring behind a
                                  transparent textarea, so a dropped character
@@ -206,6 +214,13 @@ case "$cmd" in
     out="${2:?output .svg path required}"
     node dist/cli.js "$in" -o "$out"
     ;;
+  try)
+    src="${1:?source text required}"
+    tmp="$(mktemp -t reladraw-try).reladraw"
+    printf '%s\n' "$src" > "$tmp"
+    node dist/cli.js "$tmp" -o "${tmp%.reladraw}.svg" && echo "parsed, no complaint"
+    rm -f "$tmp" "${tmp%.reladraw}.svg"
+    ;;
   out)
     in="${1:?input .reladraw path required}"
     base="$(basename "$in" .reladraw)"
@@ -328,11 +343,14 @@ case "$cmd" in
       echo "$out"
     fi
     ;;
-  boxes)
-    node tools/geometry.mjs boxes "${1:?input .reladraw path required}"
+  nodes)
+    node tools/geometry.mjs nodes "${1:?input .reladraw path required}"
     ;;
   overlaps)
     node tools/geometry.mjs overlaps "${1:?input .reladraw path required}"
+    ;;
+  blocks)
+    node tools/blocks.mjs "$@"
     ;;
   tokens)
     node tools/tokens.mjs "${1:?input .reladraw path required}"

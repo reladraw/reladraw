@@ -1,5 +1,5 @@
 // The picture from the README: where reladraw sits between auto-layout and
-// pixel-pushing. The middle box is what holds the two ends apart — delete its
+// pixel-pushing. The middle node is what holds the two ends apart — delete its
 // line and they close up.
 
 diagram background: #111111
@@ -7,17 +7,17 @@ diagram background: #111111
 style tool  fill: #191728  border: #4f5367
 style here  fill: #142814  border: #486544  subtext: muted
 
-box auto "Auto-layout / placement is / an output" (at: top, align: center)  subtext: muted  align: widths
-box auto.mermaid  "Mermaid.js"  style: tool
-box auto.graphviz "Graphviz"    below auto.mermaid (gap: tight)   left level with auto.mermaid  style: tool
-box auto.d2       "D2"          below auto.graphviz (gap: tight)  left level with auto.mermaid  style: tool
+node auto "Auto-layout / placement is / an output" (at: top, align: center)  subtext: muted  align: widths
+node auto.mermaid  "Mermaid.js"  style: tool
+node auto.graphviz "Graphviz"    below auto.mermaid (gap: tight)   left level with auto.mermaid  style: tool
+node auto.d2       "D2"          below auto.graphviz (gap: tight)  left level with auto.mermaid  style: tool
 
-box manual "Absolute / placement is / pixels" (at: top, align: center)  right of auto  level with auto  subtext: muted  align: widths
-box manual.drawio     "draw.io"     style: tool
-box manual.excalidraw "Excalidraw"  below manual.drawio (gap: tight)      left level with manual.drawio  style: tool
-box manual.figma      "Figma"       below manual.excalidraw (gap: tight)  left level with manual.drawio  style: tool
+node manual "Absolute / placement is / pixels" (at: top, align: center)  right of auto  level with auto  subtext: muted  align: widths
+node manual.drawio     "draw.io"     style: tool
+node manual.excalidraw "Excalidraw"  below manual.drawio (gap: tight)      left level with manual.drawio  style: tool
+node manual.figma      "Figma"       below manual.excalidraw (gap: tight)  left level with manual.drawio  style: tool
 
-box here "reladraw / placement is / stated"  right of auto  left of manual  level with auto  style: here
+node here "reladraw / placement is / stated"  right of auto  left of manual  level with auto  style: here
 
-link auto -> here    from: right  to: left
-link here -> manual  from: right  to: left
+edge auto -> here    from: right  to: left
+edge here -> manual  from: right  to: left

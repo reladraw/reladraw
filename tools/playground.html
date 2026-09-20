@@ -424,24 +424,24 @@
           <dl>
             <dt>Statements</dt>
             <dd>
-              <code>box <i>name</i> <i>["text"]</i> <i>[placements]</i> <i>[key: value …]</i></code><br />
+              <code>node <i>name</i> <i>["text"]</i> <i>[placements]</i> <i>[key: value …]</i></code><br />
               <code>note <i>name</i> "text" <i>placements</i></code><br />
-              <code>link <i>a</i> -&gt; <i>b</i> <i>["label"]</i> <i>[key: value …]</i></code>
+              <code>edge <i>a</i> -&gt; <i>b</i> <i>["text"]</i> <i>[key: value …]</i></code>
               &nbsp;<i>(<code>&lt;-</code> to write the target first, <code>&lt;-&gt;</code> for both ends)</i><br />
-              <code>deck <i>name</i> "label" <i>["label" …]</i></code><br />
+              <code>deck <i>name</i> "text" <i>["text" …]</i></code><br />
               <code>style <i>name</i> <i>key: value …</i></code><br />
               <code>diagram background: #111111</code>
             </dd>
 
             <dt>Labels</dt>
             <dd>
-              <code>box parser</code> — no text, so the box is labeled with its name.<br />
-              <code>box parser ""</code> — deliberately blank.<br />
+              <code>node parser</code> — no text, so the node takes its name as its text.<br />
+              <code>node parser ""</code> — deliberately blank.<br />
               <code>"two / lines"</code> — <code> / </code> with spaces either side breaks a line.
             </dd>
 
             <dt>Containment</dt>
-            <dd><code>box server.docker "Docker"</code> — a dotted name is a child. Declare the parent first. Unlabeled, it reads "docker".</dd>
+            <dd><code>node server.docker "Docker"</code> — a dotted name is a child. Declare the parent first. With no text of its own, it reads "docker".</dd>
 
             <dt>Placement</dt>
             <dd>
@@ -468,18 +468,18 @@
               <code>fill: #191728</code>
               <code>border: none</code>
               <code>text: #d9d9d9</code>
-              <code>line: #d2904e</code> <i>(a link)</i>
+              <code>line: #d2904e</code> <i>(an edge)</i>
               <code>subtext: muted</code><br />
               <code>size: small|normal|large</code>
-              <code>width: 24</code> <i>(characters, wraps the label)</i>
+              <code>wrap: 24</code> <i>(characters, folds the text)</i>
               <code>align: widths</code>
               <code>overlap: allow</code>
             </dd>
 
             <dt>Icons</dt>
             <dd>
-              <code>icon: <i>name</i></code> beside the label,
-              <code>shape: <i>name</i></code> instead of the box.
+              <code>icon: <i>name</i></code> beside the text,
+              <code>shape: <i>name</i></code> instead of the node.
               Names: <code>disk</code> <code>desktop</code> <code>laptop</code>
               <code>package</code> <code>cubes</code> <code>instance</code>
               <code>database</code>, plus <code>box</code> and <code>document</code> for shapes.
@@ -487,7 +487,7 @@
 
             <dt>Labels</dt>
             <dd>
-              <code>"Docker" (at: bottom, align: center)</code> on a container's label.
+              <code>"Docker" (at: bottom, align: center)</code> on a container's text.
               <code>" / "</code> in any text is a line break; <code>\/</code> is a literal slash.
             </dd>
 
@@ -525,15 +525,15 @@
         'use strict';
 
         // The first thing a visitor sees. No comments in it: every statement
-        // says where a box goes, which is the whole point, and a paragraph
+        // says where a node goes, which is the whole point, and a paragraph
         // explaining that in advance only gets in the way.
         var SEED = [
-          'box parser "Parser"',
-          'box renderer "Renderer"  right of parser',
-          'box resolver "Resolver"  right of parser  left of renderer  level with parser',
+          'node parser "Parser"',
+          'node renderer "Renderer"  right of parser',
+          'node resolver "Resolver"  right of parser  left of renderer  level with parser',
           '',
-          'link parser -> resolver    "statements"  from: right  to: left',
-          'link resolver -> renderer  "layout"      from: right  to: left',
+          'edge parser -> resolver    "statements"  from: right  to: left',
+          'edge resolver -> renderer  "layout"      from: right  to: left',
           '',
         ].join('\n');
 

@@ -1,36 +1,36 @@
-// A labeled link widens the gap it crosses.
+// An edge with text widens the gap it crosses.
 
 diagram background: #111111
 
-style box  fill: #191728  border: #4f5367
+style plain  fill: #191728  border: #4f5367
 
 // Nothing here says how far apart these two sit. The default gap is sized for
-// two boxes to breathe, not to hold a word, so the label opens it.
-box parser   "Parser"                     style: box
-box resolver "Resolver"  right of parser  style: box
-link parser -> resolver  "statements"  from: right  to: left
+// two nodes to breathe, not to hold a word, so the text opens it.
+node parser   "Parser"                     style: plain
+node resolver "Resolver"  right of parser  style: plain
+edge parser -> resolver  "statements"  from: right  to: left
 
-// The same two placements with nothing on the link, for comparison.
-box sink  "Sink"   below parser (gap: wide)  style: box
-box quiet "Quiet"  right of sink  level with sink       style: box
-link sink -> quiet  from: right  to: left
+// The same two placements with nothing on the edge, for comparison.
+node sink  "Sink"   below parser (gap: wide)  style: plain
+node quiet "Quiet"  right of sink  level with sink       style: plain
+edge sink -> quiet  from: right  to: left
 
-// Going downward the label is only a line deep, so it opens the gap by one line
+// Going downward the text is only a line deep, so it opens the gap by one line
 // and hangs out either side.
 //
-// Written with `<-`, which is the same link as `writer -> disk` and draws the
-// same picture. It just puts the box the line is about first.
-box writer "Writer"  right of resolver (gap: wide)  style: box
-box disk   "Disk"    below writer                  style: box
-link disk <- writer  "flushed to disk"  from: bottom  to: top
+// Written with `<-`, which is the same edge as `writer -> disk` and draws the
+// same picture. It just puts the node the line is about first.
+node writer "Writer"  right of resolver (gap: wide)  style: plain
+node disk   "Disk"    below writer                  style: plain
+edge disk <- writer  "flushed to disk"  from: bottom  to: top
 
-// Already wider than the label needs, so nothing moves.
-box roomy "Roomy"        below sink                                 style: box
-box spare "Plenty spare"  right of roomy (gap: wide)  level with roomy  style: box
-link roomy -> spare  "fits"  from: right  to: left
+// Already wider than the text needs, so nothing moves.
+node roomy "Roomy"        below sink                                 style: plain
+node spare "Plenty spare"  right of roomy (gap: wide)  level with roomy  style: plain
+edge roomy -> spare  "fits"  from: right  to: left
 
-// Corner to corner, so there is no single gap the label sits in and nothing is
+// Corner to corner, so there is no single gap the text sits in and nothing is
 // widened for it.
-box high "High"  right of writer (gap: wide)  style: box
-box low  "Low"   below high  right of high  style: box
-link high -> low  "diagonal"
+node high "High"  right of writer (gap: wide)  style: plain
+node low  "Low"   below high  right of high  style: plain
+edge high -> low  "diagonal"

@@ -6,19 +6,19 @@ diagram  background: #111111
 // anyone typing the word twice.
 style store  fill: #142814  border: #486544  icon: database
 
-box row1 ""  fill: none  border: none
-box row1.disk     "Spinning disk"     icon: disk
-box row1.desktop  "Workstation"       right of row1.disk     gap: tight  icon: desktop
-box row1.laptop   "Portable"          right of row1.desktop  gap: tight  icon: laptop
+node row1 ""  fill: none  border: none
+node row1.disk     "Spinning disk"     icon: disk
+node row1.desktop  "Workstation"       right of row1.disk     gap: tight  icon: desktop
+node row1.laptop   "Portable"          right of row1.desktop  gap: tight  icon: laptop
 
-box row2 ""  below row1  gap: tight  fill: none  border: none
-box row2.package  "Archive"           icon: package
-box row2.cubes    "Service instances" right of row2.package  gap: tight  icon: cubes
-box row2.db       "Records"           right of row2.cubes    gap: tight  style: store
+node row2 ""  below row1  gap: tight  fill: none  border: none
+node row2.package  "Archive"           icon: package
+node row2.cubes    "Service instances" right of row2.package  gap: tight  icon: cubes
+node row2.db       "Records"           right of row2.cubes    gap: tight  style: store
 
-// No label, so the box is just the icon and its padding.
-box bare ""  below row2  gap: tight  icon: disk
+// No text, so the node is just the icon and its padding.
+node bare ""  below row2  gap: tight  icon: disk
 
-// An icon is two lines of the label tall, so it shrinks and grows with the text.
-box small "Small text / and a small icon"  right of bare  gap: tight  size: small  icon: laptop
-box large "Large text / and a large icon"  right of small gap: tight  size: large  icon: laptop
+// An icon is two lines tall, so it shrinks and grows with the text beside it.
+node small "Small text / and a small icon"  right of bare  gap: tight  size: small  icon: laptop
+node large "Large text / and a large icon"  right of small gap: tight  size: large  icon: laptop

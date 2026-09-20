@@ -1,28 +1,28 @@
-// Gaps: on a placement, on a box, and what happens when both ends ask.
+// Gaps: on a placement, on a node, and what happens when both ends ask.
 
 diagram background: #111111
 
 style plain  fill: #191728  border: #4f5367
 
-box left_wall  "Left wall"   style: plain
-box right_wall "Right wall"  right of left_wall  style: plain
+node left_wall  "Left wall"   style: plain
+node right_wall "Right wall"  right of left_wall  style: plain
 
 // Both sides bind and they want different distances, so each placement carries
 // its own gap.
-box wedge "Wedged tight left, wide right"  right of left_wall (gap: tight)  left of right_wall (gap: wide)  level with left_wall  style: plain
+node wedge "Wedged tight left, wide right"  right of left_wall (gap: tight)  left of right_wall (gap: wide)  level with left_wall  style: plain
 
-// `gap:` on the box is the default for whatever the placements do not say.
-box stack "Node default is wide"  below wedge  right of left_wall (gap: tight)  gap: wide  style: plain
+// `gap:` on the node is the default for whatever the placements do not say.
+node stack "Node default is wide"  below wedge  right of left_wall (gap: tight)  gap: wide  style: plain
 
 // `none` is contact, and the other placement still keeps its distance.
-box shelf "Flat on the stack"  below stack (gap: none)  right of left_wall (gap: tight)  style: plain
+node shelf "Flat on the stack"  below stack (gap: none)  right of left_wall (gap: tight)  style: plain
 
-link left_wall -> wedge  from: right  to: left
-link wedge -> right_wall  from: right  to: left
+edge left_wall -> wedge  from: right  to: left
+edge wedge -> right_wall  from: right  to: left
 
-// A box's gap also reaches placements written against it. `island` names nobody
+// A node's gap also reaches placements written against it. `island` names nobody
 // and asks for wide, so both neighbors are held off at that distance. `west`
 // asks for tight and gets wide: a gap is a minimum, so the larger one holds.
-box island "States wide, names nobody"  below shelf  gap: wide  style: plain
-box east   "Takes the island's wide"    right of island  level with island  style: plain
-box west   "Asks tight, gets wide"      left of island   level with island  gap: tight  style: plain
+node island "States wide, names nobody"  below shelf  gap: wide  style: plain
+node east   "Takes the island's wide"    right of island  level with island  style: plain
+node west   "Asks tight, gets wide"      left of island   level with island  gap: tight  style: plain

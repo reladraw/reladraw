@@ -32,7 +32,7 @@ const EXPOSED = ['compile', 'SourceError', 'highlightLine'];
 // in the language is demonstrated by one of these files and by nothing else the
 // page can reach, so leaving them out makes the playground a five-line demo. The
 // list is stated rather than globbed: the order is the point (the benchmark
-// first, then placement, appearance, links), and a new file under examples/ is
+// first, then placement, appearance, edges), and a new file under examples/ is
 // not automatically something a stranger should be handed.
 const OFFERED = [
   'arch',

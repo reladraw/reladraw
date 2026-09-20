@@ -424,24 +424,24 @@
           <dl>
             <dt>Statements</dt>
             <dd>
-              <code>box <i>name</i> <i>["text"]</i> <i>[placements]</i> <i>[key: value …]</i></code><br />
+              <code>node <i>name</i> <i>["text"]</i> <i>[placements]</i> <i>[key: value …]</i></code><br />
               <code>note <i>name</i> "text" <i>placements</i></code><br />
-              <code>link <i>a</i> -&gt; <i>b</i> <i>["label"]</i> <i>[key: value …]</i></code>
+              <code>edge <i>a</i> -&gt; <i>b</i> <i>["text"]</i> <i>[key: value …]</i></code>
               &nbsp;<i>(<code>&lt;-</code> to write the target first, <code>&lt;-&gt;</code> for both ends)</i><br />
-              <code>deck <i>name</i> "label" <i>["label" …]</i></code><br />
+              <code>deck <i>name</i> "text" <i>["text" …]</i></code><br />
               <code>style <i>name</i> <i>key: value …</i></code><br />
               <code>diagram background: #111111</code>
             </dd>
 
             <dt>Labels</dt>
             <dd>
-              <code>box parser</code> — no text, so the box is labeled with its name.<br />
-              <code>box parser ""</code> — deliberately blank.<br />
+              <code>node parser</code> — no text, so the node takes its name as its text.<br />
+              <code>node parser ""</code> — deliberately blank.<br />
               <code>"two / lines"</code> — <code> / </code> with spaces either side breaks a line.
             </dd>
 
             <dt>Containment</dt>
-            <dd><code>box server.docker "Docker"</code> — a dotted name is a child. Declare the parent first. Unlabeled, it reads "docker".</dd>
+            <dd><code>node server.docker "Docker"</code> — a dotted name is a child. Declare the parent first. With no text of its own, it reads "docker".</dd>
 
             <dt>Placement</dt>
             <dd>
@@ -468,18 +468,18 @@
               <code>fill: #191728</code>
               <code>border: none</code>
               <code>text: #d9d9d9</code>
-              <code>line: #d2904e</code> <i>(a link)</i>
+              <code>line: #d2904e</code> <i>(an edge)</i>
               <code>subtext: muted</code><br />
               <code>size: small|normal|large</code>
-              <code>width: 24</code> <i>(characters, wraps the label)</i>
+              <code>wrap: 24</code> <i>(characters, folds the text)</i>
               <code>align: widths</code>
               <code>overlap: allow</code>
             </dd>
 
             <dt>Icons</dt>
             <dd>
-              <code>icon: <i>name</i></code> beside the label,
-              <code>shape: <i>name</i></code> instead of the box.
+              <code>icon: <i>name</i></code> beside the text,
+              <code>shape: <i>name</i></code> instead of the node.
               Names: <code>disk</code> <code>desktop</code> <code>laptop</code>
               <code>package</code> <code>cubes</code> <code>instance</code>
               <code>database</code>, plus <code>box</code> and <code>document</code> for shapes.
@@ -487,7 +487,7 @@
 
             <dt>Labels</dt>
             <dd>
-              <code>"Docker" (at: bottom, align: center)</code> on a container's label.
+              <code>"Docker" (at: bottom, align: center)</code> on a container's text.
               <code>" / "</code> in any text is a line break; <code>\/</code> is a literal slash.
             </dd>
 
@@ -518,7 +518,7 @@
     </main>
 
     <script>
-globalThis.reladrawExamples = [{"name":"arch","source":"// Transcribed from a draw.io diagram.\n\n// --- Styles -----------------------------------------------------------------\nstyle synced     fill: #142814  border: #486544  line: #486544  subtext: muted\nstyle backup     border: #d2904e  line: #d2904e\nstyle dump       fill: #460000  border: #4e4e4e  shape: document\nstyle invisible  fill: none  border: none\n\ndiagram  background: #111111\n\n\n// --- The hub and its four machines ------------------------------------------\n// The cluster is wrapped in an invisible container so things outside it can be\n// placed against the whole cluster rather than against the hub alone.\n\nbox cluster \"\"  style: invisible\n\nbox cluster.hub \"Cloud sync\"  icon: package  style: synced\n\nbox cluster.desktop1       \"Desktop 1 / Linux\"    above-left of cluster.hub   gap: tight  icon: desktop\nbox cluster.desktop1.files \"shared folder / synced\"  style: synced\n\nbox cluster.desktop2       \"Desktop 2 / Windows\"  above-right of cluster.hub  gap: tight  icon: desktop\nbox cluster.desktop2.files \"shared folder / synced\"  style: synced\n\nbox cluster.laptop1        \"Laptop 1 / macOS\"     below-left of cluster.hub   gap: tight  icon: laptop\nbox cluster.laptop1.files  \"shared folder / synced\"  style: synced\n\nbox cluster.laptop2        \"Laptop 2 / macOS\"     below-right of cluster.hub  gap: tight  icon: laptop\nbox cluster.laptop2.files  \"shared folder / synced\"  style: synced\n\nlink cluster.desktop1.files <-> cluster.hub  style: synced  from: right  to: top\nlink cluster.desktop2.files <-> cluster.hub  style: synced  from: left   to: top\nlink cluster.laptop1.files  <-> cluster.hub  style: synced  from: right  to: bottom\nlink cluster.laptop2.files  <-> cluster.hub  style: synced  from: left   to: bottom\n\n\n// --- The database dumps -----------------------------------------------------\n// Nothing says how wide the corridor between the server and the machines is.\n// Putting the dumps in between is what pushes those two apart.\n\nbox dumps \"\"  right of server.docker  left of cluster (gap: wide)  level with server.docker  style: invisible\nbox dumps.db1 \"db dump / (app 1)\"  style: dump\nbox dumps.db2 \"db dump / (app 2)\"  style: dump\n\nnote dumps_note \"Written by nightly cron job.\"  below dumps  gap: tight  wrap: 30\n\n\n// --- The server -------------------------------------------------------------\n\nbox server         \"Home Server\"  left of cluster  icon: desktop  align: widths\nbox server.mirror  \"shared folder / mirror\"  style: backup\nbox server.deploy  \"deploy dir\"  below server.mirror  gap: normal\n\n// The cubes are nodes rather than ornament: two of them are where the dump\n// arrows start. The lower pair is centered under the upper three by naming two\n// targets and nothing else.\nbox server.docker  \"Docker\" (at: bottom, align: center)  below server.deploy  gap: normal\nbox server.docker.a    \"\"  shape: instance\nbox server.docker.b    \"\"  right of server.docker.a  gap: tight  shape: instance\nbox server.docker.db1  \"\"  right of server.docker.b  gap: tight  shape: instance\nbox server.docker.c    \"\"  below server.docker.a and server.docker.b    gap: tight  shape: instance\nbox server.docker.db2  \"\"  below server.docker.b and server.docker.db1  gap: tight  shape: instance\n\nlink server.deploy -> server.docker  \"compose up\"\n\nlink server.docker.db1 -> dumps.db1  from: right  to: left\nlink server.docker.db2 -> dumps.db2  from: right  to: left\n\n// The rclone lines run up the channel between the two left-hand machines, so\n// the dumps arrive through the middle of the cluster rather than across one.\nlink dumps.db1 -> cluster.hub  \"rclone\"  between cluster.desktop1 and cluster.laptop1  from: right  to: left\nlink dumps.db2 -> cluster.hub  \"rclone\"  between cluster.desktop1 and cluster.laptop1  from: right  to: left\n\nlink cluster.desktop1.files -> server.mirror  \"backup script\"  style: backup  from: left  to: right\nlink cluster.desktop1.files -> server.deploy  \"deploy script\"                 from: left  to: right\n\n\n// --- The backup drive -------------------------------------------------------\n\nbox drive          \"External HD\"  left of server  top level with server  icon: disk  align: widths\nbox drive.mirror   \"shared folder / backup\"  style: backup\nbox drive.archive  \"archive\"\n\nlink server.mirror -> drive.mirror  style: backup  from: left  to: right\n\nnote drive_note \"Swapped with a second drive weekly.\"  left of drive.mirror  gap: tight  wrap: 22\n"},{"name":"regions","source":"// Naming several targets places a box against the region that bounds them all.\n\nbox one    \"first\"\nbox two    \"second\"                 below one\nbox three  \"third with a longer label\"  below two\n\n// A direction clears the furthest of them. This note says nothing about its own\n// vertical position — that comes from the region.\nnote spans  \"level with all three, and clear of the widest\"  right of one and three  wrap: 24  gap: wide\n\n// An alignment uses the region as a position. \"top\" is its top edge, not its middle.\nnote tops   \"top level with the second box\"                  right of two  top level with two  wrap: 20  gap: tight\n\nbox beside  \"centered on the top two\"  right of spans  level with one and two  gap: wide\n"},{"name":"gaps","source":"// Gaps: on a placement, on a box, and what happens when both ends ask.\n\ndiagram background: #111111\n\nstyle plain  fill: #191728  border: #4f5367\n\nbox left_wall  \"Left wall\"   style: plain\nbox right_wall \"Right wall\"  right of left_wall  style: plain\n\n// Both sides bind and they want different distances, so each placement carries\n// its own gap.\nbox wedge \"Wedged tight left, wide right\"  right of left_wall (gap: tight)  left of right_wall (gap: wide)  level with left_wall  style: plain\n\n// `gap:` on the box is the default for whatever the placements do not say.\nbox stack \"Node default is wide\"  below wedge  right of left_wall (gap: tight)  gap: wide  style: plain\n\n// `none` is contact, and the other placement still keeps its distance.\nbox shelf \"Flat on the stack\"  below stack (gap: none)  right of left_wall (gap: tight)  style: plain\n\nlink left_wall -> wedge  from: right  to: left\nlink wedge -> right_wall  from: right  to: left\n\n// A box's gap also reaches placements written against it. `island` names nobody\n// and asks for wide, so both neighbors are held off at that distance. `west`\n// asks for tight and gets wide: a gap is a minimum, so the larger one holds.\nbox island \"States wide, names nobody\"  below shelf  gap: wide  style: plain\nbox east   \"Takes the island's wide\"    right of island  level with island  style: plain\nbox west   \"Asks tight, gets wide\"      left of island   level with island  gap: tight  style: plain\n"},{"name":"snug","source":"// A box sits as close to what it names as its placements allow.\n\nbox anchor \"anchor\"\nbox far    \"far\"   right of anchor\nbox near   \"near\"  right of far\n\nnote trailing \"one tight gap from near\"  left of near  below anchor  gap: tight  overlap: allow\n"},{"name":"separation","source":"// Boxes never overlap. Nothing here says the wide box has to clear \"left\".\n//\n// Which way it moves is read off the file: \"middle\" is right of \"left\", so\n// rightward is the way that contradicts nothing written. And \"left\" is tall, so\n// the two overlap far less horizontally than vertically.\n\nbox left    \"L/L/L/L/L/L/L/L/L/L/L/L/L/L\"\nbox right   \"R\"                             right of left\nbox middle  \"m\"   right of left  left of right  level with left\nbox wide    \"a wide box that overruns both\"    below middle  gap: tight\n"},{"name":"shapes","source":"// What a node is drawn as. `shape:` is either another outline for the box or a\n// glyph standing where the box would be.\n\ndiagram  background: #111111\n\nstyle artifact  fill: #460000  border: #4e4e4e  shape: document\n\n// The fold is a fixed size rather than a fraction of the box, so it looks the\n// same on all three of these.\nbox narrow \"Report\"  style: artifact\nbox medium \"Nightly database dump\"        right of narrow  gap: tight  style: artifact\nbox wide   \"A very much longer file name than either of the other two\"  right of medium  gap: tight  style: artifact\n\n// A glyph has no outline, no fill and no padding. The label goes underneath.\nbox services \"\"  below narrow  gap: normal  fill: none  border: none\nbox services.web    \"web\"                          shape: instance\nbox services.api    \"api\"     right of services.web  gap: tight  shape: instance\nbox services.worker \"worker\"  right of services.api  gap: tight  shape: instance\n\n// Unlabeled, so the node is exactly the glyph.\nbox bare1 \"\"  below services (gap: normal)  shape: instance\nbox bare2 \"\"  below bare1     gap: tight  shape: instance\n\n// A glyph is an ordinary node, so it takes links and sides like any other. That\n// is what it buys over an icon, which cannot be the end of an arrow.\nbox sink \"collector\"  right of bare1 and bare2 (gap: wide)  level with bare1, bare2\nlink bare1 -> sink  from: right  to: left\nlink bare2 -> sink  from: right  to: left\n\n// Any icon works as a body, not just the cube.\nbox store \"\"  below bare2 (gap: normal)  shape: database\nbox drive \"\"  right of store  gap: tight  shape: disk\n\n// `at: bottom` puts the label under the contents and `align: center` centers\n// it; neither implies the other. The lower cube is centered under the upper\n// pair by naming both of them and nothing else.\nbox pool \"Worker pool\" (at: bottom, align: center)  right of store and drive (gap: wide)  level with store, drive \nbox pool.one    \"\"  shape: instance\nbox pool.two    \"\"  right of pool.one  gap: tight  shape: instance\nbox pool.three  \"\"  below pool.one and pool.two  gap: tight  shape: instance\n"},{"name":"icons","source":"// The seven icons, and the ways to use one.\n\ndiagram  background: #111111\n\n// A style can carry an icon, so every store in a diagram looks alike without\n// anyone typing the word twice.\nstyle store  fill: #142814  border: #486544  icon: database\n\nbox row1 \"\"  fill: none  border: none\nbox row1.disk     \"Spinning disk\"     icon: disk\nbox row1.desktop  \"Workstation\"       right of row1.disk     gap: tight  icon: desktop\nbox row1.laptop   \"Portable\"          right of row1.desktop  gap: tight  icon: laptop\n\nbox row2 \"\"  below row1  gap: tight  fill: none  border: none\nbox row2.package  \"Archive\"           icon: package\nbox row2.cubes    \"Service instances\" right of row2.package  gap: tight  icon: cubes\nbox row2.db       \"Records\"           right of row2.cubes    gap: tight  style: store\n\n// No label, so the box is just the icon and its padding.\nbox bare \"\"  below row2  gap: tight  icon: disk\n\n// An icon is two lines of the label tall, so it shrinks and grows with the text.\nbox small \"Small text / and a small icon\"  right of bare  gap: tight  size: small  icon: laptop\nbox large \"Large text / and a large icon\"  right of small gap: tight  size: large  icon: laptop\n"},{"name":"labels","source":"// A labeled link widens the gap it crosses.\n\ndiagram background: #111111\n\nstyle box  fill: #191728  border: #4f5367\n\n// Nothing here says how far apart these two sit. The default gap is sized for\n// two boxes to breathe, not to hold a word, so the label opens it.\nbox parser   \"Parser\"                     style: box\nbox resolver \"Resolver\"  right of parser  style: box\nlink parser -> resolver  \"statements\"  from: right  to: left\n\n// The same two placements with nothing on the link, for comparison.\nbox sink  \"Sink\"   below parser (gap: wide)  style: box\nbox quiet \"Quiet\"  right of sink  level with sink       style: box\nlink sink -> quiet  from: right  to: left\n\n// Going downward the label is only a line deep, so it opens the gap by one line\n// and hangs out either side.\n//\n// Written with `<-`, which is the same link as `writer -> disk` and draws the\n// same picture. It just puts the box the line is about first.\nbox writer \"Writer\"  right of resolver (gap: wide)  style: box\nbox disk   \"Disk\"    below writer                  style: box\nlink disk <- writer  \"flushed to disk\"  from: bottom  to: top\n\n// Already wider than the label needs, so nothing moves.\nbox roomy \"Roomy\"        below sink                                 style: box\nbox spare \"Plenty spare\"  right of roomy (gap: wide)  level with roomy  style: box\nlink roomy -> spare  \"fits\"  from: right  to: left\n\n// Corner to corner, so there is no single gap the label sits in and nothing is\n// widened for it.\nbox high \"High\"  right of writer (gap: wide)  style: box\nbox low  \"Low\"   below high  right of high  style: box\nlink high -> low  \"diagonal\"\n"},{"name":"lanes","source":"// Several links between the same two sides nest instead of crossing. The lanes\n// are as wide as the labels riding in them.\n\ndiagram background: #111111\n\nstyle box  fill: #191728  border: #4f5367\n\n// A reciprocal pair around a corner. Further left along Gateway's bottom is\n// further down Queue's left, so the order reverses between the two ends.\nbox gateway \"Gateway\"  style: box\nbox queue   \"Queue\"    below gateway  right of gateway (gap: wide)  style: box\nlink gateway -> queue  \"publishes messages\"  from: bottom  to: left\nlink queue -> gateway  \"receives messages\"   from: left    to: bottom\n\n// Two edges facing each other, where the order runs the same way at both ends.\nbox client \"Client\"  below queue (gap: wide)  left of queue  style: box\nbox server \"Server\"  right of client (gap: wide)  level with client  style: box\nlink client -> server  \"request\"   from: right  to: left\nlink server -> client  \"response\"  from: left   to: right\n\n// Five lanes down a vertical run. The labels all sit at the same height, so the\n// only way they clear each other is sideways and a lane has to be a whole label\n// wide. These two boxes are wide enough for five of them.\nbox fan  \"Fan of five, spread wide\"  below client (gap: wide)  left of client  style: box\nbox hub  \"Hub of the same five\"     below fan (gap: wide)  style: box\nlink fan -> hub  \"one\"    from: bottom  to: top\nlink fan -> hub  \"two\"    from: bottom  to: top\nlink fan -> hub  \"three\"  from: bottom  to: top\nlink fan -> hub  \"four\"   from: bottom  to: top\nlink fan -> hub  \"five\"   from: bottom  to: top\n\n// Two links pointing the same way. Nothing tells them apart, so the order they\n// are written in decides. Swap these two lines and the labels swap lanes.\nbox left_wall  \"Producer\"  below hub (gap: wide)  left of hub  style: box\nbox right_wall \"Consumer\"  right of left_wall (gap: wide)  level with left_wall  style: box\nlink left_wall -> right_wall  \"bulk\"     from: right  to: left\nlink left_wall -> right_wall  \"control\"  from: right  to: left\n\n// Sharing one side only is not a bundle. The far ends differ, and that is\n// enough to order them.\nbox spoke \"Spoke\"  below right_wall (gap: wide)  style: box\nbox up    \"Up\"     above spoke  right of spoke (gap: wide)  style: box\nbox down  \"Down\"   below spoke  right of spoke (gap: wide)  style: box\nlink spoke -> up    from: right  to: left\nlink spoke -> down  from: right  to: left\n\n// More links than the two edges can hold. The arrowheads squeeze together\n// because there is nowhere further along an edge to go, and each line makes up\n// the shortfall by bowing out in the middle, where the labels ride.\nbox narrow \"Narrow\"  below spoke (gap: wide)  left of spoke  style: box\nbox also   \"Also\"    right of narrow (gap: wide)  level with narrow  style: box\nlink narrow -> also  \"first\"   from: right  to: left\nlink narrow -> also  \"second\"  from: right  to: left\nlink narrow -> also  \"third\"   from: right  to: left\nlink narrow -> also  \"fourth\"  from: right  to: left\nlink narrow -> also  \"fifth\"   from: right  to: left\n"},{"name":"coincident","source":"// Several links between the same two boxes with no side named anywhere. Each\n// line is shifted sideways off the one a single link would draw, so they stay\n// parallel and each end lands wherever its own line crosses the border.\n\ndiagram background: #111111\n\nstyle box  fill: #191728  border: #4f5367\n\n// Level boxes, so the run is horizontal and the lanes fan out vertically.\nbox a \"A\"  style: box\nbox b \"B\"  right of a (gap: wide)  level with a  style: box\nlink a -> b  \"first\"\nlink a -> b  \"second\"\nlink a -> b  \"third\"\n\n// A perfect diagonal, where the single line would leave through the corner\n// exactly. These two straddle it, one point on each of the edges meeting there.\nbox low  \"Low\"   below a (gap: wide)  left of a  style: box\nbox high \"High\"  above low  right of low (gap: wide)  style: box\nlink low -> high   \"up\"\nlink high -> low   \"down\"\n\n// A near diagonal, where the crossing point sits on one edge but close to the\n// corner.\nbox near \"Near\"  below low (gap: wide)  style: box\nbox far  \"Far\"   right of near (gap: wide)  above near  style: box\nlink near -> far  \"one\"\nlink near -> far  \"two\"\n\n// A lone link is in no group and does not move.\nbox solo  \"Solo\"   below near (gap: wide)  style: box\nbox alone \"Alone\"  right of solo (gap: wide)  level with solo  style: box\nlink solo -> alone  \"by itself\"\n\n// Naming a side on either end takes a link out of the group.\nbox named \"Named\"  below solo (gap: wide)  style: box\nbox other \"Other\"  right of named (gap: wide)  level with named  style: box\nlink named -> other  \"free\"\nlink named -> other  \"free too\"\nlink named -> other  \"top\"  from: top  to: top\n\n// More than the edges can hold. The ends squeeze together and each line bows\n// out in the middle to make up what its ends could not give it, so the labels\n// still come apart. The middle line has no shortfall and stays straight.\nbox many \"Many\"  below named (gap: wide)  style: box\nbox one  \"One\"   right of many (gap: wide)  level with many  style: box\nlink many -> one  \"first\"\nlink many -> one  \"second\"\nlink many -> one  \"third\"\nlink many -> one  \"fourth\"\nlink many -> one  \"fifth\"\n\n// The same on a vertical run, where the labels sit at one height and a lane is\n// a whole label wide.\nbox top    \"Top\"     below many (gap: wide)  style: box\nbox bottom \"Bottom\"  below top (gap: wide)  style: box\nlink top -> bottom  \"alpha\"\nlink top -> bottom  \"beta\"\nlink top -> bottom  \"gamma\"\n"},{"name":"corridors","source":"// `between a and b` sends a link through the gap between two named things, for\n// the stretch where it is passing them. Before and after, it goes wherever its\n// ends take it.\n\ndiagram background: #111111\n\nstyle channel  fill: #191920  border: #25242f\n\n// North and South are apart vertically, so that is the gap. Both links start\n// well to the left, climb into the channel, run along it and leave for East.\n// They share it, so they take a lane each.\n\nbox west   \"West\"\nbox lower  \"Lower\"   below west     gap: tight\nbox north  \"North\"   right of west  gap: wide   style: channel\nbox south  \"South\"   below north    gap: wide   style: channel\nbox east   \"East\"    right of north and south  level with west  gap: wide\n\nlink west  -> east  \"over\"   between north and south  from: right  to: left\nlink lower -> east  \"under\"  between north and south  from: right  to: left\n\n// Port and Starboard are apart horizontally, so here the line runs down the gap\n// instead. This link names no sides: the open end aims at the channel rather\n// than at the far box, so it leaves Bow already heading for the gap.\n\nbox bow        \"Bow\"        below lower  gap: wide\nbox port       \"Port\"       below bow    gap: wide       style: channel\nbox starboard  \"Starboard\"  right of port  level with port  gap: wide  style: channel\nbox stern      \"Stern\"      below port   gap: wide\n\nlink bow -> stern  \"down\"  between port and starboard\n\n// The same channel travelled the other way. No label on this one, so its lane\n// needs only the room two arrows need.\n\nlink stern -> bow  between port and starboard  from: top  to: bottom\n\n// High and Low sit diagonally, so there are two gaps between them and the file\n// has to say which. `vertically` is the gap you measure with a vertical ruler —\n// under High, over Low — so a line running along it travels sideways.\n\nbox far   \"Far\"    below stern  gap: wide\nbox high  \"High\"   right of far  gap: wide  style: channel\nbox low   \"Low\"    below-right of high  gap: wide  style: channel\nbox near  \"Near\"   right of low  level with high  gap: wide\n\nlink far -> near  \"threaded\"  between high and low vertically\n"},{"name":"overhang","source":"// Links that leave the area the boxes cover. The page grows to hold them: the\n// boxes here cover 378x230 and the page comes out 428x312.\n\ndiagram background: #111111\n\nstyle box  fill: #191728  border: #4f5367\n\nbox a \"A\"                            style: box\nbox b \"B\"  right of a  (gap: wide)   style: box\nbox c \"C\"  right of b                style: box\n\nbox d \"D\"  below a and c             style: box\n\n// A long arch over everything, with the label at the top of it.\nlink a -> b  \"over the top\"  from: top  to: top\n\n// The same shape across a narrow gap.\nlink b -> c  from: top  to: top\n\n// Out the left and back into the bottom, so the loop hangs off the left edge.\nlink d -> a  \"round the side\"  from: left  to: left\n\n// And one under the bottom row.\nlink a -> d  from: bottom  to: bottom\n"}];
+globalThis.reladrawExamples = [{"name":"arch","source":"// Transcribed from a draw.io diagram.\n\n// --- Styles -----------------------------------------------------------------\nstyle synced     fill: #142814  border: #486544  line: #486544  subtext: muted\nstyle backup     border: #d2904e  line: #d2904e\nstyle dump       fill: #460000  border: #4e4e4e  shape: document\nstyle invisible  fill: none  border: none\n\ndiagram  background: #111111\n\n\n// --- The hub and its four machines ------------------------------------------\n// The cluster is wrapped in an invisible container so things outside it can be\n// placed against the whole cluster rather than against the hub alone.\n\nnode cluster \"\"  style: invisible\n\nnode cluster.hub \"Cloud sync\"  icon: package  style: synced\n\nnode cluster.desktop1       \"Desktop 1 / Linux\"    above-left of cluster.hub   gap: tight  icon: desktop\nnode cluster.desktop1.files \"shared folder / synced\"  style: synced\n\nnode cluster.desktop2       \"Desktop 2 / Windows\"  above-right of cluster.hub  gap: tight  icon: desktop\nnode cluster.desktop2.files \"shared folder / synced\"  style: synced\n\nnode cluster.laptop1        \"Laptop 1 / macOS\"     below-left of cluster.hub   gap: tight  icon: laptop\nnode cluster.laptop1.files  \"shared folder / synced\"  style: synced\n\nnode cluster.laptop2        \"Laptop 2 / macOS\"     below-right of cluster.hub  gap: tight  icon: laptop\nnode cluster.laptop2.files  \"shared folder / synced\"  style: synced\n\nedge cluster.desktop1.files <-> cluster.hub  style: synced  from: right  to: top\nedge cluster.desktop2.files <-> cluster.hub  style: synced  from: left   to: top\nedge cluster.laptop1.files  <-> cluster.hub  style: synced  from: right  to: bottom\nedge cluster.laptop2.files  <-> cluster.hub  style: synced  from: left   to: bottom\n\n\n// --- The database dumps -----------------------------------------------------\n// Nothing says how wide the corridor between the server and the machines is.\n// Putting the dumps in between is what pushes those two apart.\n\nnode dumps \"\"  right of server.docker  left of cluster (gap: wide)  level with server.docker  style: invisible\nnode dumps.db1 \"db dump / (app 1)\"  style: dump\nnode dumps.db2 \"db dump / (app 2)\"  style: dump\n\nnote dumps_note \"Written by nightly cron job.\"  below dumps  gap: tight  wrap: 30\n\n\n// --- The server -------------------------------------------------------------\n\nnode server         \"Home Server\"  left of cluster  icon: desktop  align: widths\nnode server.mirror  \"shared folder / mirror\"  style: backup\nnode server.deploy  \"deploy dir\"  below server.mirror  gap: normal\n\n// The cubes are nodes rather than ornament: two of them are where the dump\n// arrows start. The lower pair is centered under the upper three by naming two\n// targets and nothing else.\nnode server.docker  \"Docker\" (at: bottom, align: center)  below server.deploy  gap: normal\nnode server.docker.a    \"\"  shape: instance\nnode server.docker.b    \"\"  right of server.docker.a  gap: tight  shape: instance\nnode server.docker.db1  \"\"  right of server.docker.b  gap: tight  shape: instance\nnode server.docker.c    \"\"  below server.docker.a and server.docker.b    gap: tight  shape: instance\nnode server.docker.db2  \"\"  below server.docker.b and server.docker.db1  gap: tight  shape: instance\n\nedge server.deploy -> server.docker  \"compose up\"\n\nedge server.docker.db1 -> dumps.db1  from: right  to: left\nedge server.docker.db2 -> dumps.db2  from: right  to: left\n\n// The rclone lines run up the channel between the two left-hand machines, so\n// the dumps arrive through the middle of the cluster rather than across one.\nedge dumps.db1 -> cluster.hub  \"rclone\"  between cluster.desktop1 and cluster.laptop1  from: right  to: left\nedge dumps.db2 -> cluster.hub  \"rclone\"  between cluster.desktop1 and cluster.laptop1  from: right  to: left\n\nedge cluster.desktop1.files -> server.mirror  \"backup script\"  style: backup  from: left  to: right\nedge cluster.desktop1.files -> server.deploy  \"deploy script\"                 from: left  to: right\n\n\n// --- The backup drive -------------------------------------------------------\n\nnode drive          \"External HD\"  left of server  top level with server  icon: disk  align: widths\nnode drive.mirror   \"shared folder / backup\"  style: backup\nnode drive.archive  \"archive\"\n\nedge server.mirror -> drive.mirror  style: backup  from: left  to: right\n\nnote drive_note \"Swapped with a second drive weekly.\"  left of drive.mirror  gap: tight  wrap: 22\n"},{"name":"regions","source":"// Naming several targets places a node against the region that bounds them all.\n\nnode one    \"first\"\nnode two    \"second\"                 below one\nnode three  \"third with a longer label\"  below two\n\n// A direction clears the furthest of them. This note says nothing about its own\n// vertical position — that comes from the region.\nnote spans  \"level with all three, and clear of the widest\"  right of one and three  wrap: 24  gap: wide\n\n// An alignment uses the region as a position. \"top\" is its top edge, not its middle.\nnote tops   \"top level with the second box\"                  right of two  top level with two  wrap: 20  gap: tight\n\nnode beside  \"centered on the top two\"  right of spans  level with one and two  gap: wide\n"},{"name":"gaps","source":"// Gaps: on a placement, on a node, and what happens when both ends ask.\n\ndiagram background: #111111\n\nstyle plain  fill: #191728  border: #4f5367\n\nnode left_wall  \"Left wall\"   style: plain\nnode right_wall \"Right wall\"  right of left_wall  style: plain\n\n// Both sides bind and they want different distances, so each placement carries\n// its own gap.\nnode wedge \"Wedged tight left, wide right\"  right of left_wall (gap: tight)  left of right_wall (gap: wide)  level with left_wall  style: plain\n\n// `gap:` on the node is the default for whatever the placements do not say.\nnode stack \"Node default is wide\"  below wedge  right of left_wall (gap: tight)  gap: wide  style: plain\n\n// `none` is contact, and the other placement still keeps its distance.\nnode shelf \"Flat on the stack\"  below stack (gap: none)  right of left_wall (gap: tight)  style: plain\n\nedge left_wall -> wedge  from: right  to: left\nedge wedge -> right_wall  from: right  to: left\n\n// A node's gap also reaches placements written against it. `island` names nobody\n// and asks for wide, so both neighbors are held off at that distance. `west`\n// asks for tight and gets wide: a gap is a minimum, so the larger one holds.\nnode island \"States wide, names nobody\"  below shelf  gap: wide  style: plain\nnode east   \"Takes the island's wide\"    right of island  level with island  style: plain\nnode west   \"Asks tight, gets wide\"      left of island   level with island  gap: tight  style: plain\n"},{"name":"snug","source":"// A node sits as close to what it names as its placements allow.\n\nnode anchor \"anchor\"\nnode far    \"far\"   right of anchor\nnode near   \"near\"  right of far\n\nnote trailing \"one tight gap from near\"  left of near  below anchor  gap: tight  overlap: allow\n"},{"name":"separation","source":"// Nodes never overlap. Nothing here says the wide node has to clear \"left\".\n//\n// Which way it moves is read off the file: \"middle\" is right of \"left\", so\n// rightward is the way that contradicts nothing written. And \"left\" is tall, so\n// the two overlap far less horizontally than vertically.\n\nnode left    \"L/L/L/L/L/L/L/L/L/L/L/L/L/L\"\nnode right   \"R\"                             right of left\nnode middle  \"m\"   right of left  left of right  level with left\nnode wide    \"a wide box that overruns both\"    below middle  gap: tight\n"},{"name":"shapes","source":"// What a node is drawn as. `shape:` is either another outline for the box or a\n// glyph standing where the box would be.\n\ndiagram  background: #111111\n\nstyle artifact  fill: #460000  border: #4e4e4e  shape: document\n\n// The fold is a fixed size rather than a fraction of the box, so it looks the\n// same on all three of these.\nnode narrow \"Report\"  style: artifact\nnode medium \"Nightly database dump\"        right of narrow  gap: tight  style: artifact\nnode wide   \"A very much longer file name than either of the other two\"  right of medium  gap: tight  style: artifact\n\n// A glyph has no outline, no fill and no padding. The text goes underneath.\nnode services \"\"  below narrow  gap: normal  fill: none  border: none\nnode services.web    \"web\"                          shape: instance\nnode services.api    \"api\"     right of services.web  gap: tight  shape: instance\nnode services.worker \"worker\"  right of services.api  gap: tight  shape: instance\n\n// No text, so the node is exactly the glyph.\nnode bare1 \"\"  below services (gap: normal)  shape: instance\nnode bare2 \"\"  below bare1     gap: tight  shape: instance\n\n// A glyph is an ordinary node, so it takes edges and sides like any other. That\n// is what it buys over an icon, which cannot be the end of an arrow.\nnode sink \"collector\"  right of bare1 and bare2 (gap: wide)  level with bare1, bare2\nedge bare1 -> sink  from: right  to: left\nedge bare2 -> sink  from: right  to: left\n\n// Any icon works as a body, not just the cube.\nnode store \"\"  below bare2 (gap: normal)  shape: database\nnode drive \"\"  right of store  gap: tight  shape: disk\n\n// `at: bottom` puts the text under the contents and `align: center` centers\n// it; neither implies the other. The lower cube is centered under the upper\n// pair by naming both of them and nothing else.\nnode pool \"Worker pool\" (at: bottom, align: center)  right of store and drive (gap: wide)  level with store, drive \nnode pool.one    \"\"  shape: instance\nnode pool.two    \"\"  right of pool.one  gap: tight  shape: instance\nnode pool.three  \"\"  below pool.one and pool.two  gap: tight  shape: instance\n"},{"name":"icons","source":"// The seven icons, and the ways to use one.\n\ndiagram  background: #111111\n\n// A style can carry an icon, so every store in a diagram looks alike without\n// anyone typing the word twice.\nstyle store  fill: #142814  border: #486544  icon: database\n\nnode row1 \"\"  fill: none  border: none\nnode row1.disk     \"Spinning disk\"     icon: disk\nnode row1.desktop  \"Workstation\"       right of row1.disk     gap: tight  icon: desktop\nnode row1.laptop   \"Portable\"          right of row1.desktop  gap: tight  icon: laptop\n\nnode row2 \"\"  below row1  gap: tight  fill: none  border: none\nnode row2.package  \"Archive\"           icon: package\nnode row2.cubes    \"Service instances\" right of row2.package  gap: tight  icon: cubes\nnode row2.db       \"Records\"           right of row2.cubes    gap: tight  style: store\n\n// No text, so the node is just the icon and its padding.\nnode bare \"\"  below row2  gap: tight  icon: disk\n\n// An icon is two lines tall, so it shrinks and grows with the text beside it.\nnode small \"Small text / and a small icon\"  right of bare  gap: tight  size: small  icon: laptop\nnode large \"Large text / and a large icon\"  right of small gap: tight  size: large  icon: laptop\n"},{"name":"labels","source":"// An edge with text widens the gap it crosses.\n\ndiagram background: #111111\n\nstyle plain  fill: #191728  border: #4f5367\n\n// Nothing here says how far apart these two sit. The default gap is sized for\n// two nodes to breathe, not to hold a word, so the text opens it.\nnode parser   \"Parser\"                     style: plain\nnode resolver \"Resolver\"  right of parser  style: plain\nedge parser -> resolver  \"statements\"  from: right  to: left\n\n// The same two placements with nothing on the edge, for comparison.\nnode sink  \"Sink\"   below parser (gap: wide)  style: plain\nnode quiet \"Quiet\"  right of sink  level with sink       style: plain\nedge sink -> quiet  from: right  to: left\n\n// Going downward the text is only a line deep, so it opens the gap by one line\n// and hangs out either side.\n//\n// Written with `<-`, which is the same edge as `writer -> disk` and draws the\n// same picture. It just puts the node the line is about first.\nnode writer \"Writer\"  right of resolver (gap: wide)  style: plain\nnode disk   \"Disk\"    below writer                  style: plain\nedge disk <- writer  \"flushed to disk\"  from: bottom  to: top\n\n// Already wider than the text needs, so nothing moves.\nnode roomy \"Roomy\"        below sink                                 style: plain\nnode spare \"Plenty spare\"  right of roomy (gap: wide)  level with roomy  style: plain\nedge roomy -> spare  \"fits\"  from: right  to: left\n\n// Corner to corner, so there is no single gap the text sits in and nothing is\n// widened for it.\nnode high \"High\"  right of writer (gap: wide)  style: plain\nnode low  \"Low\"   below high  right of high  style: plain\nedge high -> low  \"diagonal\"\n"},{"name":"lanes","source":"// Several edges between the same two sides nest instead of crossing. The lanes\n// are as wide as the texts riding in them.\n\ndiagram background: #111111\n\nstyle plain  fill: #191728  border: #4f5367\n\n// A reciprocal pair around a corner. Further left along Gateway's bottom is\n// further down Queue's left, so the order reverses between the two ends.\nnode gateway \"Gateway\"  style: plain\nnode queue   \"Queue\"    below gateway  right of gateway (gap: wide)  style: plain\nedge gateway -> queue  \"publishes messages\"  from: bottom  to: left\nedge queue -> gateway  \"receives messages\"   from: left    to: bottom\n\n// Two edges facing each other, where the order runs the same way at both ends.\nnode client \"Client\"  below queue (gap: wide)  left of queue  style: plain\nnode server \"Server\"  right of client (gap: wide)  level with client  style: plain\nedge client -> server  \"request\"   from: right  to: left\nedge server -> client  \"response\"  from: left   to: right\n\n// Five lanes down a vertical run. The texts all sit at the same height, so the\n// only way they clear each other is sideways and a lane has to be a whole text\n// wide. These two nodes are wide enough for five of them.\nnode fan  \"Fan of five, spread wide\"  below client (gap: wide)  left of client  style: plain\nnode hub  \"Hub of the same five\"     below fan (gap: wide)  style: plain\nedge fan -> hub  \"one\"    from: bottom  to: top\nedge fan -> hub  \"two\"    from: bottom  to: top\nedge fan -> hub  \"three\"  from: bottom  to: top\nedge fan -> hub  \"four\"   from: bottom  to: top\nedge fan -> hub  \"five\"   from: bottom  to: top\n\n// Two edges pointing the same way. Nothing tells them apart, so the order they\n// are written in decides. Swap these two lines and the texts swap lanes.\nnode left_wall  \"Producer\"  below hub (gap: wide)  left of hub  style: plain\nnode right_wall \"Consumer\"  right of left_wall (gap: wide)  level with left_wall  style: plain\nedge left_wall -> right_wall  \"bulk\"     from: right  to: left\nedge left_wall -> right_wall  \"control\"  from: right  to: left\n\n// Sharing one side only is not a bundle. The far ends differ, and that is\n// enough to order them.\nnode spoke \"Spoke\"  below right_wall (gap: wide)  style: plain\nnode up    \"Up\"     above spoke  right of spoke (gap: wide)  style: plain\nnode down  \"Down\"   below spoke  right of spoke (gap: wide)  style: plain\nedge spoke -> up    from: right  to: left\nedge spoke -> down  from: right  to: left\n\n// More edges than the two sides can hold. The arrowheads squeeze together\n// because there is nowhere further along an edge to go, and each line makes up\n// the shortfall by bowing out in the middle, where the texts ride.\nnode narrow \"Narrow\"  below spoke (gap: wide)  left of spoke  style: plain\nnode also   \"Also\"    right of narrow (gap: wide)  level with narrow  style: plain\nedge narrow -> also  \"first\"   from: right  to: left\nedge narrow -> also  \"second\"  from: right  to: left\nedge narrow -> also  \"third\"   from: right  to: left\nedge narrow -> also  \"fourth\"  from: right  to: left\nedge narrow -> also  \"fifth\"   from: right  to: left\n"},{"name":"coincident","source":"// Several edges between the same two nodes with no side named anywhere. Each\n// line is shifted sideways off the one a single edge would draw, so they stay\n// parallel and each end lands wherever its own line crosses the border.\n\ndiagram background: #111111\n\nstyle plain  fill: #191728  border: #4f5367\n\n// Level nodes, so the run is horizontal and the lanes fan out vertically.\nnode a \"A\"  style: plain\nnode b \"B\"  right of a (gap: wide)  level with a  style: plain\nedge a -> b  \"first\"\nedge a -> b  \"second\"\nedge a -> b  \"third\"\n\n// A perfect diagonal, where the single line would leave through the corner\n// exactly. These two straddle it, one point on each of the edges meeting there.\nnode low  \"Low\"   below a (gap: wide)  left of a  style: plain\nnode high \"High\"  above low  right of low (gap: wide)  style: plain\nedge low -> high   \"up\"\nedge high -> low   \"down\"\n\n// A near diagonal, where the crossing point sits on one edge but close to the\n// corner.\nnode near \"Near\"  below low (gap: wide)  style: plain\nnode far  \"Far\"   right of near (gap: wide)  above near  style: plain\nedge near -> far  \"one\"\nedge near -> far  \"two\"\n\n// A lone edge is in no group and does not move.\nnode solo  \"Solo\"   below near (gap: wide)  style: plain\nnode alone \"Alone\"  right of solo (gap: wide)  level with solo  style: plain\nedge solo -> alone  \"by itself\"\n\n// Naming a side on either end takes an edge out of the group.\nnode named \"Named\"  below solo (gap: wide)  style: plain\nnode other \"Other\"  right of named (gap: wide)  level with named  style: plain\nedge named -> other  \"free\"\nedge named -> other  \"free too\"\nedge named -> other  \"top\"  from: top  to: top\n\n// More than the edges can hold. The ends squeeze together and each line bows\n// out in the middle to make up what its ends could not give it, so the texts\n// still come apart. The middle line has no shortfall and stays straight.\nnode many \"Many\"  below named (gap: wide)  style: plain\nnode one  \"One\"   right of many (gap: wide)  level with many  style: plain\nedge many -> one  \"first\"\nedge many -> one  \"second\"\nedge many -> one  \"third\"\nedge many -> one  \"fourth\"\nedge many -> one  \"fifth\"\n\n// The same on a vertical run, where the texts sit at one height and a lane is\n// a whole text wide.\nnode top    \"Top\"     below many (gap: wide)  style: plain\nnode bottom \"Bottom\"  below top (gap: wide)  style: plain\nedge top -> bottom  \"alpha\"\nedge top -> bottom  \"beta\"\nedge top -> bottom  \"gamma\"\n"},{"name":"corridors","source":"// `between a and b` sends an edge through the gap between two named things, for\n// the stretch where it is passing them. Before and after, it goes wherever its\n// ends take it.\n\ndiagram background: #111111\n\nstyle channel  fill: #191920  border: #25242f\n\n// North and South are apart vertically, so that is the gap. Both edges start\n// well to the left, climb into the channel, run along it and leave for East.\n// They share it, so they take a lane each.\n\nnode west   \"West\"\nnode lower  \"Lower\"   below west     gap: tight\nnode north  \"North\"   right of west  gap: wide   style: channel\nnode south  \"South\"   below north    gap: wide   style: channel\nnode east   \"East\"    right of north and south  level with west  gap: wide\n\nedge west  -> east  \"over\"   between north and south  from: right  to: left\nedge lower -> east  \"under\"  between north and south  from: right  to: left\n\n// Port and Starboard are apart horizontally, so here the line runs down the gap\n// instead. This edge names no sides: the open end aims at the channel rather\n// than at the far node, so it leaves Bow already heading for the gap.\n\nnode bow        \"Bow\"        below lower  gap: wide\nnode port       \"Port\"       below bow    gap: wide       style: channel\nnode starboard  \"Starboard\"  right of port  level with port  gap: wide  style: channel\nnode stern      \"Stern\"      below port   gap: wide\n\nedge bow -> stern  \"down\"  between port and starboard\n\n// The same channel travelled the other way. No text on this one, so its lane\n// needs only the room two arrows need.\n\nedge stern -> bow  between port and starboard  from: top  to: bottom\n\n// High and Low sit diagonally, so there are two gaps between them and the file\n// has to say which. `vertically` is the gap you measure with a vertical ruler —\n// under High, over Low — so a line running along it travels sideways.\n\nnode far   \"Far\"    below stern  gap: wide\nnode high  \"High\"   right of far  gap: wide  style: channel\nnode low   \"Low\"    below-right of high  gap: wide  style: channel\nnode near  \"Near\"   right of low  level with high  gap: wide\n\nedge far -> near  \"threaded\"  between high and low vertically\n"},{"name":"overhang","source":"// Edges that leave the area the nodes cover. The page grows to hold them: the\n// nodes here cover 378x230 and the page comes out 428x312.\n\ndiagram background: #111111\n\nstyle plain  fill: #191728  border: #4f5367\n\nnode a \"A\"                            style: plain\nnode b \"B\"  right of a  (gap: wide)   style: plain\nnode c \"C\"  right of b                style: plain\n\nnode d \"D\"  below a and c             style: plain\n\n// A long arch over everything, with the text at the top of it.\nedge a -> b  \"over the top\"  from: top  to: top\n\n// The same shape across a narrow gap.\nedge b -> c  from: top  to: top\n\n// Out the left and back into the bottom, so the loop hangs off the left edge.\nedge d -> a  \"round the side\"  from: left  to: left\n\n// And one under the bottom row.\nedge a -> d  from: bottom  to: bottom\n"}];
 </script>
     <script>
 (function () {
@@ -542,12 +542,12 @@ function isDirection(word) {
     return DIRECTIONS.includes(word);
 }
 /**
- * Which edge of the target a `level with` shares. `center` is the plain form;
+ * Which side of the target a `level with` shares. `center` is the plain form;
  * the rest are written in front of it, as in `top level with media`.
  */
-const EDGES = ['center', 'top', 'bottom', 'left', 'right'];
-/** An edge belongs to one axis, so an alignment never has to say which. */
-const EDGE_AXIS = {
+const SIDES = ['center', 'top', 'bottom', 'left', 'right'];
+/** A side belongs to one axis, so an alignment never has to say which. */
+const SIDE_AXIS = {
     center: 'y',
     top: 'y',
     bottom: 'y',
@@ -564,8 +564,8 @@ const PLACEMENT_KEYS = ['gap'];
 function describePlacement(placement) {
     const targets = listTargets(placement.targets);
     if (placement.kind === 'align') {
-        const edge = placement.edge === 'center' ? '' : `${placement.edge} `;
-        return `${edge}level with ${targets}`;
+        const side = placement.side === 'center' ? '' : `${placement.side} `;
+        return `${side}level with ${targets}`;
     }
     // "left of X" and "above X" are both good English; "above of X" is not.
     const joiner = placement.direction === 'above' || placement.direction === 'below' ? '' : 'of ';
@@ -591,15 +591,15 @@ function describeAxis(axis) {
     return axis === 'y' ? 'vertically' : 'horizontally';
 }
 /**
- * What a label's brackets may say: `"Docker" (at: bottom, align: center)`.
+ * What a text's brackets may say: `"Docker" (at: bottom, align: center)`.
  *
- * They are bracketed onto the label rather than written among the node's
+ * They are bracketed onto the text rather than written among the node's
  * attributes for the same reason a gap is bracketed onto its placement — they
  * modify that one thing, and the brackets make the scope visible instead of
  * positional. `at` and `align` are independent: neither implies the other, and a
- * label at the bottom is an ordinary label that happens to be at the bottom.
+ * text at the bottom is an ordinary text that happens to be at the bottom.
  */
-const LABEL_KEYS = ['at', 'align'];
+const TEXT_KEYS = ['at', 'align'];
 /** The attributes a `diagram` statement understands. */
 const DIAGRAM_KEYS = ['background'];
 /**
@@ -622,8 +622,8 @@ const COLOR_KEYS = [
 ];
 /**
  * A color attribute names the *part* it colors, and a part exists only on the
- * kinds that have one. A box has a border and text; a note and a glyph body are
- * text and nothing else; a link is a line and its label.
+ * kinds that have one. A node has a border and text; a note and a glyph body are
+ * text and nothing else; an edge is a line and its text.
  *
  * This table is what makes the words checkable. `border:` on a note is refused
  * by name rather than ignored — the same rule as an unknown `diagram` key, and
@@ -633,13 +633,13 @@ const COLOR_KEYS = [
  * A style spanning kinds writes one key per kind — `border: #d2904e  line:
  * #d2904e` — since a style contributes a part only to the kinds that have it.
  * That is what replaced `stroke:`, which named no part and so could never be
- * wrong, and which is why a box's text had no word of its own until now.
+ * wrong, and which is why a node's text had no word of its own until now.
  */
 const COLOR_PARTS = {
-    box: ['fill', 'border', 'text', 'subtext'],
+    node: ['fill', 'border', 'text', 'subtext'],
     note: ['text'],
     glyph: ['text', 'subtext'],
-    link: ['line', 'text'],
+    edge: ['line', 'text'],
 };
 /**
  * Every attribute each kind understands. An attribute a kind has no use for is
@@ -660,11 +660,11 @@ const COLOR_PARTS = {
  *   second one to sit in; `sizeNode` returns before it would ever be read.
  * - A glyph and a note take no `align:`, which widens a node's children, and
  *   neither may have any.
- * - A link takes no `gap:` or `overlap:`. Those are about where a box sits, and
- *   a link is not placed — it joins two things that are.
+ * - An edge takes no `gap:` or `overlap:`. Those are about where a box sits, and
+ *   an edge is not placed — it joins two things that are.
  */
 const ATTR_KEYS = {
-    box: [
+    node: [
         'style',
         'size',
         'gap',
@@ -680,7 +680,7 @@ const ATTR_KEYS = {
     ],
     note: ['style', 'size', 'gap', 'overlap', 'wrap', 'text'],
     glyph: ['style', 'size', 'gap', 'overlap', 'wrap', 'shape', 'text', 'subtext'],
-    link: ['style', 'size', 'from', 'to', 'line', 'text'],
+    edge: ['style', 'size', 'from', 'to', 'line', 'text'],
 };
 /**
  * Every word that is an attribute *somewhere*, which is what separates a
@@ -688,7 +688,7 @@ const ATTR_KEYS = {
  * different errors: one has no remedy but the spelling, the other has a real
  * meaning somewhere else in the file.
  *
- * `DIAGRAM_KEYS` is in here so that `background:` on a box is understood to be
+ * `DIAGRAM_KEYS` is in here so that `background:` on a node is understood to be
  * a real word in the wrong place — that mistake wants to be pointed at `fill:`,
  * not told the word does not exist.
  */
@@ -826,12 +826,12 @@ function parseStatement(tokens, line) {
         throw new SourceError('a statement must begin with a keyword', line);
     }
     switch (keyword.text) {
-        case 'box':
-            return parseBox(head, attrs, line);
+        case 'node':
+            return parseNode(head, attrs, line);
         case 'note':
             return parseNote(head, attrs, line);
-        case 'link':
-            return parseLink(head, attrs, line);
+        case 'edge':
+            return parseEdge(head, attrs, line);
         case 'deck':
             return parseDeck(head, line);
         case 'style':
@@ -839,8 +839,47 @@ function parseStatement(tokens, line) {
         case 'diagram':
             return parseDiagram(head, attrs, line);
         default:
-            throw new SourceError(`unknown statement "${keyword.text}"`, line);
+            throw new SourceError(substitution(keyword.text, head), line);
     }
+}
+/**
+ * The statement keywords that are not words in this language, and the word to
+ * write instead. `box` and `link` were the keywords until 0.3.0; `rect` and
+ * `arrow` never were, and are here because they are what somebody arriving from
+ * another format types first.
+ *
+ * Refused by name with the substitution quoted, the same treatment `stroke:`
+ * and `width:` get. A synonym was the other candidate and is refused for the
+ * reasons in the design record: an alias is a variant every reader has to
+ * learn, and the statement keyword would become the one place a misspelling
+ * silently succeeds.
+ */
+const SUBSTITUTIONS = {
+    box: 'node',
+    rect: 'node',
+    link: 'edge',
+    arrow: 'edge',
+};
+/**
+ * What to say about a word that opens no statement. A word this language once
+ * used, or one another format uses, gets the replacement quoted back in the
+ * author's own name for the thing; anything else has no remedy but its
+ * spelling.
+ */
+function substitution(word, head) {
+    const replacement = SUBSTITUTIONS[word];
+    if (replacement === undefined)
+        return `unknown statement "${word}"`;
+    const plural = replacement === 'node' ? 'nodes' : 'edges';
+    // Quote the fix in the line the author actually wrote. `node parser` and
+    // `edge a -> b` both say more than a placeholder does, and the whole head is
+    // what makes the second of those readable.
+    const rest = head
+        .slice(1)
+        .map((token) => (token.quoted ? quoteOf(token.text) : token.text))
+        .join(' ');
+    const example = rest === '' ? '' : ` \u2014 try \`${replacement} ${rest}\``;
+    return `reladraw calls these ${plural}, so there is no \`${word}\` statement${example}`;
 }
 /**
  * Where the node's own attributes start: the first `key:` outside any brackets.
@@ -861,7 +900,7 @@ function attributesBegin(tokens) {
     }
     return -1;
 }
-/** The value as the author would have to write it back into a label. */
+/** The value as the author would have to write it back into a text. */
 function quoteOf(text) {
     return `"${text.replace(/"/g, '\\"')}"`;
 }
@@ -889,13 +928,13 @@ function parseAttrs(tokens, line) {
         if (key === 'stroke') {
             // Removed 2026-09-09. It meant a different part on every kind — the
             // border of a box, the text of a note or a glyph body, the line of a
-            // link — so it could never be wrong, and a box's text had no word at all.
+            // edge — so it could never be wrong, and a node's text had no word at all.
             // Refused by name rather than ignored: an older file must be told what
             // to write, not silently drawn without its colors.
-            throw new SourceError('`stroke:` has been replaced by the part it colors — `border:` on a box, `text:` on a note or a glyph body, `line:` on a link. A style shared between boxes and links writes both, as in `border: #d2904e  line: #d2904e`', line);
+            throw new SourceError('`stroke:` has been replaced by the part it colors — `border:` on a node, `text:` on a note or a glyph body, `line:` on an edge. A style shared between nodes and edges writes both, as in `border: #d2904e  line: #d2904e`', line);
         }
         if (key === 'width') {
-            // Renamed 2026-09-09. It folds a label every n *characters* and never
+            // Renamed 2026-09-09. It folds a text every n *characters* and never
             // said how wide anything is, so `width: 200` meaning units was accepted,
             // wrapped at 200 characters, and did nothing visible — the silent drop
             // this vocabulary is otherwise free of. Refused by name for the reason
@@ -907,19 +946,19 @@ function parseAttrs(tokens, line) {
             // these keys takes a color. Without this the string is passed through as
             // a color, turns out not to be one, and nothing is drawn and nothing is
             // said. Name the likely intent rather than only the rule: the qualifier
-            // under a name is a second label line, not a `subtext` value.
+            // under a name is a second text line, not a `subtext` value.
             if (valueToken.text.startsWith('#')) {
                 // A hex color that was merely quoted. The author wrote a color and the
                 // remedy is punctuation, so say that rather than that it is not one.
                 throw new SourceError(`a color is written without quotes — "${key}: ${valueToken.text}"`, line);
             }
-            // `text:` is the color of a label, not the label itself, and that is a
+            // `text:` is the color of a text, not the text itself, and that is a
             // mistake worth naming rather than only refusing — the word invites it.
             if (key === 'text') {
-                throw new SourceError(`\`text:\` is the color of a label, not the label — write the words in quotes after the name, as in \`box name ${quoteOf(valueToken.text)}\``, line);
+                throw new SourceError(`\`text:\` colors a node's text rather than setting it — write the words in quotes after the name, as in \`node name ${quoteOf(valueToken.text)}\``, line);
             }
             if (key === 'subtext') {
-                throw new SourceError(`\`subtext:\` is the color of a label's later lines, not the words — write them into the label, as in \`"Name / ${valueToken.text}"\`, and \`subtext: muted\` to make them quieter`, line);
+                throw new SourceError(`\`subtext:\` colors a node's later text lines rather than setting them — write them into the text, as in \`"Name / ${valueToken.text}"\`, and \`subtext: muted\` to make them quieter`, line);
             }
             throw new SourceError(`"${key}" takes a color and a quoted value is text — drop the quotes if ${valueToken.text} is a color`, line);
         }
@@ -929,11 +968,11 @@ function parseAttrs(tokens, line) {
     return attrs;
 }
 /**
- * `box <name> ["<text>"] [(<label modifiers>)] [<placement> ...]`
+ * `node <name> ["<text>"] [(<text modifiers>)] [<placement> ...]`
  *
- * The text is optional and the name stands in for it, because a bare `box a`
+ * The text is optional and the name stands in for it, because a bare `node a`
  * asking for an empty rectangle is a default nobody wants: the first lines
- * anybody types are `box a` and `box b right of a`, and they mean the two
+ * anybody types are `node a` and `node b right of a`, and they mean the two
  * boxes to say "a" and "b". `""` is how a box says it is deliberately blank —
  * an invisible container, a glyph body, a node that is nothing but its icon —
  * and every such box already writes it, so nothing that predates this changed
@@ -944,30 +983,30 @@ function parseAttrs(tokens, line) {
  * `server.docker` reading "docker" says everything the whole path would.
  *
  * A name now has two jobs, so renaming a node can change the picture. That is
- * the price, and it is honest: a file that states no label is saying the name
- * is the label.
+ * the price, and it is honest: a file that states no text is saying the name
+ * is the text.
  */
-function parseBox(head, attrs, line) {
-    const name = requireName(head[1], 'box', line);
+function parseNode(head, attrs, line) {
+    const name = requireName(head[1], 'node', line);
     const written = head[2];
     const textToken = written?.quoted ? written : undefined;
-    // A bare word here is a label somebody forgot to quote far more often than
+    // A bare word here is a text somebody forgot to quote far more often than
     // it is anything else, and `"Parser" is not a direction` would send them
     // looking in the wrong place.
     if (written && !textToken && !isAttrKey(written) && !startsPlacement(written) && written.text !== '(') {
-        throw new SourceError(`box "${name}": a label is quoted — write "${written.text}" rather than ${written.text}`, line);
+        throw new SourceError(`node "${name}": a text is quoted — write "${written.text}" rather than ${written.text}`, line);
     }
     const text = textToken ? textToken.text : name.slice(name.lastIndexOf('.') + 1);
-    const subject = `box "${name}"`;
-    const label = readBracket(head, textToken ? 3 : 2, LABEL_KEYS, {
+    const subject = `node "${name}"`;
+    const bracket = readBracket(head, textToken ? 3 : 2, TEXT_KEYS, {
         subject,
-        what: 'the label',
-        kind: 'a label',
+        what: 'the text',
+        kind: 'a text',
         example: 'at: bottom',
         line,
     });
-    const placements = parsePlacements(head.slice(label.next), line, subject);
-    return { kind: 'box', name, text, label: label.values, placements, attrs, line };
+    const placements = parsePlacements(head.slice(bracket.next), line, subject);
+    return { kind: 'node', name, text, textAttrs: bracket.values, placements, attrs, line };
 }
 /** `note <name> "<text>" [<placement> ...]` */
 function parseNote(head, attrs, line) {
@@ -976,37 +1015,37 @@ function parseNote(head, attrs, line) {
     if (!textToken || !textToken.quoted) {
         throw new SourceError(`note "${name}" needs quoted text`, line);
     }
-    // A note is bare text with no box, so it has no band for a label to sit in
+    // A note is bare text with no box, so it has no band for a text to sit in
     // and nowhere for `at:` to put one. Refused by name rather than ignored.
     if (follows(head, 3, '(')) {
-        throw new SourceError(`note "${name}" carries label modifiers. A note is bare text, so there is no box for its label to sit anywhere in`, line);
+        throw new SourceError(`note "${name}" carries text modifiers. A note is bare text, so there is no box for its text to sit anywhere in`, line);
     }
     const placements = parsePlacements(head.slice(3), line, `note "${name}"`);
     return { kind: 'note', name, text: textToken.text, placements, attrs, line };
 }
 /**
- * `link <from> -> <to> ["<label>"] [between <a> and <b>]`, with `<->` for a
+ * `edge <from> -> <to> ["<text>"] [between <a> and <b>]`, with `<->` for a
  * two-headed arrow and `<-` for one pointing the other way.
  *
  * `a <- b` is exactly `b -> a` and carries no meaning of its own downstream.
  * What it buys is the ordering: the name written first is the one the line is
- * about, and plenty of links have the target as their subject.
+ * about, and plenty of edges have the target as their subject.
  */
 const ARROWS = ['->', '<->', '<-'];
-function parseLink(head, attrs, line) {
-    const left = requireName(head[1], 'link', line);
+function parseEdge(head, attrs, line) {
+    const left = requireName(head[1], 'edge', line);
     const arrow = head[2];
     if (!arrow || arrow.quoted || !ARROWS.includes(arrow.text)) {
-        throw new SourceError('a link needs "->", "<-" or "<->" between its endpoints', line);
+        throw new SourceError('an edge needs "->", "<-" or "<->" between its endpoints', line);
     }
     const rightToken = head[3];
     if (!rightToken || rightToken.quoted) {
-        throw new SourceError('a link needs a node on the right of the arrow', line);
+        throw new SourceError('an edge needs a node on the right of the arrow', line);
     }
     const back = arrow.text === '<-';
     let at = 4;
-    const labelToken = head[at]?.quoted ? head[at] : undefined;
-    if (labelToken)
+    const textToken = head[at]?.quoted ? head[at] : undefined;
+    if (textToken)
         at += 1;
     // A gap has two sides, so `between` takes exactly two targets rather than the
     // open list a placement takes. `right of a and b` means "clear of both", and
@@ -1015,9 +1054,9 @@ function parseLink(head, attrs, line) {
     if (at < head.length) {
         const word = head[at];
         if (word.quoted || word.text !== 'between') {
-            throw new SourceError(`unexpected "${word.text}" after the link`, line);
+            throw new SourceError(`unexpected "${word.text}" after the edge`, line);
         }
-        const read = readTargets(head, at + 1, 'link', 'between', line);
+        const read = readTargets(head, at + 1, 'edge', 'between', line);
         if (read.targets.length !== 2) {
             throw new SourceError(`"between" takes two nodes, one for each side of the gap — found ${read.targets.length}`, line);
         }
@@ -1031,33 +1070,33 @@ function parseLink(head, attrs, line) {
         between = { targets: read.targets, ...(axis !== undefined ? { axis } : {}) };
     }
     if (at < head.length) {
-        throw new SourceError(`unexpected "${head[at].text}" after the link`, line);
+        throw new SourceError(`unexpected "${head[at].text}" after the edge`, line);
     }
     return {
-        kind: 'link',
+        kind: 'edge',
         from: back ? rightToken.text : left,
         to: back ? left : rightToken.text,
         both: arrow.text === '<->',
-        ...(labelToken ? { label: labelToken.text } : {}),
+        ...(textToken ? { text: textToken.text } : {}),
         ...(between ? { between } : {}),
         attrs,
         line,
     };
 }
-/** `deck <name> "<label>" ["<label>" ...]` */
+/** `deck <name> "<text>" ["<text>" ...]` */
 function parseDeck(head, line) {
     const name = requireName(head[1], 'deck', line);
-    const labels = [];
+    const texts = [];
     for (const token of head.slice(2)) {
         if (!token.quoted) {
-            throw new SourceError(`deck "${name}" takes quoted labels only`, line);
+            throw new SourceError(`deck "${name}" takes quoted texts only`, line);
         }
-        labels.push(token.text);
+        texts.push(token.text);
     }
-    if (labels.length === 0) {
-        throw new SourceError(`deck "${name}" needs at least one label`, line);
+    if (texts.length === 0) {
+        throw new SourceError(`deck "${name}" needs at least one text`, line);
     }
-    return { kind: 'deck', name, labels, line };
+    return { kind: 'deck', name, texts, line };
 }
 /** `style <name> <attributes>` */
 function parseStyle(head, attrs, line) {
@@ -1113,14 +1152,14 @@ function parsePlacements(tokens, line, subject) {
         if (word.quoted) {
             throw new SourceError(`${subject}: unexpected text "${word.text}"`, line);
         }
-        // `top level with media` names an edge rather than the center line. `left`
-        // and `right` are edges as well as directions, so it is the word after them
+        // `top level with media` names a side rather than the center line. `left`
+        // and `right` are sides as well as directions, so it is the word after them
         // that says which was meant — "left of drive" against "left level with drive".
-        const edge = isEdgeWord(word.text) && follows(tokens, i + 1, 'level') ? word.text : undefined;
-        const head = edge ? tokens[i + 1] : word;
+        const side = isSideWord(word.text) && follows(tokens, i + 1, 'level') ? word.text : undefined;
+        const head = side ? tokens[i + 1] : word;
         if (head.text === 'level' && !head.quoted) {
-            const at = edge ? i + 1 : i;
-            const written = edge ? `${edge} level with` : 'level with';
+            const at = side ? i + 1 : i;
+            const written = side ? `${side} level with` : 'level with';
             if (!follows(tokens, at + 1, 'with')) {
                 throw new SourceError(`${subject}: an alignment reads "${written} <node>"`, line);
             }
@@ -1135,8 +1174,8 @@ function parsePlacements(tokens, line, subject) {
             }
             placements.push({
                 kind: 'align',
-                axis: EDGE_AXIS[edge ?? 'center'],
-                edge: edge ?? 'center',
+                axis: SIDE_AXIS[side ?? 'center'],
+                side: side ?? 'center',
                 targets: read.targets,
                 line,
             });
@@ -1183,7 +1222,7 @@ function readModifiers(tokens, start, subject, placement, line) {
 }
 /**
  * A bracketed `key: value` list, shared by a placement's modifiers and a
- * label's. Both exist for the same reason — a modifier belongs to the clause it
+ * text's. Both exist for the same reason — a modifier belongs to the clause it
  * modifies, and the brackets say which clause that is rather than leaving it to
  * be inferred from what happens to precede it.
  *
@@ -1225,16 +1264,16 @@ function follows(tokens, at, word) {
     const token = tokens[at];
     return token !== undefined && !token.quoted && token.text === word;
 }
-/** Could this token open a placement? `top` and `left` open the edge alignments. */
+/** Could this token open a placement? `top` and `left` open the side alignments. */
 function startsPlacement(token) {
     if (token.quoted)
         return false;
     return (isDirection(token.text) ||
         token.text === 'level' ||
-        EDGES.includes(token.text));
+        SIDES.includes(token.text));
 }
-function isEdgeWord(word) {
-    return word !== 'center' && EDGES.includes(word);
+function isSideWord(word) {
+    return word !== 'center' && SIDES.includes(word);
 }
 /**
  * One target, or several joined by `and` — `right of borg and bare`, or
@@ -1267,11 +1306,11 @@ function readTargets(tokens, start, subject, placement, line) {
 const PAD = 14;
 /** Between stacked children of one container. */
 const CHILD_GAP = 10;
-/** Between a container's own label and its first child. */
+/** Between a container's own text and its first child. */
 const HEADER_GAP = 10;
 /**
  * How far each deck copy is offset behind the front face. It has to clear a
- * whole line of text plus the padding above it, or a copy's label is drawn and
+ * whole line of text plus the padding above it, or a copy's text is drawn and
  * then immediately covered by the copy in front of it.
  */
 const DECK_STEP = 34;
@@ -1297,7 +1336,7 @@ const GAPS = {
  */
 const SEPARATION_GAP = GAPS['tight'];
 /**
- * Between two links meeting the same side of the same box. An author names a
+ * Between two edges meeting the same side of the same box. An author names a
  * side, never a point on it, so this is the tool keeping two attachments apart
  * rather than a distance anyone asked for — small, like `SEPARATION_GAP`, and
  * squeezed further if the side is too short to hold the whole group.
@@ -1305,7 +1344,7 @@ const SEPARATION_GAP = GAPS['tight'];
 const ATTACH_STEP = 16;
 /** Kept clear at each end of a side, so an attachment never sits on a corner. */
 const ATTACH_MARGIN = 10;
-/** How wide a link's line is drawn. */
+/** How wide an edge's line is drawn. */
 const LINE_WIDTH = 1.6;
 /**
  * The arrowhead's length, in the `markerUnits="strokeWidth"` the marker is
@@ -1319,48 +1358,48 @@ const ARROW_MARKER_WIDTH = 7;
  */
 const ARROW_LENGTH = ARROW_MARKER_WIDTH * LINE_WIDTH;
 /**
- * Line left showing between a link's label and the box at that end of the
+ * Line left showing between an edge's text and the box at that end of the
  * corridor it crosses.
  *
  * Unlike `SEPARATION_GAP` and `ATTACH_MARGIN` this is not "small on purpose".
  * Those two keep two things from touching, and the least distance that reads as
- * "not touching" is the right one. This one has something to show: a label sits
+ * "not touching" is the right one. This one has something to show: a text sits
  * in a knockout that erases the line behind it, so whatever is left either side
- * is the entire evidence that the label belongs to a link at all. At ten pixels
+ * is the entire evidence that the text belongs to an edge at all. At ten pixels
  * it did not read as a line — the seed diagram in the playground drew as a word
  * with a dash beside it — so it is the length of a run of line, not a margin.
  *
  * Say `gap:` if you want the corridor wider than its contents.
  */
-const LABEL_CLEARANCE = 20;
+const TEXT_CLEARANCE = 20;
 /**
- * How much room a link's label takes along one axis.
+ * How much room an edge's text takes along one axis.
  *
- * The knockout rectangle drawn behind a label is the text plus five either side,
+ * The knockout rectangle drawn behind a text is the text plus five either side,
  * so that rectangle, not the glyphs, is what must not overlap anything.
  *
- * Shared by the resolver, which widens a corridor to hold a label, and the
+ * Shared by the resolver, which widens a corridor to hold a text, and the
  * renderer, which spaces the lanes of a channel by it, so the two cannot
- * disagree about how much room a label needs. The two ask different questions of
- * it and both are right: the resolver measures *along* the run, so a link
- * traveling horizontally needs the label's width; the renderer measures *across*
- * the channel, so a link traveling horizontally down one needs its height.
+ * disagree about how much room a text needs. The two ask different questions of
+ * it and both are right: the resolver measures *along* the run, so an edge
+ * traveling horizontally needs the text's width; the renderer measures *across*
+ * the channel, so an edge traveling horizontally down one needs its height.
  */
-function labelExtent(label, appearance, axis, measurer, fontSize, line) {
-    const size = fontSizeFor('link', appearance, fontSize, line);
-    const { width, lines } = measurer.measure(label, size);
+function textExtent(text, appearance, axis, measurer, fontSize, line) {
+    const size = fontSizeFor('edge', appearance, fontSize, line);
+    const { width, lines } = measurer.measure(text, size);
     return axis === 'x' ? width + 10 : lines.length * measurer.lineHeight(size);
 }
 /**
- * An icon is two lines of the label tall, and that ratio is what makes it a
- * *label-sized* ornament rather than a picture with a size of its own. It is
+ * An icon is two lines of the text tall, and that ratio is what makes it a
+ * *text-sized* ornament rather than a picture with a size of its own. It is
  * read off the reference, where the title lines run 25 pixels baseline to
  * baseline and the drive and machine glyphs are close to 50 tall. Deriving it
  * from the text also means an icon on a `size: small` node shrinks with it,
  * which is what anyone would expect and what a fixed pixel count would not do.
  */
 const ICON_LINES = 2;
-/** Between the label column and the icon column beside it. */
+/** Between the text column and the icon column beside it. */
 const ICON_GAP = 10;
 const DEFAULT_FONT_SIZE = 14;
 /**
@@ -1370,7 +1409,7 @@ const DEFAULT_FONT_SIZE = 14;
  * it says nothing about why one piece of text is smaller than another.
  *
  * `small` is sampled rather than chosen. In
- * `examples/reference/arch.png` the box and container labels run 25
+ * `examples/reference/arch.png` the box and container texts run 25
  * pixels baseline to baseline and every annotation runs 21, which is this
  * ratio; `./dev.sh textrows` is how that was read off. `large` is the same step
  * taken the other way, so the scale is symmetric about the document size.
@@ -1382,7 +1421,7 @@ const TEXT_SIZES = {
 };
 /**
  * What each kind of text is set at when the file says nothing. A note annotates
- * the diagram rather than being part of it, and at the size of a box label an
+ * the diagram rather than being part of it, and at the size of a box text an
  * aside reads as a statement — so `note` starts small and says so by being a
  * note. This is a default and not a ceiling: `size:` overrides it, the same way
  * `fill:` overrides the theme's color.
@@ -1403,52 +1442,52 @@ function fontSizeFor(kind, appearance, fontSize, line) {
 }
 const DEFAULT_MARGIN = 40;
 /**
- * Where a container's own label sits. Every container reserves a band for its
- * label and its icon; `at` says which end of the box that band is, and the
+ * Where a container's own text sits. Every container reserves a band for its
+ * text and its icon; `at` says which end of the box that band is, and the
  * contents take what is left. `align` says how the text sits across it.
  *
- * The two are independent and neither implies the other. A label at the bottom
- * is an ordinary label that happens to be at the bottom — there is no kind of
- * label being named here and no second thing quietly coming along with the
- * first. An earlier version bundled them as `label: heading | caption`, which
+ * The two are independent and neither implies the other. A text at the bottom
+ * is an ordinary text that happens to be at the bottom — there is no kind of
+ * text being named here and no second thing quietly coming along with the
+ * first. An earlier version bundled them as `text: heading | caption`, which
  * read a position as though it were a meaning; a folded corner means "artifact
  * rather than process" and a reader decodes it, while "lower down" means only
  * lower down.
  *
  * A leaf has no band, so `at` says nothing about one and is refused there. But
- * `align` is not about the band: a label of more than one line has lines of
+ * `align` is not about the band: a text of more than one line has lines of
  * unequal length whatever kind of box it is in, and how those sit across each
  * other is a real question anywhere. A leaf's default is centered rather than
  * ranged left, which is why the fallback is a parameter.
  */
-const LABEL_ENDS = ['top', 'bottom'];
+const TEXT_ENDS = ['top', 'bottom'];
 /**
  * Author's word to the SVG's. One spelling of each, per the rule that refuses
- * synonyms for `box` and `link`: an alias is a variant a reader has to learn,
+ * synonyms for `node` and `edge`: an alias is a variant a reader has to learn,
  * and every document and example has to pick one of them anyway.
  */
-const LABEL_ALIGNMENTS = {
+const TEXT_ALIGNMENTS = {
     left: 'start',
     center: 'middle',
     right: 'end',
 };
 /**
- * Read a label's bracketed modifiers. Shared by the resolver, which offsets the
+ * Read a text's bracketed modifiers. Shared by the resolver, which offsets the
  * contents away from the band, and the renderer, which draws into it, so the two
  * cannot disagree about which end the band is at.
  */
-function labelStyleFor(label, line, fallbackAlign = 'start') {
-    const at = label['at'];
-    if (at !== undefined && !LABEL_ENDS.includes(at)) {
-        throw new SourceError(`a label's at takes ${LABEL_ENDS.join(' or ')}, not "${at}"`, line);
+function textStyleFor(attrs, line, fallbackAlign = 'start') {
+    const at = attrs['at'];
+    if (at !== undefined && !TEXT_ENDS.includes(at)) {
+        throw new SourceError(`a text's at takes ${TEXT_ENDS.join(' or ')}, not "${at}"`, line);
     }
-    const align = label['align'];
-    if (align !== undefined && LABEL_ALIGNMENTS[align] === undefined) {
-        throw new SourceError(`a label's align takes left, center or right, not "${align}"`, line);
+    const align = attrs['align'];
+    if (align !== undefined && TEXT_ALIGNMENTS[align] === undefined) {
+        throw new SourceError(`a text's align takes left, center or right, not "${align}"`, line);
     }
     return {
         at: at ?? 'top',
-        align: align === undefined ? fallbackAlign : LABEL_ALIGNMENTS[align],
+        align: align === undefined ? fallbackAlign : TEXT_ALIGNMENTS[align],
     };
 }
 
@@ -1592,7 +1631,7 @@ const PLAIN = { outline: 'box' };
  * The value is either a box outline or the name of a glyph. Those are the two
  * things "what is this drawn as" can answer, and the author has no reason to
  * care which category their answer fell into. The test that separates them is
- * whether the node still sizes itself from its label: a `document` does, a
+ * whether the node still sizes itself from its text: a `document` does, a
  * glyph does not.
  */
 function shapeFor(appearance, line) {
@@ -1632,16 +1671,16 @@ function iconFor(appearance, line) {
  * measures exactly.
  */
 /**
- * A slash with whitespace on both sides marks a line break, so a label is
+ * A slash with whitespace on both sides marks a line break, so a text is
  * really a short stack of lines. Each line is trimmed; empty ones are dropped.
  *
  * The whitespace is what makes the marker safe. Splitting on a bare `/` meant
- * no label could contain one, so `TCP/IP` came out as two lines, and so did
+ * no text could contain one, so `TCP/IP` came out as two lines, and so did
  * `16/9`, `I/O` and every path or URL. Requiring the spaces keeps the marker
  * legible where it is meant — `"Computer 1 / Ubuntu"` — while a
  * slash inside a word stays an ordinary character.
  *
- * That leaves the label that wants a spaced slash and no break — `Before / After`
+ * That leaves the text that wants a spaced slash and no break — `Before / After`
  * — which writes it `\/`. The lexer preserves that escape rather than resolving
  * it, so the backslash is still here to suppress the split, and is dropped once
  * the splitting is done.
@@ -1703,7 +1742,7 @@ const DARK_THEME = {
     containerStroke: '#25242f',
     text: '#d9d9d9',
     mutedText: '#8b8b8b',
-    link: '#5c5c7c',
+    edge: '#5c5c7c',
     // Both sampled off the reference's machine glyphs. Note that the reference
     // gives each icon its own hue — the drive is gray, the laptop periwinkle, the
     // workstation violet — which is a drawing tool's per-shape default and not a
@@ -1726,22 +1765,22 @@ function render(layout, options = {}) {
     for (const root of layout.roots) {
         body.push(drawNode(root, theme, measurer, fontSize));
     }
-    // Everything the boxes cover. Links are added to it as they are drawn.
+    // Everything the boxes cover. Edges are added to it as they are drawn.
     let ink = { minX: 0, minY: 0, maxX: layout.width, maxY: layout.height };
-    // Endpoints are planned for every link at once, because where a link meets a
+    // Endpoints are planned for every edge at once, because where an edge meets a
     // side depends on what else meets that same side. Corridors come after, for
-    // the same reason in the other direction: which lane of a gap a link takes
+    // the same reason in the other direction: which lane of a gap an edge takes
     // is ordered by where its ends turned out to be.
-    const ends = planEndpoints(layout.links, measurer, fontSize);
-    const corridors = planCorridors(layout.links, ends, measurer, fontSize);
-    aimFreeEnds(layout.links, ends, corridors);
-    for (const link of layout.links) {
-        const drawn = drawLink(link, ends.get(link), corridors.get(link), theme, measurer, fontSize);
+    const ends = planEndpoints(layout.edges, measurer, fontSize);
+    const corridors = planCorridors(layout.edges, ends, measurer, fontSize);
+    aimFreeEnds(layout.edges, ends, corridors);
+    for (const edge of layout.edges) {
+        const drawn = drawEdge(edge, ends.get(edge), corridors.get(edge), theme, measurer, fontSize);
         body.push(drawn.svg);
         ink = union(ink, grow(drawn.ink, layout.margin));
     }
-    // A link's geometry is measured rather than solved for, so the resolver sized
-    // the canvas from the boxes alone. A curve out of a `top` side, or a label
+    // An edge's geometry is measured rather than solved for, so the resolver sized
+    // the canvas from the boxes alone. A curve out of a `top` side, or a text
     // riding above one, lands outside that — so the page grows to hold it and the
     // origin moves with it, rather than the drawing being quietly clipped.
     const canvas = {
@@ -1750,7 +1789,7 @@ function render(layout, options = {}) {
         width: Math.ceil(ink.maxX) - Math.floor(ink.minX),
         height: Math.ceil(ink.maxY) - Math.floor(ink.minY),
     };
-    const arrowColors = new Set(layout.links.map((link) => lineOf(link.appearance, theme.link)));
+    const arrowColors = new Set(layout.edges.map((edge) => lineOf(edge.appearance, theme.edge)));
     return [
         `<svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}" viewBox="${canvas.x} ${canvas.y} ${canvas.width} ${canvas.height}" font-family=${quote(measurer.fontFamily)} font-size="${fontSize}px">`,
         '  <defs>',
@@ -1764,7 +1803,7 @@ function render(layout, options = {}) {
 }
 // --- nodes -------------------------------------------------------------------
 function drawNode(node, theme, measurer, fontSize) {
-    // A note is set smaller than a box label by default, and `size:` overrides
+    // A note is set smaller than a box text by default, and `size:` overrides
     // that on anything. Only this node's own text takes the size — children are
     // drawn by their own call and carry whatever they say themselves.
     const size = fontSizeFor(node.kind, node.appearance, fontSize, node.line);
@@ -1776,10 +1815,10 @@ function drawNode(node, theme, measurer, fontSize) {
         }), size, fontSize);
     }
     const shape = shapeFor(node.appearance, node.line);
-    const labelStyle = labelStyleFor(node.label, node.line);
+    const textStyle = textStyleFor(node.textAttrs, node.line);
     const glyphSide = ICON_LINES * textHeight;
     if (shape.body !== undefined) {
-        // No outline, no fill, no padding — the node is the picture. The label, if
+        // No outline, no fill, no padding — the node is the picture. The text, if
         // there is one, sits under it and centered.
         const drawn = [drawIcon(shape.body, node.x + (node.width - glyphSide) / 2, node.y, glyphSide, theme)];
         if (node.lines.some((line) => line.length > 0)) {
@@ -1801,13 +1840,13 @@ function drawNode(node, theme, measurer, fontSize) {
     const text = textOf(node.appearance, theme.text);
     const subColor = subtextOf(node.appearance, theme);
     // Deck copies sit behind the front face, furthest back drawn first.
-    for (let depth = node.deckLabels.length; depth >= 1; depth -= 1) {
+    for (let depth = node.deckTexts.length; depth >= 1; depth -= 1) {
         const x = face.x - depth * DECK_STEP;
         const y = face.y - depth * DECK_STEP;
         parts.push(`  <path d="${outlinePath(shape.outline, x, y, face.width, face.height)}" fill="${theme.containerFill}" stroke="${border}"/>`);
-        const label = node.deckLabels[depth - 1];
-        if (label !== undefined) {
-            parts.push(sized(textBlock([label], x + PAD, y + PAD, face.width - PAD * 2, textHeight, size, {
+        const copy = node.deckTexts[depth - 1];
+        if (copy !== undefined) {
+            parts.push(sized(textBlock([copy], x + PAD, y + PAD, face.width - PAD * 2, textHeight, size, {
                 color: text,
                 align: 'start',
             }), size, fontSize));
@@ -1817,18 +1856,18 @@ function drawNode(node, theme, measurer, fontSize) {
     for (const extra of outlineDetail(shape.outline, face.x, face.y, face.width, face.height)) {
         parts.push(`  <path d="${extra}" fill="none" stroke="${border}"/>`);
     }
-    // The icon takes a column on the right and the label lays out in what is
+    // The icon takes a column on the right and the text lays out in what is
     // left, which is the room the resolver already reserved for exactly this.
     const icon = iconFor(node.appearance, node.line);
     const iconSide = icon === undefined ? 0 : glyphSide;
-    const hasLabel = node.lines.some((line) => line.length > 0);
-    const iconRoom = icon === undefined ? 0 : iconSide + (hasLabel ? ICON_GAP : 0);
+    const hasText = node.lines.some((line) => line.length > 0);
+    const iconRoom = icon === undefined ? 0 : iconSide + (hasText ? ICON_GAP : 0);
     if (!container) {
-        // A leaf centers its label in the box, both ways — in the room beside the
+        // A leaf centers its text in the box, both ways — in the room beside the
         // icon rather than the whole box, so the two sit side by side. Centered
-        // across is only the default: a label of several lines may say `align`, and
+        // across is only the default: a text of several lines may say `align`, and
         // there is genuine slack between lines of unequal length to range them in.
-        const leafAlign = labelStyleFor(node.label, node.line, 'middle').align;
+        const leafAlign = textStyleFor(node.textAttrs, node.line, 'middle').align;
         const top = face.y + (face.height - node.lines.length * textHeight) / 2;
         parts.push(sized(textBlock(node.lines, face.x, top, face.width - iconRoom, textHeight, size, {
             color: text,
@@ -1837,28 +1876,28 @@ function drawNode(node, theme, measurer, fontSize) {
         }), size, fontSize));
     }
     else {
-        // The label and the icon share a band at one end of the box, and the
+        // The text and the icon share a band at one end of the box, and the
         // resolver has already given the contents the other end. A heading is
         // ranged left at the top; a caption is centered at the bottom.
         const band = Math.max(node.lines.length * textHeight, iconSide);
-        const bandTop = labelStyle.at === 'top' ? face.y + PAD : face.y + face.height - PAD - band;
+        const bandTop = textStyle.at === 'top' ? face.y + PAD : face.y + face.height - PAD - band;
         parts.push(sized(textBlock(node.lines, face.x + PAD, bandTop, face.width - PAD * 2 - iconRoom, textHeight, size, {
             color: text,
             subColor,
-            align: labelStyle.align,
+            align: textStyle.align,
         }), size, fontSize));
         for (const child of node.children) {
             parts.push(drawNode(child, theme, measurer, fontSize));
         }
     }
     if (icon !== undefined) {
-        // A container's icon rides in the label's band, at whichever end that is; a
-        // leaf's label is centered, so the icon centers with it. Both follow the
-        // label rather than being placed by a rule of their own, which is what
+        // A container's icon rides in the text's band, at whichever end that is; a
+        // leaf's text is centered, so the icon centers with it. Both follow the
+        // text rather than being placed by a rule of their own, which is what
         // keeps an icon reading as part of the title block and not as a sticker.
         const left = face.x + face.width - PAD - iconSide;
         const top = container
-            ? labelStyle.at === 'top'
+            ? textStyle.at === 'top'
                 ? face.y + PAD
                 : face.y + face.height - PAD - iconSide
             : face.y + (face.height - iconSide) / 2;
@@ -1932,12 +1971,12 @@ function drawIcon(icon, x, y, side, theme) {
         '  </g>',
     ].join('\n');
 }
-// --- links -------------------------------------------------------------------
-function drawLink(link, ends, corridor, theme, measurer, fontSize) {
+// --- edges -------------------------------------------------------------------
+function drawEdge(edge, ends, corridor, theme, measurer, fontSize) {
     const { start, end } = ends;
-    const color = lineOf(link.appearance, theme.link);
+    const color = lineOf(edge.appearance, theme.edge);
     const markerEnd = ` marker-end="url(#${markerId(color)})"`;
-    const markerStart = link.both ? ` marker-start="url(#${markerId(color)}-back)"` : '';
+    const markerStart = edge.both ? ` marker-start="url(#${markerId(color)}-back)"` : '';
     // A named side is a statement about how the line should leave or arrive, so
     // it is drawn as a curve that actually does leave and arrive that way. With
     // neither side named there is nothing to honor and the line stays straight.
@@ -1953,7 +1992,7 @@ function drawLink(link, ends, corridor, theme, measurer, fontSize) {
         const path = corridorPath(start, end, corridor);
         ink = union(ink, path.ink);
         parts.push(`  <path d="${path.d}" fill="none" stroke="${color}" stroke-width="${LINE_WIDTH}"${markerEnd}${markerStart}/>`);
-        // The label goes on the straight run rather than at the midpoint of the
+        // The text goes on the straight run rather than at the midpoint of the
         // whole path, so it sits in the gap the author asked the line to travel.
         midX = path.mid.x;
         midY = path.mid.y;
@@ -1971,7 +2010,7 @@ function drawLink(link, ends, corridor, theme, measurer, fontSize) {
         const c2 = { x: end.x + end.tx * reach + bx, y: end.y + end.ty * reach + by };
         parts.push(`  <path d="M ${round(start.x)} ${round(start.y)} C ${round(c1.x)} ${round(c1.y)}, ${round(c2.x)} ${round(c2.y)}, ${round(end.x)} ${round(end.y)}" fill="none" stroke="${color}" stroke-width="${LINE_WIDTH}"${markerEnd}${markerStart}/>`);
         ink = union(ink, cubicExtent(start, c1, c2, end));
-        // The point halfway along a cubic, which is where the label belongs.
+        // The point halfway along a cubic, which is where the text belongs.
         midX = (start.x + 3 * c1.x + 3 * c2.x + end.x) / 8;
         midY = (start.y + 3 * c1.y + 3 * c2.y + end.y) / 8;
     }
@@ -2000,18 +2039,18 @@ function drawLink(link, ends, corridor, theme, measurer, fontSize) {
         midX = (start.x + end.x) / 2;
         midY = (start.y + end.y) / 2;
     }
-    if (link.label !== undefined) {
-        // A link label breaks on ` / ` exactly as a box label does, so a two-line
+    if (edge.text !== undefined) {
+        // An edge text breaks on ` / ` exactly as a box text does, so a two-line
         // caption on an arrow needs no vocabulary of its own. The block is centered
-        // on the midpoint, which keeps a one-line label where it has always been.
-        const size = fontSizeFor('link', link.appearance, fontSize, link.line);
+        // on the midpoint, which keeps a one-line text where it has always been.
+        const size = fontSizeFor('edge', edge.appearance, fontSize, edge.line);
         const textHeight = measurer.lineHeight(size);
-        const { width, lines } = measurer.measure(link.label, size);
+        const { width, lines } = measurer.measure(edge.text, size);
         const height = lines.length * textHeight;
         const top = midY - height / 2;
-        // The label knocks a hole in whatever it lands on rather than sitting in a
+        // The text knocks a hole in whatever it lands on rather than sitting in a
         // chip of its own: an outlined box reads as a node, which is the one thing
-        // a label on a line is not.
+        // a text on a line is not.
         parts.push(`  <rect x="${round(midX - width / 2 - 5)}" y="${round(top)}" width="${round(width + 10)}" height="${round(height)}" fill="${theme.background}"/>`);
         ink = union(ink, {
             minX: midX - width / 2 - 5,
@@ -2020,9 +2059,9 @@ function drawLink(link, ends, corridor, theme, measurer, fontSize) {
             maxY: top + height,
         });
         parts.push(sized(textBlock(lines, midX - width / 2, top, width, textHeight, size, {
-            // A colored link carries its meaning into its label; an uncolored
+            // A colored edge carries its meaning into its text; an uncolored
             // one leaves the words to read as ordinary text.
-            color: textOf(link.appearance, lineOf(link.appearance, theme.text)),
+            color: textOf(edge.appearance, lineOf(edge.appearance, theme.text)),
             align: 'middle',
         }), size, fontSize));
     }
@@ -2057,7 +2096,7 @@ function extentOfPoints(points) {
  * What a cubic actually covers, which is not what its control points cover. A
  * handle reaching 140 pixels up carries the curve only about three quarters of
  * that, and sizing the page off the handles would leave a visible band of empty
- * canvas above every curved link. Solved rather than sampled: the extremes are
+ * canvas above every curved edge. Solved rather than sampled: the extremes are
  * the ends plus wherever the derivative — a quadratic — crosses zero.
  */
 function cubicExtent(p0, c1, c2, p3) {
@@ -2092,7 +2131,7 @@ function cubicExtent(p0, c1, c2, p3) {
     return { minX, minY, maxX, maxY };
 }
 /** Walk out from the center of a box toward a point, stopping at the border. */
-function edgePoint(box, toward) {
+function sidePoint(box, toward) {
     const center = centerOf(box);
     const dx = toward.x - center.x;
     const dy = toward.y - center.y;
@@ -2103,48 +2142,48 @@ function edgePoint(box, toward) {
     const scale = Math.min(scaleX, scaleY);
     return { x: center.x + dx * scale, y: center.y + dy * scale };
 }
-// --- where a link meets a box -------------------------------------------------
+// --- where an edge meets a box -------------------------------------------------
 const SIDES = ['top', 'bottom', 'left', 'right'];
 /**
- * Work out where every link meets every box.
+ * Work out where every edge meets every box.
  *
  * An author names a *side* — `to: top` — and never a point on it. Alone on a
- * side a link lands at its center; sharing the side with others, the points
+ * side an edge lands at its center; sharing the side with others, the points
  * spread so they do not sit on top of each other. Which one goes where is
- * derived from where the far ends actually are, never chosen: of two links
+ * derived from where the far ends actually are, never chosen: of two edges
  * arriving at one top edge, the one coming from further left arrives further
  * left. That is the same rule as box non-overlap — the tool separates things by
  * default, and reads the direction off the solved layout rather than asking.
  *
- * Where several links run between the *same* pair of sides that rule has
+ * Where several edges run between the *same* pair of sides that rule has
  * nothing to read, and a `Bundle` supplies the order instead — see there.
  */
-function planEndpoints(links, measurer, fontSize) {
+function planEndpoints(edges, measurer, fontSize) {
     const claims = new Map();
     const achieved = new Map();
     const named = new Map();
-    const bundles = planBundles(links, measurer, fontSize);
-    const spreads = planSpreads(links, measurer, fontSize);
-    for (const link of links) {
-        named.set(link, {});
-        const fromSide = sideAttr(link, 'from');
-        const toSide = sideAttr(link, 'to');
+    const bundles = planBundles(edges, measurer, fontSize);
+    const spreads = planSpreads(edges, measurer, fontSize);
+    for (const edge of edges) {
+        named.set(edge, {});
+        const fromSide = sideAttr(edge, 'from');
+        const toSide = sideAttr(edge, 'to');
         if (fromSide) {
-            claim(claims, link.from, fromSide, {
-                link,
+            claim(claims, edge.from, fromSide, {
+                edge,
                 which: 'start',
                 side: fromSide,
-                toward: centerOf(faceOf(link.to)),
-                rank: rankIn(bundles.get(link), link, link.from, fromSide),
+                toward: centerOf(faceOf(edge.to)),
+                rank: rankIn(bundles.get(edge), edge, edge.from, fromSide),
             });
         }
         if (toSide) {
-            claim(claims, link.to, toSide, {
-                link,
+            claim(claims, edge.to, toSide, {
+                edge,
                 which: 'end',
                 side: toSide,
-                toward: centerOf(faceOf(link.from)),
-                rank: rankIn(bundles.get(link), link, link.to, toSide),
+                toward: centerOf(faceOf(edge.from)),
+                rank: rankIn(bundles.get(edge), edge, edge.to, toSide),
             });
         }
     }
@@ -2155,18 +2194,18 @@ function planEndpoints(links, measurer, fontSize) {
             const along = side === 'top' || side === 'bottom' ? 'x' : 'y';
             const span = along === 'x' ? face.width : face.height;
             const origin = along === 'x' ? face.x : face.y;
-            // Far ends first, as ever; a bundle's own lane order settles the links
+            // Far ends first, as ever; a bundle's own lane order settles the edges
             // that share one, which are precisely the ones the first key cannot.
             const ordered = [...group].sort((a, b) => a.toward[along] - b.toward[along] || (a.rank ?? 0) - (b.rank ?? 0));
-            // A bundle's lanes have to hold whole labels apart rather than the points
+            // A bundle's lanes have to hold whole texts apart rather than the points
             // of two arrows, so its step is the one that governs the side it lands on.
-            const wanted = Math.max(ATTACH_STEP, ...group.map((entry) => bundles.get(entry.link)?.step ?? 0));
+            const wanted = Math.max(ATTACH_STEP, ...group.map((entry) => bundles.get(entry.edge)?.step ?? 0));
             const usable = Math.max(0, span - ATTACH_MARGIN * 2);
             const step = ordered.length > 1 ? Math.min(wanted, usable / (ordered.length - 1)) : 0;
             const first = origin + span / 2 - (step * (ordered.length - 1)) / 2;
             ordered.forEach((entry, index) => {
                 const at = first + index * step;
-                named.get(entry.link)[entry.which] = anchorOn(face, side, at);
+                named.get(entry.edge)[entry.which] = anchorOn(face, side, at);
             });
             // What the side could actually give, which is less than `wanted` when it
             // is too short for the group. `bowBundles` makes up the difference.
@@ -2180,34 +2219,34 @@ function planEndpoints(links, measurer, fontSize) {
     // Fill in the ends the author said nothing about, now that the named ones
     // are known: an unnamed end aims at wherever its partner ended up.
     const ends = new Map();
-    for (const link of links) {
-        const partial = named.get(link);
-        const fromFace = faceOf(link.from);
-        const toFace = faceOf(link.to);
-        // Several links between one pair of boxes with no side named anywhere: the
+    for (const edge of edges) {
+        const partial = named.get(edge);
+        const fromFace = faceOf(edge.from);
+        const toFace = faceOf(edge.to);
+        // Several edges between one pair of boxes with no side named anywhere: the
         // line each would have drawn alone, moved aside so they do not coincide.
-        const spread = spreads.get(link);
+        const spread = spreads.get(edge);
         if (spread) {
-            ends.set(link, { ...parallelEnds(fromFace, toFace, spread.offset), bow: spread.bow });
+            ends.set(edge, { ...parallelEnds(fromFace, toFace, spread.offset), bow: spread.bow });
             continue;
         }
         // With neither end named this is the straight line it always was, each end
         // aiming at the other box's center.
         const start = partial.start ?? free(fromFace, partial.end ?? centerOf(toFace));
         const end = partial.end ?? free(toFace, partial.start ?? centerOf(fromFace));
-        ends.set(link, { start, end, bow: bows.get(link) });
+        ends.set(edge, { start, end, bow: bows.get(edge) });
     }
     return ends;
 }
 /**
- * Group the links that run between the same pair of sides, and work out the
+ * Group the edges that run between the same pair of sides, and work out the
  * lane order and lane width each group needs.
  *
- * Only a link whose author named *both* sides can be in a bundle: a bundle is a
+ * Only an edge whose author named *both* sides can be in a bundle: a bundle is a
  * statement about two specific edges, and an end with no side named has not
  * picked one yet.
  */
-function planBundles(links, measurer, fontSize) {
+function planBundles(edges, measurer, fontSize) {
     const ids = new Map();
     const idOf = (node) => {
         let id = ids.get(node);
@@ -2218,13 +2257,13 @@ function planBundles(links, measurer, fontSize) {
         return id;
     };
     const groups = new Map();
-    for (const link of links) {
-        const fromSide = sideAttr(link, 'from');
-        const toSide = sideAttr(link, 'to');
-        if (!fromSide || !toSide || link.from === link.to)
+    for (const edge of edges) {
+        const fromSide = sideAttr(edge, 'from');
+        const toSide = sideAttr(edge, 'to');
+        if (!fromSide || !toSide || edge.from === edge.to)
             continue;
-        const a = { node: link.from, side: fromSide };
-        const b = { node: link.to, side: toSide };
+        const a = { node: edge.from, side: fromSide };
+        const b = { node: edge.to, side: toSide };
         const keyA = `${idOf(a.node)}:${a.side}`;
         const keyB = `${idOf(b.node)}:${b.side}`;
         // The pair is unordered — `a -> b` and `b -> a` join the same two edges —
@@ -2234,13 +2273,13 @@ function planBundles(links, measurer, fontSize) {
         const ends = swap ? [b, a] : [a, b];
         const group = groups.get(key);
         if (group)
-            group.links.push(link);
+            group.edges.push(edge);
         else
-            groups.set(key, { ends, links: [link] });
+            groups.set(key, { ends, edges: [edge] });
     }
     const bundles = new Map();
     for (const group of groups.values()) {
-        if (group.links.length < 2)
+        if (group.edges.length < 2)
             continue;
         const [first, second] = group.ends;
         const t0 = tangentOf(first.side);
@@ -2253,16 +2292,16 @@ function planBundles(links, measurer, fontSize) {
         // step them to opposite sides and it pivots, which is a crossing.
         const aligned = cross(run, t0) * cross(run, t1) >= 0;
         const sense = aligned ? 1 : -1;
-        // Two links leaving in opposite directions are the ordinary case, and which
+        // Two edges leaving in opposite directions are the ordinary case, and which
         // lane each takes is then read off the diagram rather than off the order the
         // author happened to type them in: a line keeps to one side of its own run.
-        // Links pointing the same way have no such signal and fall back to the file.
-        const order = new Map(group.links.map((link, index) => [link, index]));
-        const lanes = [...group.links].sort((a, b) => Number(a.from !== first.node) - Number(b.from !== first.node) ||
+        // Edges pointing the same way have no such signal and fall back to the file.
+        const order = new Map(group.edges.map((edge, index) => [edge, index]));
+        const lanes = [...group.edges].sort((a, b) => Number(a.from !== first.node) - Number(b.from !== first.node) ||
             order.get(a) - order.get(b));
-        // One lane apart moves a link's start by `step` along one side and its end
+        // One lane apart moves an edge's start by `step` along one side and its end
         // by `step` along the other, so the midpoint of the line — which is where
-        // its label goes — moves by the average of the two.
+        // its text goes — moves by the average of the two.
         const drift = { x: (t0.x + sense * t1.x) / 2, y: (t0.y + sense * t1.y) / 2 };
         const bundle = {
             ends: group.ends,
@@ -2270,41 +2309,41 @@ function planBundles(links, measurer, fontSize) {
             aligned,
             step: Math.max(ATTACH_STEP, laneStep(lanes, drift, measurer, fontSize)),
         };
-        for (const link of lanes)
-            bundles.set(link, bundle);
+        for (const edge of lanes)
+            bundles.set(edge, bundle);
     }
     return bundles;
 }
 /**
- * The sideways offset each link takes when several run between the same two
+ * The sideways offset each edge takes when several run between the same two
  * boxes and none of them names a side.
  *
  * An unnamed end has no side to spread along: it aims at the far box's center
- * and attaches wherever that ray crosses the border, so every link in such a
+ * and attaches wherever that ray crosses the border, so every edge in such a
  * group produces the *same* ray and they are drawn on top of one another —
- * one visible line, every label stacked on one point. `planEndpoints` cannot
+ * one visible line, every text stacked on one point. `planEndpoints` cannot
  * see this and `planBundles` will not, since a bundle is a statement about two
  * named edges.
  *
  * The repair keeps the attachment rule exactly as it is and only stops two
- * links using it at the same place: the line a link would have drawn alone is
+ * edges using it at the same place: the line an edge would have drawn alone is
  * translated across its own run by a lane, which is the straight-line version
- * of the nesting a bundle already gives curves. A lone link is in no group and
+ * of the nesting a bundle already gives curves. A lone edge is in no group and
  * so is untouched.
  *
  * Where the boxes are too small to hold the group at full spacing, the ends
  * are squeezed evenly to fit the edge — there is nowhere further to attach —
  * and the shortfall is made up in the middle instead: each line bows across
- * its run by exactly what its endpoints could not give it, so the labels, which
+ * its run by exactly what its endpoints could not give it, so the texts, which
  * ride at the midpoints, come apart even though the arrows do not. The bow is
  * therefore derived rather than styled, and it is zero whenever the edge was
  * long enough, which is why the ordinary case is still a straight line.
  *
- * A `between` link is left out. Its route is the corridor it named, its lane
+ * A `between` edge is left out. Its route is the corridor it named, its lane
  * inside that corridor is `planCorridors`' business, and `aimFreeEnds` will
  * re-aim these ends at the corridor afterwards regardless.
  */
-function planSpreads(links, measurer, fontSize) {
+function planSpreads(edges, measurer, fontSize) {
     const ids = new Map();
     const idOf = (node) => {
         let id = ids.get(node);
@@ -2315,47 +2354,47 @@ function planSpreads(links, measurer, fontSize) {
         return id;
     };
     const groups = new Map();
-    for (const link of links) {
-        if (sideAttr(link, 'from') || sideAttr(link, 'to'))
+    for (const edge of edges) {
+        if (sideAttr(edge, 'from') || sideAttr(edge, 'to'))
             continue;
-        if (link.from === link.to || link.between)
+        if (edge.from === edge.to || edge.between)
             continue;
-        const a = idOf(link.from);
-        const b = idOf(link.to);
+        const a = idOf(edge.from);
+        const b = idOf(edge.to);
         const swap = b < a;
         const key = swap ? `${b}|${a}` : `${a}|${b}`;
-        const first = swap ? link.to : link.from;
+        const first = swap ? edge.to : edge.from;
         const group = groups.get(key);
         if (group)
-            group.links.push(link);
+            group.edges.push(edge);
         else
-            groups.set(key, { first, links: [link] });
+            groups.set(key, { first, edges: [edge] });
     }
     const spreads = new Map();
     for (const group of groups.values()) {
-        if (group.links.length < 2)
+        if (group.edges.length < 2)
             continue;
         const from = centerOf(faceOf(group.first));
-        const sample = group.links[0];
+        const sample = group.edges[0];
         const other = sample.from === group.first ? sample.to : sample.from;
         const to = centerOf(faceOf(other));
         const dx = to.x - from.x;
         const dy = to.y - from.y;
         const length = Math.hypot(dx, dy) || 1;
-        // Translating the line moves its midpoint — where the label goes — by
+        // Translating the line moves its midpoint — where the text goes — by
         // exactly this, so it is the drift `laneStep` needs.
         const across = { x: -dy / length, y: dx / length };
-        // The same derived order a bundle uses: links pointing opposite ways each
+        // The same derived order a bundle uses: edges pointing opposite ways each
         // keep to one side of their own run, so a reciprocal pair reads as a
-        // circulation, and only links pointing the same way fall back to the file.
-        const order = new Map(group.links.map((link, index) => [link, index]));
-        const lanes = [...group.links].sort((a, b) => Number(a.from !== group.first) - Number(b.from !== group.first) ||
+        // circulation, and only edges pointing the same way fall back to the file.
+        const order = new Map(group.edges.map((edge, index) => [edge, index]));
+        const lanes = [...group.edges].sort((a, b) => Number(a.from !== group.first) - Number(b.from !== group.first) ||
             order.get(a) - order.get(b));
         // How far a lane may be shifted before its line no longer passes through the
         // box at all. `exitAlong` clamps beyond that, which piles the outer lanes
-        // onto a corner and puts their labels back on top of each other — so the
+        // onto a corner and puts their texts back on top of each other — so the
         // group is squeezed evenly instead, exactly as `planEndpoints` squeezes a
-        // side too short for the links arriving on it, and just as silently.
+        // side too short for the edges arriving on it, and just as silently.
         const reach = (node) => {
             const face = faceOf(node);
             const byX = across.x === 0 ? Infinity : face.width / 2 / Math.abs(across.x);
@@ -2364,22 +2403,22 @@ function planSpreads(links, measurer, fontSize) {
         };
         // Which way lane 0 lies is arbitrary, so fix it the way the rest of the
         // renderer does — toward increasing x, or increasing y where the run is
-        // horizontal. Without this the first link written is topmost on a rightward
+        // horizontal. Without this the first edge written is topmost on a rightward
         // run and rightmost on a downward one, for no reason a reader could see.
         const orient = across.x < 0 || (across.x === 0 && across.y < 0) ? -1 : 1;
         const usable = 2 * Math.min(reach(group.first), reach(other));
         const wanted = Math.max(ATTACH_STEP, laneStep(lanes, across, measurer, fontSize));
         const step = Math.min(wanted, usable / (lanes.length - 1));
-        lanes.forEach((link, index) => {
+        lanes.forEach((edge, index) => {
             const place = index - (lanes.length - 1) / 2;
             // The lane is measured across the pair's own run, which has one direction;
-            // a link written the other way round travels the opposite way and would
+            // an edge written the other way round travels the opposite way and would
             // otherwise take the same offset to the opposite side, putting a
             // reciprocal pair back on one line. Negated, both keep to their own left,
             // which is the circulation a bundle already draws.
-            const sense = (link.from === group.first ? 1 : -1) * orient;
+            const sense = (edge.from === group.first ? 1 : -1) * orient;
             const shortfall = place * (wanted - step) * sense;
-            spreads.set(link, {
+            spreads.set(edge, {
                 offset: place * step * sense,
                 bow: { x: across.x * shortfall, y: across.y * shortfall },
             });
@@ -2388,11 +2427,11 @@ function planSpreads(links, measurer, fontSize) {
     return spreads;
 }
 /**
- * The bow each bundled link needs, where the sides it was given were too short
- * to hold the group at the spacing its labels asked for.
+ * The bow each bundled edge needs, where the sides it was given were too short
+ * to hold the group at the spacing its texts asked for.
  *
  * A named side is squeezed exactly as an unnamed group's edge is — the step
- * shrinks to `usable / (n - 1)` and the labels ride down on top of each other —
+ * shrinks to `usable / (n - 1)` and the texts ride down on top of each other —
  * and until this existed, naming the two sides the tool would have chosen
  * anyway made the picture strictly worse than saying nothing. That is not a
  * line worth defending, so the same repair applies: a lane's midpoint is not
@@ -2425,35 +2464,35 @@ function bowBundles(bundles, achieved) {
         };
         if (short.x === 0 && short.y === 0)
             continue;
-        bundle.lanes.forEach((link, index) => {
+        bundle.lanes.forEach((edge, index) => {
             const place = index - (bundle.lanes.length - 1) / 2;
-            bows.set(link, { x: short.x * place, y: short.y * place });
+            bows.set(edge, { x: short.x * place, y: short.y * place });
         });
     }
     return bows;
 }
 /**
- * How far apart adjacent lanes must sit for their labels to clear each other.
+ * How far apart adjacent lanes must sit for their texts to clear each other.
  *
- * The labels are knockout rectangles, so two of them clear when they are apart
+ * The texts are knockout rectangles, so two of them clear when they are apart
  * on *either* axis — hence the smaller of the two answers. `drift` is how far
  * the midpoint travels per unit of step, and it is never zero: the two ends
  * cancel only when both sides run the same way, and two such sides are always
  * `aligned`, which adds rather than subtracts.
  */
 function laneStep(lanes, drift, measurer, fontSize) {
-    const labeled = lanes.filter((link) => link.label !== undefined);
-    if (labeled.length < 2)
+    const withText = lanes.filter((edge) => edge.text !== undefined);
+    if (withText.length < 2)
         return 0;
-    const need = (axis) => Math.max(...labeled.map((link) => labelExtent(link.label, link.appearance, axis, measurer, fontSize, link.line)));
+    const need = (axis) => Math.max(...withText.map((edge) => textExtent(edge.text, edge.appearance, axis, measurer, fontSize, edge.line)));
     const along = (axis, reach) => reach === 0 ? Infinity : need(axis) / Math.abs(reach);
     return Math.min(along('x', drift.x), along('y', drift.y));
 }
-/** Which lane of its bundle a link's end at this side takes, if it is in one. */
-function rankIn(bundle, link, node, side) {
+/** Which lane of its bundle an edge's end at this side takes, if it is in one. */
+function rankIn(bundle, edge, node, side) {
     if (!bundle)
         return undefined;
-    const lane = bundle.lanes.indexOf(link);
+    const lane = bundle.lanes.indexOf(edge);
     const [first, second] = bundle.ends;
     if (node === first.node && side === first.side)
         return lane;
@@ -2502,7 +2541,7 @@ function anchorOn(face, side, at) {
 }
 /** An end with no side named: leave from the border, pointing at the far end. */
 function free(face, toward) {
-    const point = edgePoint(face, toward);
+    const point = sidePoint(face, toward);
     const center = centerOf(face);
     const dx = point.x - center.x;
     const dy = point.y - center.y;
@@ -2512,7 +2551,7 @@ function free(face, toward) {
 /**
  * Walk from a point inside a box along a direction, stopping at the border.
  *
- * `edgePoint` walks from the center, which is the only place a single line
+ * `sidePoint` walks from the center, which is the only place a single line
  * passes through. A fanned-out group's lines are parallel to that one and
  * beside it, so each needs the border crossing of its own line rather than of
  * the center's — which is what keeps the group parallel instead of splayed.
@@ -2530,11 +2569,11 @@ function exitAlong(box, from, dir) {
     return { x: x + dir.x * Math.max(0, t), y: y + dir.y * Math.max(0, t) };
 }
 /**
- * Both ends of a link that named no side, moved `offset` sideways across its
+ * Both ends of an edge that named no side, moved `offset` sideways across its
  * own run.
  *
  * The whole line is translated rather than each end being nudged along its
- * border, so the result is genuinely parallel to the line the link would have
+ * border, so the result is genuinely parallel to the line the edge would have
  * drawn alone, exactly `offset` away from it. Where each end lands then falls
  * out of that: level boxes put both points further along the same two edges,
  * and a diagonal pair whose line leaves through a corner puts one point on each
@@ -2614,61 +2653,61 @@ function gapBetween(a, b, aName, bName, wanted, line) {
     };
 }
 /**
- * Route every link that named a gap.
+ * Route every edge that named a gap.
  *
- * Links sharing one gap share its lanes, spread like attachments on a side and
+ * Edges sharing one gap share its lanes, spread like attachments on a side and
  * ordered the same derived way — by where their ends actually sit, so the two
  * arriving at the hub's left edge in one order run through the corridor in that
  * same order and never cross.
  */
-function planCorridors(links, ends, measurer, fontSize) {
+function planCorridors(edges, ends, measurer, fontSize) {
     const plans = new Map();
     const groups = new Map();
-    for (const link of links) {
-        if (!link.between)
+    for (const edge of edges) {
+        if (!edge.between)
             continue;
-        const [first, second] = link.between.nodes;
-        const gap = gapBetween(faceOf(first), faceOf(second), first.name, second.name, link.between.axis, link.line);
+        const [first, second] = edge.between.nodes;
+        const gap = gapBetween(faceOf(first), faceOf(second), first.name, second.name, edge.between.axis, edge.line);
         // The pair names one gap however the author ordered them. The axis is in
-        // the key because a diagonal pair really does have two, and two links may
+        // the key because a diagonal pair really does have two, and two edges may
         // legitimately name the same pair and take different ones.
         const key = [gap.axis, ...[first.name, second.name].sort()].join(' ');
         const group = groups.get(key);
         if (group)
-            group.members.push(link);
+            group.members.push(edge);
         else
-            groups.set(key, { ...gap, members: [link] });
+            groups.set(key, { ...gap, members: [edge] });
     }
     for (const group of groups.values()) {
-        const along = (link) => {
-            const { start, end } = ends.get(link);
+        const along = (edge) => {
+            const { start, end } = ends.get(edge);
             return (start[group.axis] + end[group.axis]) / 2;
         };
         const ordered = [...group.members].sort((a, b) => along(a) - along(b));
         // Lanes are spread as attachments on a side are, including the squeeze when
         // there is not enough room — see `planEndpoints`. The step is wider here,
-        // because a lane carries a whole label rather than the point of an arrow,
-        // and two lanes closer together than a label is deep would draw the labels
+        // because a lane carries a whole text rather than the point of an arrow,
+        // and two lanes closer together than a text is deep would draw the texts
         // over each other. Still derived, not chosen: it is the size of what is
         // actually running along the corridor.
         const span = group.hi - group.lo;
         const usable = Math.max(0, span - ATTACH_MARGIN * 2);
-        const want = Math.max(ATTACH_STEP, ...ordered.map((link) => laneExtent(link, group.axis, measurer, fontSize)));
+        const want = Math.max(ATTACH_STEP, ...ordered.map((edge) => laneExtent(edge, group.axis, measurer, fontSize)));
         const step = ordered.length > 1 ? Math.min(want, usable / (ordered.length - 1)) : 0;
         const firstLane = group.lo + span / 2 - (step * (ordered.length - 1)) / 2;
-        ordered.forEach((link, index) => {
-            const { start, end } = ends.get(link);
+        ordered.forEach((edge, index) => {
+            const { start, end } = ends.get(edge);
             const run = group.axis === 'y' ? 'x' : 'y';
-            // The corridor binds only where the link is actually passing the pair, so
-            // its reach is the overlap of the pair's extent with the link's own.
+            // The corridor binds only where the edge is actually passing the pair, so
+            // its reach is the overlap of the pair's extent with the edge's own.
             const enterAt = Math.max(group.across[0], Math.min(start[run], end[run]));
             const leaveAt = Math.min(group.across[1], Math.max(start[run], end[run]));
             if (leaveAt <= enterAt) {
-                const [a, b] = link.between.nodes;
-                throw new SourceError(`this link never passes between "${a.name}" and "${b.name}"`, link.line);
+                const [a, b] = edge.between.nodes;
+                throw new SourceError(`this edge never passes between "${a.name}" and "${b.name}"`, edge.line);
             }
             const forward = end[run] >= start[run];
-            plans.set(link, {
+            plans.set(edge, {
                 axis: group.axis,
                 lane: firstLane + index * step,
                 enter: forward ? enterAt : leaveAt,
@@ -2683,41 +2722,41 @@ function planCorridors(links, ends, measurer, fontSize) {
  * is the wrong thing to aim at once the line has been told to go somewhere else
  * on the way. Point those ends at the corridor instead.
  */
-function aimFreeEnds(links, ends, corridors) {
-    for (const link of links) {
-        const plan = corridors.get(link);
+function aimFreeEnds(edges, ends, corridors) {
+    for (const edge of edges) {
+        const plan = corridors.get(edge);
         if (!plan)
             continue;
-        const current = ends.get(link);
+        const current = ends.get(edge);
         const start = current.start.side === undefined
-            ? free(faceOf(link.from), corridorPoint(plan, plan.enter))
+            ? free(faceOf(edge.from), corridorPoint(plan, plan.enter))
             : current.start;
         const end = current.end.side === undefined
-            ? free(faceOf(link.to), corridorPoint(plan, plan.leave))
+            ? free(faceOf(edge.to), corridorPoint(plan, plan.leave))
             : current.end;
-        ends.set(link, { start, end });
+        ends.set(edge, { start, end });
     }
 }
 /**
- * How much room a link's label takes across the corridor — its depth in a
- * horizontal channel, its width in a vertical one. Zero for an unlabeled link,
+ * How much room an edge's text takes across the corridor — its depth in a
+ * horizontal channel, its width in a vertical one. Zero for an edge with no text,
  * which needs no more than the arrow spacing.
  *
- * `labelExtent` measures the knockout along whichever axis it is handed, and the
+ * `textExtent` measures the knockout along whichever axis it is handed, and the
  * axis wanted here is the one the channel is measured on rather than the one the
- * link runs along — a channel measured vertically carries links running
- * horizontally, and what has to fit between two lanes of it is a label's depth.
+ * edge runs along — a channel measured vertically carries edges running
+ * horizontally, and what has to fit between two lanes of it is a text's depth.
  */
-function laneExtent(link, axis, measurer, fontSize) {
-    if (link.label === undefined)
+function laneExtent(edge, axis, measurer, fontSize) {
+    if (edge.text === undefined)
         return 0;
-    return labelExtent(link.label, link.appearance, axis, measurer, fontSize, link.line);
+    return textExtent(edge.text, edge.appearance, axis, measurer, fontSize, edge.line);
 }
 function corridorPoint(plan, at) {
     return plan.axis === 'y' ? { x: at, y: plan.lane } : { x: plan.lane, y: at };
 }
 /**
- * The path a corridor link takes: a curve out of its start into the gap, the
+ * The path a corridor edge takes: a curve out of its start into the gap, the
  * straight run along the gap, and a curve out of the gap to its end. It is
  * three pieces rather than one cubic because a single curve has no way to stay
  * inside an interval over part of its length — which is the whole claim the
@@ -2756,12 +2795,12 @@ function corridorReach(from, to, axis) {
     const distance = Math.hypot(to.x - from.x, to.y - from.y);
     return Math.min(140, Math.max(8, Math.min(distance * 0.4, run / 2)));
 }
-function sideAttr(link, key) {
-    const value = link.attrs[key];
+function sideAttr(edge, key) {
+    const value = edge.attrs[key];
     if (value === undefined)
         return undefined;
     if (!SIDES.includes(value)) {
-        throw new SourceError(`"${key}: ${value}" is not a side — use ${SIDES.join(', ')}`, link.line);
+        throw new SourceError(`"${key}: ${value}" is not a side — use ${SIDES.join(', ')}`, edge.line);
     }
     return value;
 }
@@ -2808,7 +2847,7 @@ function textBlock(lines, x, top, width, lineHeight, fontSize, style) {
         if (line.length === 0)
             return '';
         const baseline = top + index * lineHeight + lineHeight / 2 + fontSize * 0.35;
-        // A label's first line is its name; anything after it is a qualifier, and
+        // A text's first line is its name; anything after it is a qualifier, and
         // `subtext:` is how a box says that qualifier should read as secondary.
         const color = index === 0 ? style.color : style.subColor ?? style.color;
         return `  <text x="${round(anchorX)}" y="${round(baseline)}" fill="${color}" text-anchor="${style.align}">${escapeXml(line)}</text>`;
@@ -2835,9 +2874,9 @@ function textOf(appearance, fallback) {
     return appearance['text'] ?? fallback;
 }
 /**
- * The color for every label line after the first, or undefined when the box
+ * The color for every text line after the first, or undefined when the box
  * said nothing and all its lines should read alike. `muted` is the one reserved
- * word: it defers to the theme, so a label's qualifier stays readable when the
+ * word: it defers to the theme, so a text's qualifier stays readable when the
  * theme changes. Anything else is a color, same as `text` and `fill` take.
  */
 function subtextOf(appearance, theme) {
@@ -2983,20 +3022,20 @@ function resolve(doc, options = {}) {
     checkStyleKeys(doc.statements);
     const { nodes, byName, roots } = buildTree(doc.statements, styles);
     applyDecks(doc.statements, byName);
-    // Links are resolved to nodes before anything is sized, because a labeled
-    // link claims room in the gap it crosses and so has to be in hand while the
+    // Edges are resolved to nodes before anything is sized, because a labeled
+    // edge claims room in the gap it crosses and so has to be in hand while the
     // gaps are being worked out. Nothing here reads geometry.
-    const links = buildLinks(doc.statements, byName, styles);
+    const edges = buildEdges(doc.statements, byName, styles);
     const local = new Map();
     for (const root of roots)
-        sizeNode(root, links, measurer, fontSize, local);
-    placeRoots(roots, byName, links, measurer, fontSize, local);
+        sizeNode(root, edges, measurer, fontSize, local);
+    placeRoots(roots, byName, edges, measurer, fontSize, local);
     normalize(nodes, margin);
     const extent = bounds(nodes);
     return {
         nodes,
         roots,
-        links,
+        edges,
         diagram: collectDiagram(doc.statements),
         width: Math.ceil(extent.maxX + margin),
         height: Math.ceil(extent.maxY + margin),
@@ -3033,7 +3072,7 @@ function buildTree(statements, styles) {
     const byName = new Map();
     const roots = [];
     for (const stmt of statements) {
-        if (stmt.kind !== 'box' && stmt.kind !== 'note')
+        if (stmt.kind !== 'node' && stmt.kind !== 'note')
             continue;
         if (byName.has(stmt.name)) {
             throw new SourceError(`"${stmt.name}" is declared twice`, stmt.line);
@@ -3049,9 +3088,9 @@ function buildTree(statements, styles) {
             width: 0,
             height: 0,
             inset: 0,
-            deckLabels: [],
+            deckTexts: [],
             headerHeight: 0,
-            label: stmt.kind === 'box' ? stmt.label : {},
+            textAttrs: stmt.kind === 'node' ? stmt.textAttrs : {},
             attrs: stmt.attrs,
             appearance: appearanceOf(stmt.attrs, styles, stmt.line),
             placements: stmt.placements,
@@ -3078,13 +3117,25 @@ function buildTree(statements, styles) {
     }
     return { nodes, byName, roots };
 }
+/**
+ * "a node", "an edge". Only the kind words are ever passed here and only `edge`
+ * begins with a vowel, but writing `a ${word}` produced "a edge" the day the
+ * keyword changed, so the article follows the word rather than being assumed.
+ */
+function article(word) {
+    return `${/^[aeiou]/.test(word) ? 'an' : 'a'} ${word}`;
+}
+/** The same phrase opening a sentence. */
+function capital(phrase) {
+    return phrase.charAt(0).toUpperCase() + phrase.slice(1);
+}
 /** How each kind reads in an error, and what it is actually made of. */
-const KIND_WORD = { box: 'box', note: 'note', glyph: 'glyph body', link: 'link' };
+const KIND_WORD = { node: 'node', note: 'note', glyph: 'glyph body', edge: 'edge' };
 const KIND_PARTS = {
-    box: 'a fill, a border and text',
+    node: 'a fill, a border and text',
     note: 'bare text and nothing else',
     glyph: 'a picture and the text under it',
-    link: 'a line and its label',
+    edge: 'a line and its text',
 };
 /**
  * An attribute is refused on a kind that has no use for it — the same rule as
@@ -3095,7 +3146,7 @@ const KIND_PARTS = {
  * What is checked is what the author wrote *on this statement*, not what a
  * style contributed. A style is a bundle meant to be shared across kinds — the
  * benchmark's `synced` carries a fill and a border for the green boxes and a
- * line for the four links joining them — so a key it carries that this kind has
+ * line for the four edges joining them — so a key it carries that this kind has
  * no part for is simply unused, and is not a mistake anybody made here. That is
  * forced rather than chosen: checking the merged appearance would refuse the
  * benchmark's own central idiom four times over. `checkStyleUse` is what keeps
@@ -3111,7 +3162,7 @@ function checkAttrs(kind, name, attrs, line) {
         if (!ALL_ATTR_KEYS.includes(key)) {
             // Nothing anywhere in the language answers to this word, so the only
             // remedy is the vocabulary itself.
-            throw new SourceError(`"${name}" has ${key}: ${value}, which is not an attribute. A ${KIND_WORD[kind]} takes ${allowed.join(', ')}`, line);
+            throw new SourceError(`"${name}" has ${key}: ${value}, which is not an attribute. ${capital(article(KIND_WORD[kind]))} takes ${allowed.join(', ')}`, line);
         }
         // A real word in the wrong place, and the two sorts of word want different
         // explanations. A color names a *part*, so saying what the kind is made of
@@ -3120,14 +3171,14 @@ function checkAttrs(kind, name, attrs, line) {
         // `border:` on a note, and one hint cannot serve both.
         if (COLOR_KEYS.includes(key)) {
             const parts = COLOR_PARTS[kind].map((part) => `\`${part}:\``).join(', ');
-            throw new SourceError(`"${name}" is a ${KIND_WORD[kind]} and has ${key}: ${value}. A ${KIND_WORD[kind]} is ${KIND_PARTS[kind]}, so it has no ${key} — it takes ${parts}`, line);
+            throw new SourceError(`"${name}" is ${article(KIND_WORD[kind])} and has ${key}: ${value}. ${capital(article(KIND_WORD[kind]))} is ${KIND_PARTS[kind]}, so it has no ${key} — it takes ${parts}`, line);
         }
         // Anything else names no part, so what the kind is made of explains
         // nothing. What does explain it is where the word *does* belong, which is
         // also the more useful thing to be told: the author has usually written a
         // real statement about the wrong half of the diagram.
-        throw new SourceError(`"${name}" is a ${KIND_WORD[kind]} and has ${key}: ${value}. \`${key}:\` belongs to ` +
-            `${listKinds(belongTo(key))} — a ${KIND_WORD[kind]} takes ${allowed.join(', ')}`, line);
+        throw new SourceError(`"${name}" is ${article(KIND_WORD[kind])} and has ${key}: ${value}. \`${key}:\` belongs to ` +
+            `${listKinds(belongTo(key))} — ${article(KIND_WORD[kind])} takes ${allowed.join(', ')}`, line);
     }
 }
 /**
@@ -3157,7 +3208,7 @@ function checkStyleUse(kind, name, attrs, styles, line) {
     if (carried.some((key) => ATTR_KEYS[kind].includes(key)))
         return;
     throw new SourceError(`style "${named}" gives "${name}" nothing. It carries ${carried.join(' and ')}; ` +
-        `a ${KIND_WORD[kind]} is ${KIND_PARTS[kind]}`, line);
+        `${article(KIND_WORD[kind])} is ${KIND_PARTS[kind]}`, line);
 }
 /**
  * A style is a bundle spanning kinds, so its keys cannot be checked against any
@@ -3181,9 +3232,9 @@ function checkStyleKeys(statements) {
 function belongTo(key) {
     return Object.keys(ATTR_KEYS).filter((kind) => ATTR_KEYS[kind].includes(key));
 }
-/** "a link", "a box or a glyph body", "a box, a note or a glyph body". */
+/** "an edge", "a node or a glyph body", "a node, a note or a glyph body". */
 function listKinds(kinds) {
-    const words = kinds.map((kind) => `a ${KIND_WORD[kind]}`);
+    const words = kinds.map((kind) => article(KIND_WORD[kind]));
     if (words.length <= 1)
         return words[0] ?? 'nothing';
     return `${words.slice(0, -1).join(', ')} or ${words[words.length - 1]}`;
@@ -3192,7 +3243,7 @@ function listKinds(kinds) {
 function kindOf(node) {
     if (node.kind === 'note')
         return 'note';
-    return shapeFor(node.appearance, node.line).body !== undefined ? 'glyph' : 'box';
+    return shapeFor(node.appearance, node.line).body !== undefined ? 'glyph' : 'node';
 }
 function appearanceOf(attrs, styles, line) {
     const named = attrs['style'];
@@ -3210,25 +3261,25 @@ function applyDecks(statements, byName) {
         const node = byName.get(stmt.name);
         if (!node)
             throw new SourceError(`deck names "${stmt.name}", which does not exist`, stmt.line);
-        node.deckLabels = stmt.labels;
+        node.deckTexts = stmt.texts;
     }
 }
-function buildLinks(statements, byName, styles) {
-    const links = [];
+function buildEdges(statements, byName, styles) {
+    const edges = [];
     for (const stmt of statements) {
-        if (stmt.kind !== 'link')
+        if (stmt.kind !== 'edge')
             continue;
         const from = byName.get(stmt.from);
         const to = byName.get(stmt.to);
         if (!from)
-            throw new SourceError(`link from "${stmt.from}", which does not exist`, stmt.line);
+            throw new SourceError(`edge from "${stmt.from}", which does not exist`, stmt.line);
         if (!to)
-            throw new SourceError(`link to "${stmt.to}", which does not exist`, stmt.line);
+            throw new SourceError(`edge to "${stmt.to}", which does not exist`, stmt.line);
         const between = stmt.between && {
             nodes: stmt.between.targets.map((name) => {
                 const node = byName.get(name);
                 if (!node) {
-                    throw new SourceError(`link passes between "${name}", which does not exist`, stmt.line);
+                    throw new SourceError(`edge passes between "${name}", which does not exist`, stmt.line);
                 }
                 return node;
             }),
@@ -3236,29 +3287,29 @@ function buildLinks(statements, byName, styles) {
         };
         const appearance = appearanceOf(stmt.attrs, styles, stmt.line);
         const what = `${stmt.from} -> ${stmt.to}`;
-        checkAttrs('link', what, stmt.attrs, stmt.line);
-        checkStyleUse('link', what, stmt.attrs, styles, stmt.line);
-        links.push({
+        checkAttrs('edge', what, stmt.attrs, stmt.line);
+        checkStyleUse('edge', what, stmt.attrs, styles, stmt.line);
+        edges.push({
             from,
             to,
             both: stmt.both,
-            ...(stmt.label !== undefined ? { label: stmt.label } : {}),
+            ...(stmt.text !== undefined ? { text: stmt.text } : {}),
             ...(between ? { between } : {}),
             attrs: stmt.attrs,
             appearance,
             line: stmt.line,
         });
     }
-    return links;
+    return edges;
 }
 /**
  * Give a node a width and height, sizing its children first. Also records each
  * child's offset within this node, which pass three turns into absolute
  * coordinates once this node itself is placed.
  */
-function sizeNode(node, links, measurer, fontSize, local) {
+function sizeNode(node, edges, measurer, fontSize, local) {
     for (const child of node.children)
-        sizeNode(child, links, measurer, fontSize, local);
+        sizeNode(child, edges, measurer, fontSize, local);
     // Text is measured at the size it will be drawn at — the size lives in
     // `constants.ts` precisely so the resolver reserving the room and the
     // renderer filling it cannot disagree about how much room there is.
@@ -3266,69 +3317,69 @@ function sizeNode(node, links, measurer, fontSize, local) {
     const lineHeight = measurer.lineHeight(textSize);
     // A node with empty text takes no room for it. This is what makes an
     // invisible grouping container size to exactly its contents.
-    const hasLabel = node.lines.some((line) => line.length > 0);
-    const labelWidth = hasLabel ? widestLine(node.lines, measurer, textSize) : 0;
-    const labelHeight = hasLabel ? node.lines.length * lineHeight : 0;
+    const hasText = node.lines.some((line) => line.length > 0);
+    const textWidth = hasText ? widestLine(node.lines, measurer, textSize) : 0;
+    const textHeight = hasText ? node.lines.length * lineHeight : 0;
     if (node.kind === 'note') {
         // A note is bare text, so it gets no padding and takes no children.
-        node.width = labelWidth;
-        node.height = labelHeight;
+        node.width = textWidth;
+        node.height = textHeight;
         return;
     }
     const shape = shapeFor(node.appearance, node.line);
     const glyphSide = ICON_LINES * lineHeight;
     if (shape.body !== undefined) {
         // Drawn as a glyph, so there is no box to pad and the node's size is the
-        // picture's. A label goes under it rather than inside it, which is the
+        // picture's. A text goes under it rather than inside it, which is the
         // arrangement that makes a row of these read as captioned things.
         if (node.children.length > 0) {
             throw new SourceError(`"${node.name}" is drawn as a glyph and has children. A glyph is not a box, so nothing can go inside it`, node.line);
         }
-        node.width = Math.max(glyphSide, labelWidth);
-        node.height = glyphSide + (hasLabel ? ICON_GAP + labelHeight : 0);
+        node.width = Math.max(glyphSide, textWidth);
+        node.height = glyphSide + (hasText ? ICON_GAP + textHeight : 0);
         return;
     }
     // An icon takes a column of its own on the right of whatever the box holds,
-    // so the label never runs underneath it and the box grows to fit both. That
+    // so the text never runs underneath it and the box grows to fit both. That
     // is why an icon is not a renderer-only concern: it is content taking room,
-    // like a label, and not appearance like `fill:`.
+    // like a text, and not appearance like `fill:`.
     const icon = iconFor(node.appearance, node.line);
     const iconSide = icon === undefined ? 0 : glyphSide;
-    const iconRoom = icon === undefined ? 0 : iconSide + (hasLabel ? ICON_GAP : 0);
+    const iconRoom = icon === undefined ? 0 : iconSide + (hasText ? ICON_GAP : 0);
     if (node.children.length === 0) {
         // A band only exists because contents have to sit clear of it, and a leaf
         // has none, so `at` has no end to name. `align` is a different question and
-        // is allowed: a label of several lines has lines of unequal length in any
+        // is allowed: a text of several lines has lines of unequal length in any
         // box, and ranging them left rather than centering them is a real thing to
         // want. It was refused here too until 2026-09-09, purely because the two
         // words arrive in the same brackets.
-        if (node.label['at'] !== undefined) {
-            throw new SourceError(`"${node.name}" holds nothing and its label carries at: ${node.label['at']}. ` +
-                `A label sits at one end of a box so its contents can have the other; with no contents there is no band for it to sit at either end of`, node.line);
+        if (node.textAttrs['at'] !== undefined) {
+            throw new SourceError(`"${node.name}" holds nothing and its text carries at: ${node.textAttrs['at']}. ` +
+                `A text sits at one end of a box so its contents can have the other; with no contents there is no band for it to sit at either end of`, node.line);
         }
-        node.width = labelWidth + iconRoom + PAD * 2;
-        node.height = Math.max(labelHeight, iconSide) + PAD * 2;
+        node.width = textWidth + iconRoom + PAD * 2;
+        node.height = Math.max(textHeight, iconSide) + PAD * 2;
     }
     else {
         applyAlign(node);
-        const content = layoutChildren(node, links, measurer, fontSize, local);
-        const band = Math.max(labelHeight, iconSide);
-        // `headerHeight` is the band the label and icon take, whichever end of the
+        const content = layoutChildren(node, edges, measurer, fontSize, local);
+        const band = Math.max(textHeight, iconSide);
+        // `headerHeight` is the band the text and icon take, whichever end of the
         // box that band is at. Only the contents' offset depends on the side.
-        node.headerHeight = hasLabel || icon !== undefined ? band + HEADER_GAP : 0;
-        node.width = Math.max(labelWidth + iconRoom, content.width) + PAD * 2;
+        node.headerHeight = hasText || icon !== undefined ? band + HEADER_GAP : 0;
+        node.width = Math.max(textWidth + iconRoom, content.width) + PAD * 2;
         node.height = node.headerHeight + content.height + PAD * 2;
-        const above = labelStyleFor(node.label, node.line).at === 'top' ? node.headerHeight : 0;
+        const above = textStyleFor(node.textAttrs, node.line).at === 'top' ? node.headerHeight : 0;
         for (const child of node.children) {
             const offset = local.get(child);
             offset.x += PAD;
             offset.y += PAD + above;
         }
     }
-    if (node.deckLabels.length > 0) {
+    if (node.deckTexts.length > 0) {
         // The copies sit behind and above-left, so the whole node grows by the
         // depth of the stack and its own face moves down and right by the same.
-        node.inset = node.deckLabels.length * DECK_STEP;
+        node.inset = node.deckTexts.length * DECK_STEP;
         node.width += node.inset;
         node.height += node.inset;
         for (const child of node.children) {
@@ -3360,7 +3411,7 @@ function applyAlign(node) {
  * siblings they name, by the same constraint pass that positions top-level
  * nodes. A placement may only name a sibling — containment scopes the group.
  */
-function layoutChildren(parent, links, measurer, fontSize, local) {
+function layoutChildren(parent, edges, measurer, fontSize, local) {
     const siblings = new Map(parent.children.map((child) => [child.name, child]));
     // Children that say nothing keep the written order, down the page and flush
     // left. Written as constraints rather than a cursor so a placed sibling can
@@ -3391,7 +3442,7 @@ function layoutChildren(parent, links, measurer, fontSize, local) {
             width: target.width,
             height: target.height,
         };
-    }), { x: alignment, y: stack }, corridorsIn(links, (node) => liftTo(node, indexOf, local), measurer, fontSize));
+    }), { x: alignment, y: stack }, corridorsIn(edges, (node) => liftTo(node, indexOf, local), measurer, fontSize));
     for (const child of parent.children)
         local.set(child, positions.get(child));
     return extentOf(parent.children, local);
@@ -3416,7 +3467,7 @@ function extentOf(children, local) {
     return { width: maxX - minX, height: maxY - minY };
 }
 // --- pass three: solve for positions -----------------------------------------
-function placeRoots(roots, byName, links, measurer, fontSize, local) {
+function placeRoots(roots, byName, edges, measurer, fontSize, local) {
     const anchors = roots.filter((root) => root.placements.length === 0);
     if (anchors.length === 0) {
         throw new SourceError('every node is placed relative to another, so nothing anchors the diagram', 1);
@@ -3450,7 +3501,7 @@ function placeRoots(roots, byName, links, measurer, fontSize, local) {
             width: target.width,
             height: target.height,
         };
-    }), { x: [], y: [] }, corridorsIn(links, (node) => liftTo(node, indexOf, local), measurer, fontSize));
+    }), { x: [], y: [] }, corridorsIn(edges, (node) => liftTo(node, indexOf, local), measurer, fontSize));
     for (const root of roots) {
         const position = positions.get(root);
         root.x = position.x;
@@ -3471,9 +3522,9 @@ const AXES = ['x', 'y'];
 const AXIS_WORD = { x: 'horizontally', y: 'vertically' };
 /**
  * Where a node sits within the group being solved: which member holds it, and
- * where inside that member. A link may name anything at any depth, so its ends
+ * where inside that member. An edge may name anything at any depth, so its ends
  * are lifted to the members of whichever group is being solved — and a node
- * outside that group has no answer, which is how a link is sorted into the one
+ * outside that group has no answer, which is how an edge is sorted into the one
  * group where its two ends are different members.
  */
 function liftTo(node, indexOf, local) {
@@ -3496,28 +3547,28 @@ function liftTo(node, indexOf, local) {
         height: node.height,
     };
 }
-/** The labeled links whose two ends are different members of this group. */
-function corridorsIn(links, locate, measurer, fontSize) {
+/** The edges with text whose two ends are different members of this group. */
+function corridorsIn(edges, locate, measurer, fontSize) {
     const corridors = [];
-    for (const link of links) {
-        // An unlabeled link asks for nothing: every gap holds an arrowhead. And a
-        // link told to pass between two named things carries its label in *that*
+    for (const edge of edges) {
+        // An edge with no text asks for nothing: every gap holds an arrowhead. And a
+        // edge told to pass between two named things carries its text in *that*
         // corridor rather than in the gap between its own ends, so widening this one
-        // would make room where the label never goes.
-        if (link.label === undefined || link.between)
+        // would make room where the text never goes.
+        if (edge.text === undefined || edge.between)
             continue;
-        const from = locate(link.from);
-        const to = locate(link.to);
+        const from = locate(edge.from);
+        const to = locate(edge.to);
         if (!from || !to || from.index === to.index)
             continue;
-        // The clearance is doubled because the label is drawn at the *midpoint* of
+        // The clearance is doubled because the text is drawn at the *midpoint* of
         // the line, so the room it needs is symmetric about that point whatever sits
         // at either end. The arrowhead is charged on both sides for the same reason:
         // it covers `ARROW_LENGTH` of the line it arrives on, and reserving that at
         // one end only would move the midpoint rather than lengthen the run.
-        const extent = (axis) => labelExtent(link.label, link.appearance, axis, measurer, fontSize, link.line) +
-            (LABEL_CLEARANCE + ARROW_LENGTH) * 2;
-        corridors.push({ link, from, to, need: { x: extent('x'), y: extent('y') } });
+        const extent = (axis) => textExtent(edge.text, edge.appearance, axis, measurer, fontSize, edge.line) +
+            (TEXT_CLEARANCE + ARROW_LENGTH) * 2;
+        corridors.push({ edge, from, to, need: { x: extent('x'), y: extent('y') } });
     }
     return corridors;
 }
@@ -3562,18 +3613,18 @@ function positionGroup(members, locate, extra, corridors = []) {
         // Aligning to several targets means aligning to the box that just bounds
         // them. That box is a constant only while its members hold still relative
         // to one another; otherwise the alignment waits for the first solution.
-        const alignOn = (axis, edge, targets, placement) => {
+        const alignOn = (axis, side, targets, placement) => {
             const anchor = sharedMember(targets);
             if (anchor === undefined) {
-                pending.push({ node, me, axis, edge, targets, placement });
+                pending.push({ node, me, axis, side, targets, placement });
                 return;
             }
             const span = spanOf(targets, axis, () => 0);
-            constraints[axis].push(...fix(anchor, me, alignedAt(edge, span, size[axis]), placement));
+            constraints[axis].push(...fix(anchor, me, alignedAt(side, span, size[axis]), placement));
         };
         for (const { placement, targets } of located) {
             if (placement.kind === 'align') {
-                alignOn(placement.axis, placement.edge, targets, placement);
+                alignOn(placement.axis, placement.side, targets, placement);
                 continue;
             }
             // One constraint per target, so the node clears the furthest of them.
@@ -3679,35 +3730,35 @@ function spanOf(targets, axis, base) {
     }
     return { start, size: end - start };
 }
-/** Where a node of this size sits so that the named edge of it meets the span's. */
-function alignedAt(edge, span, own) {
-    if (edge === 'center')
+/** Where a node of this size sits so that the named side of it meets the span's. */
+function alignedAt(side, span, own) {
+    if (side === 'center')
         return span.start + (span.size - own) / 2;
-    if (edge === 'top' || edge === 'left')
+    if (side === 'top' || side === 'left')
         return span.start;
     return span.start + span.size - own;
 }
 /**
- * Widen a corridor to hold the label of the link crossing it.
+ * Widen a corridor to hold the text of the edge crossing it.
  *
- * This is the one place a link reaches the constraint system, and it is the same
- * measure-then-constrain move `settle` makes rather than links joining the graph
- * outright: the first solution says which gap each label actually falls in, and
+ * This is the one place an edge reaches the constraint system, and it is the same
+ * measure-then-constrain move `settle` makes rather than edges joining the graph
+ * outright: the first solution says which gap each text actually falls in, and
  * from there the room it needs is an ordinary minimum distance like any other.
  * Nothing is nudged and no layout is repaired — a constraint the file already
  * implied is derived and the whole system is solved again.
  *
  * Which gap that is, is derived and never chosen. A pair clear of each other on
- * exactly one axis has exactly one corridor between them, and the label is in
+ * exactly one axis has exactly one corridor between them, and the text is in
  * it. A pair clear on *both* axes sits corner to corner, so the line runs
  * diagonally through open space and there is no corridor to widen; a pair clear
  * on neither overlaps, which is the separation pass's business and not this
  * one's. Both are left alone, which is why this only ever moves boxes that a
- * label is genuinely wedged between.
+ * text is genuinely wedged between.
  *
  * A gap being a minimum does the rest. Where the corridor is already wide enough
  * — because the author said `gap: wide`, or because something else is in there
- * — the constraint is slack and nothing moves; delete the label and the corridor
+ * — the constraint is slack and nothing moves; delete the text and the corridor
  * closes back to whatever the file asked for.
  */
 function room(corridors, constraints, solved, solveAll) {
@@ -3773,7 +3824,7 @@ function settle(pending, members, constraints, solved, solveAll) {
             const span = spanOf(entry.targets, axis, (target) => solved[axis][target.index]);
             const own = axis === 'x' ? entry.node.width : entry.node.height;
             const anchor = entry.targets[0].index;
-            constraints[axis].push(...fix(anchor, entry.me, alignedAt(entry.edge, span, own) - solved[axis][anchor], entry.placement));
+            constraints[axis].push(...fix(anchor, entry.me, alignedAt(entry.side, span, own) - solved[axis][anchor], entry.placement));
         }
     }
     solveAll();
@@ -3792,7 +3843,7 @@ function confirm(pending, solved) {
         const { axis } = entry;
         const span = spanOf(entry.targets, axis, (target) => solved[axis][target.index]);
         const own = axis === 'x' ? entry.node.width : entry.node.height;
-        if (Math.abs(alignedAt(entry.edge, span, own) - solved[axis][entry.me]) <= 0.5)
+        if (Math.abs(alignedAt(entry.side, span, own) - solved[axis][entry.me]) <= 0.5)
             continue;
         throw new SourceError(`"${entry.node.name}" cannot be ${describePlacement(entry.placement)}: keeping boxes off ` +
             `each other moved them apart after that region was measured`, entry.placement.line);
@@ -4026,7 +4077,7 @@ function widestLine(lines, measurer, fontSize) {
     }, 0);
 }
 /**
- * Split a label into the lines that get drawn. `/` always breaks a line. A
+ * Split a text into the lines that get drawn. `/` always breaks a line. A
  * `width` attribute additionally folds each of those at word boundaries, which
  * is what stops a long note running across the whole diagram.
  *
@@ -4121,9 +4172,9 @@ function normalize(nodes, margin) {
  * it. A word missing here is a word that draws in the plain color, which is a
  * dull page rather than a wrong one.
  */
-const STATEMENT_KEYWORDS = ['box', 'note', 'link', 'deck', 'style', 'diagram'];
+const STATEMENT_KEYWORDS = ['node', 'note', 'edge', 'deck', 'style', 'diagram'];
 /** Statements whose second word declares a name. `diagram` has none. */
-const DECLARES_NAME = ['box', 'note', 'deck', 'style'];
+const DECLARES_NAME = ['node', 'note', 'deck', 'style'];
 /**
  * Every word that says something about where a thing goes. Assembled from the
  * lists the parser itself reads, so a direction or a passage axis added there
@@ -4131,7 +4182,7 @@ const DECLARES_NAME = ['box', 'note', 'deck', 'style'];
  */
 const RELATION_WORDS = [
     ...DIRECTIONS,
-    ...EDGES,
+    ...SIDES,
     ...Object.keys(PASSAGE_AXES),
     // The connecting words. `of` is optional after a direction, `and` joins
     // targets, `between` opens a passage, `level with` is the alignment.
@@ -4250,7 +4301,7 @@ function highlightLine(line) {
                     if (space !== null) {
                         push('plain', at + space.length);
                         const name = match(WORD, line, at);
-                        // `style backup  border: …` declares a name; `box  fill: red` is a
+                        // `style backup  border: …` declares a name; `node  fill: red` is a
                         // half-typed line whose second word is already an attribute, and
                         // coloring that as a name would be a lie about what it is.
                         if (name !== null && !name.endsWith(':'))
@@ -4322,15 +4373,15 @@ globalThis.reladraw = { compile, SourceError, highlightLine };
         'use strict';
 
         // The first thing a visitor sees. No comments in it: every statement
-        // says where a box goes, which is the whole point, and a paragraph
+        // says where a node goes, which is the whole point, and a paragraph
         // explaining that in advance only gets in the way.
         var SEED = [
-          'box parser "Parser"',
-          'box renderer "Renderer"  right of parser',
-          'box resolver "Resolver"  right of parser  left of renderer  level with parser',
+          'node parser "Parser"',
+          'node renderer "Renderer"  right of parser',
+          'node resolver "Resolver"  right of parser  left of renderer  level with parser',
           '',
-          'link parser -> resolver    "statements"  from: right  to: left',
-          'link resolver -> renderer  "layout"      from: right  to: left',
+          'edge parser -> resolver    "statements"  from: right  to: left',
+          'edge resolver -> renderer  "layout"      from: right  to: left',
           '',
         ].join('\n');
 

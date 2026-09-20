@@ -24,7 +24,7 @@ import { SourceError } from './errors.js';
 /**
  * Icons carry three tones rather than colors. `ink` is the drawn line, `shade`
  * the body it encloses, and `void` is the page showing through — the same
- * knockout a link label already uses. Naming tones instead of colors is what
+ * knockout an edge text already uses. Naming tones instead of colors is what
  * lets one glyph sit correctly on a dark theme and a light one.
  */
 export type IconTone = 'ink' | 'shade' | 'void';
@@ -183,7 +183,7 @@ const PLAIN: NodeShape = { outline: 'box' };
  * The value is either a box outline or the name of a glyph. Those are the two
  * things "what is this drawn as" can answer, and the author has no reason to
  * care which category their answer fell into. The test that separates them is
- * whether the node still sizes itself from its label: a `document` does, a
+ * whether the node still sizes itself from its text: a `document` does, a
  * glyph does not.
  */
 export function shapeFor(appearance: Record<string, string>, line: number): NodeShape {

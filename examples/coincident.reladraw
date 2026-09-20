@@ -1,59 +1,59 @@
-// Several links between the same two boxes with no side named anywhere. Each
-// line is shifted sideways off the one a single link would draw, so they stay
+// Several edges between the same two nodes with no side named anywhere. Each
+// line is shifted sideways off the one a single edge would draw, so they stay
 // parallel and each end lands wherever its own line crosses the border.
 
 diagram background: #111111
 
-style box  fill: #191728  border: #4f5367
+style plain  fill: #191728  border: #4f5367
 
-// Level boxes, so the run is horizontal and the lanes fan out vertically.
-box a "A"  style: box
-box b "B"  right of a (gap: wide)  level with a  style: box
-link a -> b  "first"
-link a -> b  "second"
-link a -> b  "third"
+// Level nodes, so the run is horizontal and the lanes fan out vertically.
+node a "A"  style: plain
+node b "B"  right of a (gap: wide)  level with a  style: plain
+edge a -> b  "first"
+edge a -> b  "second"
+edge a -> b  "third"
 
 // A perfect diagonal, where the single line would leave through the corner
 // exactly. These two straddle it, one point on each of the edges meeting there.
-box low  "Low"   below a (gap: wide)  left of a  style: box
-box high "High"  above low  right of low (gap: wide)  style: box
-link low -> high   "up"
-link high -> low   "down"
+node low  "Low"   below a (gap: wide)  left of a  style: plain
+node high "High"  above low  right of low (gap: wide)  style: plain
+edge low -> high   "up"
+edge high -> low   "down"
 
 // A near diagonal, where the crossing point sits on one edge but close to the
 // corner.
-box near "Near"  below low (gap: wide)  style: box
-box far  "Far"   right of near (gap: wide)  above near  style: box
-link near -> far  "one"
-link near -> far  "two"
+node near "Near"  below low (gap: wide)  style: plain
+node far  "Far"   right of near (gap: wide)  above near  style: plain
+edge near -> far  "one"
+edge near -> far  "two"
 
-// A lone link is in no group and does not move.
-box solo  "Solo"   below near (gap: wide)  style: box
-box alone "Alone"  right of solo (gap: wide)  level with solo  style: box
-link solo -> alone  "by itself"
+// A lone edge is in no group and does not move.
+node solo  "Solo"   below near (gap: wide)  style: plain
+node alone "Alone"  right of solo (gap: wide)  level with solo  style: plain
+edge solo -> alone  "by itself"
 
-// Naming a side on either end takes a link out of the group.
-box named "Named"  below solo (gap: wide)  style: box
-box other "Other"  right of named (gap: wide)  level with named  style: box
-link named -> other  "free"
-link named -> other  "free too"
-link named -> other  "top"  from: top  to: top
+// Naming a side on either end takes an edge out of the group.
+node named "Named"  below solo (gap: wide)  style: plain
+node other "Other"  right of named (gap: wide)  level with named  style: plain
+edge named -> other  "free"
+edge named -> other  "free too"
+edge named -> other  "top"  from: top  to: top
 
 // More than the edges can hold. The ends squeeze together and each line bows
-// out in the middle to make up what its ends could not give it, so the labels
+// out in the middle to make up what its ends could not give it, so the texts
 // still come apart. The middle line has no shortfall and stays straight.
-box many "Many"  below named (gap: wide)  style: box
-box one  "One"   right of many (gap: wide)  level with many  style: box
-link many -> one  "first"
-link many -> one  "second"
-link many -> one  "third"
-link many -> one  "fourth"
-link many -> one  "fifth"
+node many "Many"  below named (gap: wide)  style: plain
+node one  "One"   right of many (gap: wide)  level with many  style: plain
+edge many -> one  "first"
+edge many -> one  "second"
+edge many -> one  "third"
+edge many -> one  "fourth"
+edge many -> one  "fifth"
 
-// The same on a vertical run, where the labels sit at one height and a lane is
-// a whole label wide.
-box top    "Top"     below many (gap: wide)  style: box
-box bottom "Bottom"  below top (gap: wide)  style: box
-link top -> bottom  "alpha"
-link top -> bottom  "beta"
-link top -> bottom  "gamma"
+// The same on a vertical run, where the texts sit at one height and a lane is
+// a whole text wide.
+node top    "Top"     below many (gap: wide)  style: plain
+node bottom "Bottom"  below top (gap: wide)  style: plain
+edge top -> bottom  "alpha"
+edge top -> bottom  "beta"
+edge top -> bottom  "gamma"

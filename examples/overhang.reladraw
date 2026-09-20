@@ -1,24 +1,24 @@
-// Links that leave the area the boxes cover. The page grows to hold them: the
-// boxes here cover 378x230 and the page comes out 428x312.
+// Edges that leave the area the nodes cover. The page grows to hold them: the
+// nodes here cover 378x230 and the page comes out 428x312.
 
 diagram background: #111111
 
-style box  fill: #191728  border: #4f5367
+style plain  fill: #191728  border: #4f5367
 
-box a "A"                            style: box
-box b "B"  right of a  (gap: wide)   style: box
-box c "C"  right of b                style: box
+node a "A"                            style: plain
+node b "B"  right of a  (gap: wide)   style: plain
+node c "C"  right of b                style: plain
 
-box d "D"  below a and c             style: box
+node d "D"  below a and c             style: plain
 
-// A long arch over everything, with the label at the top of it.
-link a -> b  "over the top"  from: top  to: top
+// A long arch over everything, with the text at the top of it.
+edge a -> b  "over the top"  from: top  to: top
 
 // The same shape across a narrow gap.
-link b -> c  from: top  to: top
+edge b -> c  from: top  to: top
 
 // Out the left and back into the bottom, so the loop hangs off the left edge.
-link d -> a  "round the side"  from: left  to: left
+edge d -> a  "round the side"  from: left  to: left
 
 // And one under the bottom row.
-link a -> d  from: bottom  to: bottom
+edge a -> d  from: bottom  to: bottom

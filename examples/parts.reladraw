@@ -2,28 +2,28 @@
 
 diagram background: #111111
 
-// All three parts of a box.
-box ledger "Ledger / append only"  fill: #142814  border: #486544  text: #cfe8c4  subtext: muted
+// All three parts of a node.
+node ledger "Ledger / append only"  fill: #142814  border: #486544  text: #cfe8c4  subtext: muted
 
 // Text on its own.
-box plain "Plain"  right of ledger (gap: wide)  text: #ff9d4d
+node plain "Plain"  right of ledger (gap: wide)  text: #ff9d4d
 
 // A note is text and nothing else, so `text:` is the only color it takes.
 // `border:` here is an error rather than a no-op.
 note remark "a note is text and nothing else"  below ledger  text: #66ccff
 
-// A style shared between boxes and links writes one key per kind. The box takes
-// the border, the link takes the line, and neither sees the other's word.
+// A style shared between nodes and edges writes one key per kind. The node takes
+// the border, the edge takes the line, and neither sees the other's word.
 style traced  border: #d2904e  line: #d2904e
 
 // A glyph body is a picture and the text under it.
-box store "store"  right of plain (gap: wide)  shape: database  text: #ff9d4d
+node store "store"  right of plain (gap: wide)  shape: database  text: #ff9d4d
 
-// A link's label takes the line's color unless `text:` says otherwise.
-box worker "Worker"  below remark (gap: wide)  style: traced
-box queue  "Queue"   right of worker (gap: wide)  level with worker
-link worker -> queue  "inherits the line"  style: traced  from: right  to: left
+// An edge's text takes the line's color unless `text:` says otherwise.
+node worker "Worker"  below remark (gap: wide)  style: traced
+node queue  "Queue"   right of worker (gap: wide)  level with worker
+edge worker -> queue  "inherits the line"  style: traced  from: right  to: left
 
-box reader "Reader"  below worker (gap: wide)
-box cache  "Cache"   right of reader (gap: wide)  level with reader
-link reader -> cache  "says its own"  line: #ff9d4d  text: #d9d9d9  from: right  to: left
+node reader "Reader"  below worker (gap: wide)
+node cache  "Cache"   right of reader (gap: wide)  level with reader
+edge reader -> cache  "says its own"  line: #ff9d4d  text: #d9d9d9  from: right  to: left

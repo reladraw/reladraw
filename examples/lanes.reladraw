@@ -1,56 +1,56 @@
-// Several links between the same two sides nest instead of crossing. The lanes
-// are as wide as the labels riding in them.
+// Several edges between the same two sides nest instead of crossing. The lanes
+// are as wide as the texts riding in them.
 
 diagram background: #111111
 
-style box  fill: #191728  border: #4f5367
+style plain  fill: #191728  border: #4f5367
 
 // A reciprocal pair around a corner. Further left along Gateway's bottom is
 // further down Queue's left, so the order reverses between the two ends.
-box gateway "Gateway"  style: box
-box queue   "Queue"    below gateway  right of gateway (gap: wide)  style: box
-link gateway -> queue  "publishes messages"  from: bottom  to: left
-link queue -> gateway  "receives messages"   from: left    to: bottom
+node gateway "Gateway"  style: plain
+node queue   "Queue"    below gateway  right of gateway (gap: wide)  style: plain
+edge gateway -> queue  "publishes messages"  from: bottom  to: left
+edge queue -> gateway  "receives messages"   from: left    to: bottom
 
 // Two edges facing each other, where the order runs the same way at both ends.
-box client "Client"  below queue (gap: wide)  left of queue  style: box
-box server "Server"  right of client (gap: wide)  level with client  style: box
-link client -> server  "request"   from: right  to: left
-link server -> client  "response"  from: left   to: right
+node client "Client"  below queue (gap: wide)  left of queue  style: plain
+node server "Server"  right of client (gap: wide)  level with client  style: plain
+edge client -> server  "request"   from: right  to: left
+edge server -> client  "response"  from: left   to: right
 
-// Five lanes down a vertical run. The labels all sit at the same height, so the
-// only way they clear each other is sideways and a lane has to be a whole label
-// wide. These two boxes are wide enough for five of them.
-box fan  "Fan of five, spread wide"  below client (gap: wide)  left of client  style: box
-box hub  "Hub of the same five"     below fan (gap: wide)  style: box
-link fan -> hub  "one"    from: bottom  to: top
-link fan -> hub  "two"    from: bottom  to: top
-link fan -> hub  "three"  from: bottom  to: top
-link fan -> hub  "four"   from: bottom  to: top
-link fan -> hub  "five"   from: bottom  to: top
+// Five lanes down a vertical run. The texts all sit at the same height, so the
+// only way they clear each other is sideways and a lane has to be a whole text
+// wide. These two nodes are wide enough for five of them.
+node fan  "Fan of five, spread wide"  below client (gap: wide)  left of client  style: plain
+node hub  "Hub of the same five"     below fan (gap: wide)  style: plain
+edge fan -> hub  "one"    from: bottom  to: top
+edge fan -> hub  "two"    from: bottom  to: top
+edge fan -> hub  "three"  from: bottom  to: top
+edge fan -> hub  "four"   from: bottom  to: top
+edge fan -> hub  "five"   from: bottom  to: top
 
-// Two links pointing the same way. Nothing tells them apart, so the order they
-// are written in decides. Swap these two lines and the labels swap lanes.
-box left_wall  "Producer"  below hub (gap: wide)  left of hub  style: box
-box right_wall "Consumer"  right of left_wall (gap: wide)  level with left_wall  style: box
-link left_wall -> right_wall  "bulk"     from: right  to: left
-link left_wall -> right_wall  "control"  from: right  to: left
+// Two edges pointing the same way. Nothing tells them apart, so the order they
+// are written in decides. Swap these two lines and the texts swap lanes.
+node left_wall  "Producer"  below hub (gap: wide)  left of hub  style: plain
+node right_wall "Consumer"  right of left_wall (gap: wide)  level with left_wall  style: plain
+edge left_wall -> right_wall  "bulk"     from: right  to: left
+edge left_wall -> right_wall  "control"  from: right  to: left
 
 // Sharing one side only is not a bundle. The far ends differ, and that is
 // enough to order them.
-box spoke "Spoke"  below right_wall (gap: wide)  style: box
-box up    "Up"     above spoke  right of spoke (gap: wide)  style: box
-box down  "Down"   below spoke  right of spoke (gap: wide)  style: box
-link spoke -> up    from: right  to: left
-link spoke -> down  from: right  to: left
+node spoke "Spoke"  below right_wall (gap: wide)  style: plain
+node up    "Up"     above spoke  right of spoke (gap: wide)  style: plain
+node down  "Down"   below spoke  right of spoke (gap: wide)  style: plain
+edge spoke -> up    from: right  to: left
+edge spoke -> down  from: right  to: left
 
-// More links than the two edges can hold. The arrowheads squeeze together
+// More edges than the two sides can hold. The arrowheads squeeze together
 // because there is nowhere further along an edge to go, and each line makes up
-// the shortfall by bowing out in the middle, where the labels ride.
-box narrow "Narrow"  below spoke (gap: wide)  left of spoke  style: box
-box also   "Also"    right of narrow (gap: wide)  level with narrow  style: box
-link narrow -> also  "first"   from: right  to: left
-link narrow -> also  "second"  from: right  to: left
-link narrow -> also  "third"   from: right  to: left
-link narrow -> also  "fourth"  from: right  to: left
-link narrow -> also  "fifth"   from: right  to: left
+// the shortfall by bowing out in the middle, where the texts ride.
+node narrow "Narrow"  below spoke (gap: wide)  left of spoke  style: plain
+node also   "Also"    right of narrow (gap: wide)  level with narrow  style: plain
+edge narrow -> also  "first"   from: right  to: left
+edge narrow -> also  "second"  from: right  to: left
+edge narrow -> also  "third"   from: right  to: left
+edge narrow -> also  "fourth"  from: right  to: left
+edge narrow -> also  "fifth"   from: right  to: left

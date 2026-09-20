@@ -23,16 +23,16 @@ export interface Measurer {
 }
 
 /**
- * A slash with whitespace on both sides marks a line break, so a label is
+ * A slash with whitespace on both sides marks a line break, so a text is
  * really a short stack of lines. Each line is trimmed; empty ones are dropped.
  *
  * The whitespace is what makes the marker safe. Splitting on a bare `/` meant
- * no label could contain one, so `TCP/IP` came out as two lines, and so did
+ * no text could contain one, so `TCP/IP` came out as two lines, and so did
  * `16/9`, `I/O` and every path or URL. Requiring the spaces keeps the marker
  * legible where it is meant — `"Computer 1 / Ubuntu"` — while a
  * slash inside a word stays an ordinary character.
  *
- * That leaves the label that wants a spaced slash and no break — `Before / After`
+ * That leaves the text that wants a spaced slash and no break — `Before / After`
  * — which writes it `\/`. The lexer preserves that escape rather than resolving
  * it, so the backslash is still here to suppress the split, and is dropped once
  * the splitting is done.

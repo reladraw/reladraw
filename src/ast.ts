@@ -23,15 +23,15 @@ export function isDirection(word: string): word is Direction {
 export type Axis = 'x' | 'y';
 
 /**
- * Which edge of the target a `level with` shares. `center` is the plain form;
+ * Which side of the target a `level with` shares. `center` is the plain form;
  * the rest are written in front of it, as in `top level with media`.
  */
-export const EDGES = ['center', 'top', 'bottom', 'left', 'right'] as const;
+export const SIDES = ['center', 'top', 'bottom', 'left', 'right'] as const;
 
-export type Edge = (typeof EDGES)[number];
+export type Side = (typeof SIDES)[number];
 
-/** An edge belongs to one axis, so an alignment never has to say which. */
-export const EDGE_AXIS: Record<Edge, Axis> = {
+/** A side belongs to one axis, so an alignment never has to say which. */
+export const SIDE_AXIS: Record<Side, Axis> = {
   center: 'y',
   top: 'y',
   bottom: 'y',
@@ -49,7 +49,7 @@ export const EDGE_AXIS: Record<Edge, Axis> = {
 export type Targets = string[];
 
 /**
- * `right of docker` — the node sits a gap beyond one of the target's edges.
+ * `right of docker` — the node sits a gap beyond one of the target's sides.
  * A direction rules out part of an axis rather than fixing a point, which is
  * what lets two of them bracket a node between two targets.
  */
@@ -67,11 +67,11 @@ export interface OffsetPlacement {
   line: number;
 }
 
-/** `level with docker` — share an edge or a center line, with no gap in between. */
+/** `level with docker` — share a side or a center line, with no gap in between. */
 export interface AlignPlacement {
   kind: 'align';
   axis: Axis;
-  edge: Edge;
+  side: Side;
   targets: Targets;
   line: number;
 }
@@ -93,8 +93,8 @@ export const PLACEMENT_KEYS = ['gap'] as const;
 export function describePlacement(placement: Placement): string {
   const targets = listTargets(placement.targets);
   if (placement.kind === 'align') {
-    const edge = placement.edge === 'center' ? '' : `${placement.edge} `;
-    return `${edge}level with ${targets}`;
+    const side = placement.side === 'center' ? '' : `${placement.side} `;
+    return `${side}level with ${targets}`;
   }
   // "left of X" and "above X" are both good English; "above of X" is not.
   const joiner =
@@ -110,7 +110,7 @@ export function listTargets(targets: Targets): string {
 }
 
 /**
- * `between desktop1 and laptop1` on a link — the gap it passes through.
+ * `between desktop1 and laptop1` on an edge — the gap it passes through.
  *
  * This is not a claim about the whole line. It binds only the stretch where the
  * line is actually passing the pair, and says nothing about where it goes
@@ -145,35 +145,35 @@ export function describeAxis(axis: Axis): string {
 export type Attrs = Record<string, string>;
 
 /**
- * What a label's brackets may say: `"Docker" (at: bottom, align: center)`.
+ * What a text's brackets may say: `"Docker" (at: bottom, align: center)`.
  *
- * They are bracketed onto the label rather than written among the node's
+ * They are bracketed onto the text rather than written among the node's
  * attributes for the same reason a gap is bracketed onto its placement — they
  * modify that one thing, and the brackets make the scope visible instead of
  * positional. `at` and `align` are independent: neither implies the other, and a
- * label at the bottom is an ordinary label that happens to be at the bottom.
+ * text at the bottom is an ordinary text that happens to be at the bottom.
  */
-export const LABEL_KEYS = ['at', 'align'] as const;
+export const TEXT_KEYS = ['at', 'align'] as const;
 
-export interface BoxStmt {
-  kind: 'box';
+export interface NodeStmt {
+  kind: 'node';
   name: string;
   text: string;
-  /** The label's bracketed modifiers, as written. Usually empty. */
-  label: Attrs;
+  /** The text's bracketed modifiers, as written. Usually empty. */
+  textAttrs: Attrs;
   /** Everything the author said about where this goes. Empty for the anchor. */
   placements: Placement[];
   attrs: Attrs;
   line: number;
 }
 
-export interface LinkStmt {
-  kind: 'link';
+export interface EdgeStmt {
+  kind: 'edge';
   from: string;
   to: string;
   /** `<->` rather than `->`. */
   both: boolean;
-  label?: string;
+  text?: string;
   /** `between desktop1 and laptop1` — the gap the line passes through. */
   between?: Passage;
   attrs: Attrs;
@@ -194,8 +194,8 @@ export interface DeckStmt {
   kind: 'deck';
   /** The container to draw with offset copies behind it. */
   name: string;
-  /** One label per copy, back to front as written. */
-  labels: string[];
+  /** One text per copy, back to front as written. */
+  texts: string[];
   line: number;
 }
 
@@ -234,8 +234,8 @@ export const COLOR_KEYS = [
 
 /**
  * A color attribute names the *part* it colors, and a part exists only on the
- * kinds that have one. A box has a border and text; a note and a glyph body are
- * text and nothing else; a link is a line and its label.
+ * kinds that have one. A node has a border and text; a note and a glyph body are
+ * text and nothing else; an edge is a line and its text.
  *
  * This table is what makes the words checkable. `border:` on a note is refused
  * by name rather than ignored — the same rule as an unknown `diagram` key, and
@@ -245,13 +245,13 @@ export const COLOR_KEYS = [
  * A style spanning kinds writes one key per kind — `border: #d2904e  line:
  * #d2904e` — since a style contributes a part only to the kinds that have it.
  * That is what replaced `stroke:`, which named no part and so could never be
- * wrong, and which is why a box's text had no word of its own until now.
+ * wrong, and which is why a node's text had no word of its own until now.
  */
 export const COLOR_PARTS: Record<Kind, readonly string[]> = {
-  box: ['fill', 'border', 'text', 'subtext'],
+  node: ['fill', 'border', 'text', 'subtext'],
   note: ['text'],
   glyph: ['text', 'subtext'],
-  link: ['line', 'text'],
+  edge: ['line', 'text'],
 };
 
 /**
@@ -260,7 +260,7 @@ export const COLOR_PARTS: Record<Kind, readonly string[]> = {
  * different set of attributes from an ordinary box, which is what makes it a
  * kind here.
  */
-export type Kind = 'box' | 'note' | 'glyph' | 'link';
+export type Kind = 'node' | 'note' | 'glyph' | 'edge';
 
 /**
  * Every attribute each kind understands. An attribute a kind has no use for is
@@ -281,11 +281,11 @@ export type Kind = 'box' | 'note' | 'glyph' | 'link';
  *   second one to sit in; `sizeNode` returns before it would ever be read.
  * - A glyph and a note take no `align:`, which widens a node's children, and
  *   neither may have any.
- * - A link takes no `gap:` or `overlap:`. Those are about where a box sits, and
- *   a link is not placed — it joins two things that are.
+ * - An edge takes no `gap:` or `overlap:`. Those are about where a box sits, and
+ *   an edge is not placed — it joins two things that are.
  */
 export const ATTR_KEYS: Record<Kind, readonly string[]> = {
-  box: [
+  node: [
     'style',
     'size',
     'gap',
@@ -301,7 +301,7 @@ export const ATTR_KEYS: Record<Kind, readonly string[]> = {
   ],
   note: ['style', 'size', 'gap', 'overlap', 'wrap', 'text'],
   glyph: ['style', 'size', 'gap', 'overlap', 'wrap', 'shape', 'text', 'subtext'],
-  link: ['style', 'size', 'from', 'to', 'line', 'text'],
+  edge: ['style', 'size', 'from', 'to', 'line', 'text'],
 };
 
 /**
@@ -310,7 +310,7 @@ export const ATTR_KEYS: Record<Kind, readonly string[]> = {
  * different errors: one has no remedy but the spelling, the other has a real
  * meaning somewhere else in the file.
  *
- * `DIAGRAM_KEYS` is in here so that `background:` on a box is understood to be
+ * `DIAGRAM_KEYS` is in here so that `background:` on a node is understood to be
  * a real word in the wrong place — that mistake wants to be pointed at `fill:`,
  * not told the word does not exist.
  */
@@ -325,7 +325,7 @@ export interface StyleStmt {
   line: number;
 }
 
-export type Stmt = BoxStmt | LinkStmt | NoteStmt | DeckStmt | StyleStmt | DiagramStmt;
+export type Stmt = NodeStmt | EdgeStmt | NoteStmt | DeckStmt | StyleStmt | DiagramStmt;
 
 export interface Document {
   statements: Stmt[];

@@ -1,23 +1,23 @@
-// A box with no text is labeled with its own name.
+// A node with no text of its own takes its name as its text.
 
-box parser
-box resolver  right of parser
-box renderer  right of resolver
-link parser -> resolver "statements"
-link resolver -> renderer "geometry"
+node parser
+node resolver  right of parser
+node renderer  right of resolver
+edge parser -> resolver "statements"
+edge resolver -> renderer "geometry"
 
 // A dotted name shows only its last segment. The containment is already drawn.
 
-box server  "My Server Machine"  below parser  gap: wide
-box server.docker
-box server.backup  right of server.docker  gap: tight
+node server  "My Server Machine"  below parser  gap: wide
+node server.docker
+node server.backup  right of server.docker  gap: tight
 
-// Empty quotes are the other half: a box that is deliberately blank.
+// Empty quotes are the other half: a node that is deliberately blank.
 
-box pool ""  right of server (gap: wide)  level with server  fill: none  border: none
-box pool.one    ""  shape: instance
-box pool.two    ""  right of pool.one  gap: tight  shape: instance
+node pool ""  right of server (gap: wide)  level with server  fill: none  border: none
+node pool.one    ""  shape: instance
+node pool.two    ""  right of pool.one  gap: tight  shape: instance
 
-// A stated label still wins.
+// A stated text still wins.
 
-box store "Records"  below pool.one and pool.two  gap: normal  icon: database
+node store "Records"  below pool.one and pool.two  gap: normal  icon: database

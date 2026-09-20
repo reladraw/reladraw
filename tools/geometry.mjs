@@ -1,13 +1,13 @@
-// Print the solved geometry of a .reladraw file, and any boxes that share space.
+// Print the solved geometry of a .reladraw file, and any nodes that share space.
 //
 // This exists so a change to the resolver can be checked without rendering an
-// image and looking at it. Reached through ./dev.sh boxes and ./dev.sh overlaps.
+// image and looking at it. Reached through ./dev.sh nodes and ./dev.sh overlaps.
 import { readFileSync } from 'node:fs';
 import { parse, resolve } from '../dist/index.js';
 
 const [mode, file] = process.argv.slice(2);
 if (!file) {
-  console.error('usage: geometry.mjs <boxes|overlaps> <file.reladraw>');
+  console.error('usage: geometry.mjs <nodes|overlaps> <file.reladraw>');
   process.exit(2);
 }
 
@@ -21,7 +21,7 @@ try {
 
 const round = (value) => Math.round(value * 10) / 10;
 
-if (mode === 'boxes') {
+if (mode === 'nodes') {
   console.log(`canvas ${layout.width}x${layout.height}`);
   for (const node of layout.nodes) {
     console.log(
@@ -75,5 +75,5 @@ for (let i = 0; i < layout.nodes.length; i += 1) {
 }
 
 const note = permitted === 0 ? '' : ` (${permitted} allowed)`;
-console.log(found === 0 ? `no unintended overlapping boxes${note}` : `${found} overlapping pair(s)${note}`);
+console.log(found === 0 ? `no unintended overlapping nodes${note}` : `${found} overlapping pair(s)${note}`);
 process.exit(found === 0 ? 0 : 1);

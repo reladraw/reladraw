@@ -1,8 +1,8 @@
-// Naming several targets places a box against the region that bounds them all.
+// Naming several targets places a node against the region that bounds them all.
 
-box one    "first"
-box two    "second"                 below one
-box three  "third with a longer label"  below two
+node one    "first"
+node two    "second"                 below one
+node three  "third with a longer label"  below two
 
 // A direction clears the furthest of them. This note says nothing about its own
 // vertical position — that comes from the region.
@@ -11,4 +11,4 @@ note spans  "level with all three, and clear of the widest"  right of one and th
 // An alignment uses the region as a position. "top" is its top edge, not its middle.
 note tops   "top level with the second box"                  right of two  top level with two  wrap: 20  gap: tight
 
-box beside  "centered on the top two"  right of spans  level with one and two  gap: wide
+node beside  "centered on the top two"  right of spans  level with one and two  gap: wide

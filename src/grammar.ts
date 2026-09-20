@@ -24,7 +24,7 @@
  * formats need and the reason a `.reladraw` grammar is small in all of them.
  */
 
-import { DIRECTIONS, EDGES, PASSAGE_AXES } from './ast.js';
+import { DIRECTIONS, SIDES, PASSAGE_AXES } from './ast.js';
 
 /** What a span of source is, for coloring. */
 export type TokenKind =
@@ -32,13 +32,13 @@ export type TokenKind =
   | 'comment'
   /** A quoted string, quotes included. Unterminated ones count, so typing is quiet. */
   | 'string'
-  /** The word a statement opens with: `box`, `link`, … */
+  /** The word a statement opens with: `node`, `edge`, … */
   | 'keyword'
   /** The name a statement declares, right after its keyword. */
   | 'name'
   /** `->` and `<->`. */
   | 'arrow'
-  /** Placement and link vocabulary: `right`, `of`, `level`, `with`, `and`, `between`, … */
+  /** Placement and edge vocabulary: `right`, `of`, `level`, `with`, `and`, `between`, … */
   | 'relation'
   /** A `key:` opening an attribute or a bracketed modifier. */
   | 'attribute'
@@ -46,7 +46,7 @@ export type TokenKind =
   | 'value'
   /** `#14532d`, wherever it appears. */
   | 'color'
-  /** `(` and `)` around a placement's or a label's modifiers. */
+  /** `(` and `)` around a placement's or a text's modifiers. */
   | 'bracket'
   /** Everything else: node names being referred to, and whitespace. */
   | 'plain';
@@ -64,10 +64,10 @@ export interface Span {
  * it. A word missing here is a word that draws in the plain color, which is a
  * dull page rather than a wrong one.
  */
-export const STATEMENT_KEYWORDS = ['box', 'note', 'link', 'deck', 'style', 'diagram'] as const;
+export const STATEMENT_KEYWORDS = ['node', 'note', 'edge', 'deck', 'style', 'diagram'] as const;
 
 /** Statements whose second word declares a name. `diagram` has none. */
-const DECLARES_NAME = ['box', 'note', 'deck', 'style'];
+const DECLARES_NAME = ['node', 'note', 'deck', 'style'];
 
 /**
  * Every word that says something about where a thing goes. Assembled from the
@@ -76,7 +76,7 @@ const DECLARES_NAME = ['box', 'note', 'deck', 'style'];
  */
 export const RELATION_WORDS: string[] = [
   ...DIRECTIONS,
-  ...EDGES,
+  ...SIDES,
   ...Object.keys(PASSAGE_AXES),
   // The connecting words. `of` is optional after a direction, `and` joins
   // targets, `between` opens a passage, `level with` is the alignment.
@@ -206,7 +206,7 @@ export function highlightLine(line: string): Span[] {
           if (space !== null) {
             push('plain', at + space.length);
             const name = match(WORD, line, at);
-            // `style backup  border: …` declares a name; `box  fill: red` is a
+            // `style backup  border: …` declares a name; `node  fill: red` is a
             // half-typed line whose second word is already an attribute, and
             // coloring that as a name would be a lie about what it is.
             if (name !== null && !name.endsWith(':')) push('name', at + name.length);

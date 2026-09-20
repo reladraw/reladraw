@@ -1,7 +1,7 @@
-// A box sits as close to what it names as its placements allow.
+// A node sits as close to what it names as its placements allow.
 
-box anchor "anchor"
-box far    "far"   right of anchor
-box near   "near"  right of far
+node anchor "anchor"
+node far    "far"   right of anchor
+node near   "near"  right of far
 
 note trailing "one tight gap from near"  left of near  below anchor  gap: tight  overlap: allow

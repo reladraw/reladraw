@@ -9,15 +9,15 @@ import {
   LINE_WIDTH,
   PAD,
   fontSizeFor,
-  labelExtent,
-  labelStyleFor,
+  textExtent,
+  textStyleFor,
 } from './constants.js';
 import type { Axis } from './ast.js';
 import { describeAxis } from './ast.js';
 import { SourceError } from './errors.js';
 import { ICON_STROKE, iconFor, shapeFor, type BoxShape, type Icon, type IconTone } from './icons.js';
 import { monospaceMeasurer, type Measurer } from './measure.js';
-import type { Layout, LayoutLink, LayoutNode } from './model.js';
+import type { Layout, LayoutEdge, LayoutNode } from './model.js';
 
 export interface RenderOptions {
   measurer?: Measurer;
@@ -34,7 +34,7 @@ export interface Theme {
   containerStroke: string;
   text: string;
   mutedText: string;
-  link: string;
+  edge: string;
   /** An icon's drawn line. */
   iconInk: string;
   /** The body an icon's lines enclose. */
@@ -55,7 +55,7 @@ export const DARK_THEME: Theme = {
   containerStroke: '#25242f',
   text: '#d9d9d9',
   mutedText: '#8b8b8b',
-  link: '#5c5c7c',
+  edge: '#5c5c7c',
   // Both sampled off the reference's machine glyphs. Note that the reference
   // gives each icon its own hue — the drive is gray, the laptop periwinkle, the
   // workstation violet — which is a drawing tool's per-shape default and not a
@@ -89,23 +89,23 @@ export function render(layout: Layout, options: RenderOptions = {}): string {
   for (const root of layout.roots) {
     body.push(drawNode(root, theme, measurer, fontSize));
   }
-  // Everything the boxes cover. Links are added to it as they are drawn.
+  // Everything the boxes cover. Edges are added to it as they are drawn.
   let ink: Extent = { minX: 0, minY: 0, maxX: layout.width, maxY: layout.height };
-  // Endpoints are planned for every link at once, because where a link meets a
+  // Endpoints are planned for every edge at once, because where an edge meets a
   // side depends on what else meets that same side. Corridors come after, for
-  // the same reason in the other direction: which lane of a gap a link takes
+  // the same reason in the other direction: which lane of a gap an edge takes
   // is ordered by where its ends turned out to be.
-  const ends = planEndpoints(layout.links, measurer, fontSize);
-  const corridors = planCorridors(layout.links, ends, measurer, fontSize);
-  aimFreeEnds(layout.links, ends, corridors);
-  for (const link of layout.links) {
-    const drawn = drawLink(link, ends.get(link)!, corridors.get(link), theme, measurer, fontSize);
+  const ends = planEndpoints(layout.edges, measurer, fontSize);
+  const corridors = planCorridors(layout.edges, ends, measurer, fontSize);
+  aimFreeEnds(layout.edges, ends, corridors);
+  for (const edge of layout.edges) {
+    const drawn = drawEdge(edge, ends.get(edge)!, corridors.get(edge), theme, measurer, fontSize);
     body.push(drawn.svg);
     ink = union(ink, grow(drawn.ink, layout.margin));
   }
 
-  // A link's geometry is measured rather than solved for, so the resolver sized
-  // the canvas from the boxes alone. A curve out of a `top` side, or a label
+  // An edge's geometry is measured rather than solved for, so the resolver sized
+  // the canvas from the boxes alone. A curve out of a `top` side, or a text
   // riding above one, lands outside that — so the page grows to hold it and the
   // origin moves with it, rather than the drawing being quietly clipped.
   const canvas = {
@@ -115,7 +115,7 @@ export function render(layout: Layout, options: RenderOptions = {}): string {
     height: Math.ceil(ink.maxY) - Math.floor(ink.minY),
   };
 
-  const arrowColors = new Set(layout.links.map((link) => lineOf(link.appearance, theme.link)));
+  const arrowColors = new Set(layout.edges.map((edge) => lineOf(edge.appearance, theme.edge)));
 
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}" viewBox="${canvas.x} ${canvas.y} ${canvas.width} ${canvas.height}" font-family=${quote(measurer.fontFamily)} font-size="${fontSize}px">`,
@@ -137,7 +137,7 @@ function drawNode(
   measurer: Measurer,
   fontSize: number,
 ): string {
-  // A note is set smaller than a box label by default, and `size:` overrides
+  // A note is set smaller than a box text by default, and `size:` overrides
   // that on anything. Only this node's own text takes the size — children are
   // drawn by their own call and carry whatever they say themselves.
   const size = fontSizeFor(node.kind, node.appearance, fontSize, node.line);
@@ -155,11 +155,11 @@ function drawNode(
   }
 
   const shape = shapeFor(node.appearance, node.line);
-  const labelStyle = labelStyleFor(node.label, node.line);
+  const textStyle = textStyleFor(node.textAttrs, node.line);
   const glyphSide = ICON_LINES * textHeight;
 
   if (shape.body !== undefined) {
-    // No outline, no fill, no padding — the node is the picture. The label, if
+    // No outline, no fill, no padding — the node is the picture. The text, if
     // there is one, sits under it and centered.
     const drawn = [drawIcon(shape.body, node.x + (node.width - glyphSide) / 2, node.y, glyphSide, theme)];
     if (node.lines.some((line) => line.length > 0)) {
@@ -189,17 +189,17 @@ function drawNode(
   const subColor = subtextOf(node.appearance, theme);
 
   // Deck copies sit behind the front face, furthest back drawn first.
-  for (let depth = node.deckLabels.length; depth >= 1; depth -= 1) {
+  for (let depth = node.deckTexts.length; depth >= 1; depth -= 1) {
     const x = face.x - depth * DECK_STEP;
     const y = face.y - depth * DECK_STEP;
     parts.push(
       `  <path d="${outlinePath(shape.outline, x, y, face.width, face.height)}" fill="${theme.containerFill}" stroke="${border}"/>`,
     );
-    const label = node.deckLabels[depth - 1];
-    if (label !== undefined) {
+    const copy = node.deckTexts[depth - 1];
+    if (copy !== undefined) {
       parts.push(
         sized(
-          textBlock([label], x + PAD, y + PAD, face.width - PAD * 2, textHeight, size, {
+          textBlock([copy], x + PAD, y + PAD, face.width - PAD * 2, textHeight, size, {
             color: text,
             align: 'start',
           }),
@@ -217,19 +217,19 @@ function drawNode(
     parts.push(`  <path d="${extra}" fill="none" stroke="${border}"/>`);
   }
 
-  // The icon takes a column on the right and the label lays out in what is
+  // The icon takes a column on the right and the text lays out in what is
   // left, which is the room the resolver already reserved for exactly this.
   const icon = iconFor(node.appearance, node.line);
   const iconSide = icon === undefined ? 0 : glyphSide;
-  const hasLabel = node.lines.some((line) => line.length > 0);
-  const iconRoom = icon === undefined ? 0 : iconSide + (hasLabel ? ICON_GAP : 0);
+  const hasText = node.lines.some((line) => line.length > 0);
+  const iconRoom = icon === undefined ? 0 : iconSide + (hasText ? ICON_GAP : 0);
 
   if (!container) {
-    // A leaf centers its label in the box, both ways — in the room beside the
+    // A leaf centers its text in the box, both ways — in the room beside the
     // icon rather than the whole box, so the two sit side by side. Centered
-    // across is only the default: a label of several lines may say `align`, and
+    // across is only the default: a text of several lines may say `align`, and
     // there is genuine slack between lines of unequal length to range them in.
-    const leafAlign = labelStyleFor(node.label, node.line, 'middle').align;
+    const leafAlign = textStyleFor(node.textAttrs, node.line, 'middle').align;
     const top = face.y + (face.height - node.lines.length * textHeight) / 2;
     parts.push(
       sized(
@@ -243,17 +243,17 @@ function drawNode(
       ),
     );
   } else {
-    // The label and the icon share a band at one end of the box, and the
+    // The text and the icon share a band at one end of the box, and the
     // resolver has already given the contents the other end. A heading is
     // ranged left at the top; a caption is centered at the bottom.
     const band = Math.max(node.lines.length * textHeight, iconSide);
-    const bandTop = labelStyle.at === 'top' ? face.y + PAD : face.y + face.height - PAD - band;
+    const bandTop = textStyle.at === 'top' ? face.y + PAD : face.y + face.height - PAD - band;
     parts.push(
       sized(
         textBlock(node.lines, face.x + PAD, bandTop, face.width - PAD * 2 - iconRoom, textHeight, size, {
           color: text,
           subColor,
-          align: labelStyle.align,
+          align: textStyle.align,
         }),
         size,
         fontSize,
@@ -265,13 +265,13 @@ function drawNode(
   }
 
   if (icon !== undefined) {
-    // A container's icon rides in the label's band, at whichever end that is; a
-    // leaf's label is centered, so the icon centers with it. Both follow the
-    // label rather than being placed by a rule of their own, which is what
+    // A container's icon rides in the text's band, at whichever end that is; a
+    // leaf's text is centered, so the icon centers with it. Both follow the
+    // text rather than being placed by a rule of their own, which is what
     // keeps an icon reading as part of the title block and not as a sticker.
     const left = face.x + face.width - PAD - iconSide;
     const top = container
-      ? labelStyle.at === 'top'
+      ? textStyle.at === 'top'
         ? face.y + PAD
         : face.y + face.height - PAD - iconSide
       : face.y + (face.height - iconSide) / 2;
@@ -354,21 +354,21 @@ function drawIcon(icon: Icon, x: number, y: number, side: number, theme: Theme):
   ].join('\n');
 }
 
-// --- links -------------------------------------------------------------------
+// --- edges -------------------------------------------------------------------
 
-function drawLink(
-  link: LayoutLink,
-  ends: LinkEnds,
+function drawEdge(
+  edge: LayoutEdge,
+  ends: EdgeEnds,
   corridor: Corridor | undefined,
   theme: Theme,
   measurer: Measurer,
   fontSize: number,
 ): { svg: string; ink: Extent } {
   const { start, end } = ends;
-  const color = lineOf(link.appearance, theme.link);
+  const color = lineOf(edge.appearance, theme.edge);
 
   const markerEnd = ` marker-end="url(#${markerId(color)})"`;
-  const markerStart = link.both ? ` marker-start="url(#${markerId(color)}-back)"` : '';
+  const markerStart = edge.both ? ` marker-start="url(#${markerId(color)}-back)"` : '';
 
   // A named side is a statement about how the line should leave or arrive, so
   // it is drawn as a curve that actually does leave and arrive that way. With
@@ -388,7 +388,7 @@ function drawLink(
     parts.push(
       `  <path d="${path.d}" fill="none" stroke="${color}" stroke-width="${LINE_WIDTH}"${markerEnd}${markerStart}/>`,
     );
-    // The label goes on the straight run rather than at the midpoint of the
+    // The text goes on the straight run rather than at the midpoint of the
     // whole path, so it sits in the gap the author asked the line to travel.
     midX = path.mid.x;
     midY = path.mid.y;
@@ -407,7 +407,7 @@ function drawLink(
       `  <path d="M ${round(start.x)} ${round(start.y)} C ${round(c1.x)} ${round(c1.y)}, ${round(c2.x)} ${round(c2.y)}, ${round(end.x)} ${round(end.y)}" fill="none" stroke="${color}" stroke-width="${LINE_WIDTH}"${markerEnd}${markerStart}/>`,
     );
     ink = union(ink, cubicExtent(start, c1, c2, end));
-    // The point halfway along a cubic, which is where the label belongs.
+    // The point halfway along a cubic, which is where the text belongs.
     midX = (start.x + 3 * c1.x + 3 * c2.x + end.x) / 8;
     midY = (start.y + 3 * c1.y + 3 * c2.y + end.y) / 8;
   } else if (ends.bow && (ends.bow.x !== 0 || ends.bow.y !== 0)) {
@@ -439,18 +439,18 @@ function drawLink(
     midY = (start.y + end.y) / 2;
   }
 
-  if (link.label !== undefined) {
-    // A link label breaks on ` / ` exactly as a box label does, so a two-line
+  if (edge.text !== undefined) {
+    // An edge text breaks on ` / ` exactly as a box text does, so a two-line
     // caption on an arrow needs no vocabulary of its own. The block is centered
-    // on the midpoint, which keeps a one-line label where it has always been.
-    const size = fontSizeFor('link', link.appearance, fontSize, link.line);
+    // on the midpoint, which keeps a one-line text where it has always been.
+    const size = fontSizeFor('edge', edge.appearance, fontSize, edge.line);
     const textHeight = measurer.lineHeight(size);
-    const { width, lines } = measurer.measure(link.label, size);
+    const { width, lines } = measurer.measure(edge.text, size);
     const height = lines.length * textHeight;
     const top = midY - height / 2;
-    // The label knocks a hole in whatever it lands on rather than sitting in a
+    // The text knocks a hole in whatever it lands on rather than sitting in a
     // chip of its own: an outlined box reads as a node, which is the one thing
-    // a label on a line is not.
+    // a text on a line is not.
     parts.push(
       `  <rect x="${round(midX - width / 2 - 5)}" y="${round(top)}" width="${round(width + 10)}" height="${round(height)}" fill="${theme.background}"/>`,
     );
@@ -463,9 +463,9 @@ function drawLink(
     parts.push(
       sized(
         textBlock(lines, midX - width / 2, top, width, textHeight, size, {
-          // A colored link carries its meaning into its label; an uncolored
+          // A colored edge carries its meaning into its text; an uncolored
           // one leaves the words to read as ordinary text.
-          color: textOf(link.appearance, lineOf(link.appearance, theme.text)),
+          color: textOf(edge.appearance, lineOf(edge.appearance, theme.text)),
           align: 'middle',
         }),
         size,
@@ -509,7 +509,7 @@ function extentOfPoints(points: Point[]): Extent {
  * What a cubic actually covers, which is not what its control points cover. A
  * handle reaching 140 pixels up carries the curve only about three quarters of
  * that, and sizing the page off the handles would leave a visible band of empty
- * canvas above every curved link. Solved rather than sampled: the extremes are
+ * canvas above every curved edge. Solved rather than sampled: the extremes are
  * the ends plus wherever the derivative — a quadratic — crosses zero.
  */
 function cubicExtent(p0: Point, c1: Point, c2: Point, p3: Point): Extent {
@@ -543,7 +543,7 @@ function cubicExtent(p0: Point, c1: Point, c2: Point, p3: Point): Extent {
 }
 
 /** Walk out from the center of a box toward a point, stopping at the border. */
-function edgePoint(box: Box, toward: { x: number; y: number }): { x: number; y: number } {
+function sidePoint(box: Box, toward: { x: number; y: number }): { x: number; y: number } {
   const center = centerOf(box);
   const dx = toward.x - center.x;
   const dy = toward.y - center.y;
@@ -556,7 +556,7 @@ function edgePoint(box: Box, toward: { x: number; y: number }): { x: number; y: 
   return { x: center.x + dx * scale, y: center.y + dy * scale };
 }
 
-// --- where a link meets a box -------------------------------------------------
+// --- where an edge meets a box -------------------------------------------------
 
 const SIDES = ['top', 'bottom', 'left', 'right'] as const;
 type Side = (typeof SIDES)[number];
@@ -572,7 +572,7 @@ interface Anchor {
   side?: Side;
 }
 
-interface LinkEnds {
+interface EdgeEnds {
   start: Anchor;
   end: Anchor;
   /**
@@ -583,42 +583,42 @@ interface LinkEnds {
   bow?: { x: number; y: number };
 }
 
-/** One link's claim on one side of one box, before the point on it is known. */
+/** One edge's claim on one side of one box, before the point on it is known. */
 interface Claim {
-  link: LayoutLink;
+  edge: LayoutEdge;
   which: 'start' | 'end';
   side: Side;
-  /** Where the far end of this link sits, which is what orders claims along the side. */
+  /** Where the far end of this edge sits, which is what orders claims along the side. */
   toward: { x: number; y: number };
   /**
    * Where this claim sits in the lane order of its bundle, or undefined when
-   * the link is in none. `toward` cannot order links that go to the same place,
+   * the edge is in none. `toward` cannot order edges that go to the same place,
    * and a bundle is exactly the case where they all do.
    */
   rank?: number;
 }
 
 /**
- * The links running between one pair of sides.
+ * The edges running between one pair of sides.
  *
- * Two links joining the bottom of A to the left of B are not two independent
+ * Two edges joining the bottom of A to the left of B are not two independent
  * orderings, one per side; they are one order used twice. Step outward along
- * A's bottom edge and the same link must step outward along B's left edge, or
+ * A's bottom edge and the same edge must step outward along B's left edge, or
  * the two lines scissor across each other instead of nesting. So a bundle
- * carries a single lane index per link and applies it at both ends, with the
+ * carries a single lane index per edge and applies it at both ends, with the
  * sense of one end tied to the sense of the other.
  *
  * `planEndpoints` on its own cannot get this right, and the reason is worth
  * keeping: it orders each side by where the far ends sit, which is the correct
- * rule and a degenerate one here — every link in a bundle has the *same* far
+ * rule and a degenerate one here — every edge in a bundle has the *same* far
  * box, so that signal says nothing and the two sides end up ordered without
  * reference to each other.
  */
 interface Bundle {
   /** The two (node, side) pairs the bundle runs between. */
   ends: [BundleEnd, BundleEnd];
-  /** The links, in lane order: index 0 sits at one extreme of the group. */
-  lanes: LayoutLink[];
+  /** The edges, in lane order: index 0 sits at one extreme of the group. */
+  lanes: LayoutEdge[];
   /**
    * Whether a step along the first end's side is a step the same way along the
    * second's. False is the common case for a corner-to-corner pair: further
@@ -635,50 +635,50 @@ interface BundleEnd {
 }
 
 /**
- * Work out where every link meets every box.
+ * Work out where every edge meets every box.
  *
  * An author names a *side* — `to: top` — and never a point on it. Alone on a
- * side a link lands at its center; sharing the side with others, the points
+ * side an edge lands at its center; sharing the side with others, the points
  * spread so they do not sit on top of each other. Which one goes where is
- * derived from where the far ends actually are, never chosen: of two links
+ * derived from where the far ends actually are, never chosen: of two edges
  * arriving at one top edge, the one coming from further left arrives further
  * left. That is the same rule as box non-overlap — the tool separates things by
  * default, and reads the direction off the solved layout rather than asking.
  *
- * Where several links run between the *same* pair of sides that rule has
+ * Where several edges run between the *same* pair of sides that rule has
  * nothing to read, and a `Bundle` supplies the order instead — see there.
  */
 function planEndpoints(
-  links: LayoutLink[],
+  edges: LayoutEdge[],
   measurer: Measurer,
   fontSize: number,
-): Map<LayoutLink, LinkEnds> {
+): Map<LayoutEdge, EdgeEnds> {
   const claims = new Map<LayoutNode, Map<Side, Claim[]>>();
   const achieved = new Map<LayoutNode, Map<Side, number>>();
-  const named = new Map<LayoutLink, { start?: Anchor; end?: Anchor }>();
-  const bundles = planBundles(links, measurer, fontSize);
-  const spreads = planSpreads(links, measurer, fontSize);
+  const named = new Map<LayoutEdge, { start?: Anchor; end?: Anchor }>();
+  const bundles = planBundles(edges, measurer, fontSize);
+  const spreads = planSpreads(edges, measurer, fontSize);
 
-  for (const link of links) {
-    named.set(link, {});
-    const fromSide = sideAttr(link, 'from');
-    const toSide = sideAttr(link, 'to');
+  for (const edge of edges) {
+    named.set(edge, {});
+    const fromSide = sideAttr(edge, 'from');
+    const toSide = sideAttr(edge, 'to');
     if (fromSide) {
-      claim(claims, link.from, fromSide, {
-        link,
+      claim(claims, edge.from, fromSide, {
+        edge,
         which: 'start',
         side: fromSide,
-        toward: centerOf(faceOf(link.to)),
-        rank: rankIn(bundles.get(link), link, link.from, fromSide),
+        toward: centerOf(faceOf(edge.to)),
+        rank: rankIn(bundles.get(edge), edge, edge.from, fromSide),
       });
     }
     if (toSide) {
-      claim(claims, link.to, toSide, {
-        link,
+      claim(claims, edge.to, toSide, {
+        edge,
         which: 'end',
         side: toSide,
-        toward: centerOf(faceOf(link.from)),
-        rank: rankIn(bundles.get(link), link, link.to, toSide),
+        toward: centerOf(faceOf(edge.from)),
+        rank: rankIn(bundles.get(edge), edge, edge.to, toSide),
       });
     }
   }
@@ -691,16 +691,16 @@ function planEndpoints(
       const span = along === 'x' ? face.width : face.height;
       const origin = along === 'x' ? face.x : face.y;
 
-      // Far ends first, as ever; a bundle's own lane order settles the links
+      // Far ends first, as ever; a bundle's own lane order settles the edges
       // that share one, which are precisely the ones the first key cannot.
       const ordered = [...group].sort(
         (a, b) => a.toward[along] - b.toward[along] || (a.rank ?? 0) - (b.rank ?? 0),
       );
-      // A bundle's lanes have to hold whole labels apart rather than the points
+      // A bundle's lanes have to hold whole texts apart rather than the points
       // of two arrows, so its step is the one that governs the side it lands on.
       const wanted = Math.max(
         ATTACH_STEP,
-        ...group.map((entry) => bundles.get(entry.link)?.step ?? 0),
+        ...group.map((entry) => bundles.get(entry.edge)?.step ?? 0),
       );
       const usable = Math.max(0, span - ATTACH_MARGIN * 2);
       const step = ordered.length > 1 ? Math.min(wanted, usable / (ordered.length - 1)) : 0;
@@ -708,7 +708,7 @@ function planEndpoints(
 
       ordered.forEach((entry, index) => {
         const at = first + index * step;
-        named.get(entry.link)![entry.which] = anchorOn(face, side, at);
+        named.get(entry.edge)![entry.which] = anchorOn(face, side, at);
       });
       // What the side could actually give, which is less than `wanted` when it
       // is too short for the group. `bowBundles` makes up the difference.
@@ -722,40 +722,40 @@ function planEndpoints(
 
   // Fill in the ends the author said nothing about, now that the named ones
   // are known: an unnamed end aims at wherever its partner ended up.
-  const ends = new Map<LayoutLink, LinkEnds>();
-  for (const link of links) {
-    const partial = named.get(link)!;
-    const fromFace = faceOf(link.from);
-    const toFace = faceOf(link.to);
-    // Several links between one pair of boxes with no side named anywhere: the
+  const ends = new Map<LayoutEdge, EdgeEnds>();
+  for (const edge of edges) {
+    const partial = named.get(edge)!;
+    const fromFace = faceOf(edge.from);
+    const toFace = faceOf(edge.to);
+    // Several edges between one pair of boxes with no side named anywhere: the
     // line each would have drawn alone, moved aside so they do not coincide.
-    const spread = spreads.get(link);
+    const spread = spreads.get(edge);
     if (spread) {
-      ends.set(link, { ...parallelEnds(fromFace, toFace, spread.offset), bow: spread.bow });
+      ends.set(edge, { ...parallelEnds(fromFace, toFace, spread.offset), bow: spread.bow });
       continue;
     }
     // With neither end named this is the straight line it always was, each end
     // aiming at the other box's center.
     const start = partial.start ?? free(fromFace, partial.end ?? centerOf(toFace));
     const end = partial.end ?? free(toFace, partial.start ?? centerOf(fromFace));
-    ends.set(link, { start, end, bow: bows.get(link) });
+    ends.set(edge, { start, end, bow: bows.get(edge) });
   }
   return ends;
 }
 
 /**
- * Group the links that run between the same pair of sides, and work out the
+ * Group the edges that run between the same pair of sides, and work out the
  * lane order and lane width each group needs.
  *
- * Only a link whose author named *both* sides can be in a bundle: a bundle is a
+ * Only an edge whose author named *both* sides can be in a bundle: a bundle is a
  * statement about two specific edges, and an end with no side named has not
  * picked one yet.
  */
 function planBundles(
-  links: LayoutLink[],
+  edges: LayoutEdge[],
   measurer: Measurer,
   fontSize: number,
-): Map<LayoutLink, Bundle> {
+): Map<LayoutEdge, Bundle> {
   const ids = new Map<LayoutNode, number>();
   const idOf = (node: LayoutNode): number => {
     let id = ids.get(node);
@@ -766,14 +766,14 @@ function planBundles(
     return id;
   };
 
-  const groups = new Map<string, { ends: [BundleEnd, BundleEnd]; links: LayoutLink[] }>();
-  for (const link of links) {
-    const fromSide = sideAttr(link, 'from');
-    const toSide = sideAttr(link, 'to');
-    if (!fromSide || !toSide || link.from === link.to) continue;
+  const groups = new Map<string, { ends: [BundleEnd, BundleEnd]; edges: LayoutEdge[] }>();
+  for (const edge of edges) {
+    const fromSide = sideAttr(edge, 'from');
+    const toSide = sideAttr(edge, 'to');
+    if (!fromSide || !toSide || edge.from === edge.to) continue;
 
-    const a = { node: link.from, side: fromSide };
-    const b = { node: link.to, side: toSide };
+    const a = { node: edge.from, side: fromSide };
+    const b = { node: edge.to, side: toSide };
     const keyA = `${idOf(a.node)}:${a.side}`;
     const keyB = `${idOf(b.node)}:${b.side}`;
     // The pair is unordered — `a -> b` and `b -> a` join the same two edges —
@@ -783,13 +783,13 @@ function planBundles(
     const ends: [BundleEnd, BundleEnd] = swap ? [b, a] : [a, b];
 
     const group = groups.get(key);
-    if (group) group.links.push(link);
-    else groups.set(key, { ends, links: [link] });
+    if (group) group.edges.push(edge);
+    else groups.set(key, { ends, edges: [edge] });
   }
 
-  const bundles = new Map<LayoutLink, Bundle>();
+  const bundles = new Map<LayoutEdge, Bundle>();
   for (const group of groups.values()) {
-    if (group.links.length < 2) continue;
+    if (group.edges.length < 2) continue;
     const [first, second] = group.ends;
     const t0 = tangentOf(first.side);
     const t1 = tangentOf(second.side);
@@ -803,20 +803,20 @@ function planBundles(
     const aligned = cross(run, t0) * cross(run, t1) >= 0;
     const sense = aligned ? 1 : -1;
 
-    // Two links leaving in opposite directions are the ordinary case, and which
+    // Two edges leaving in opposite directions are the ordinary case, and which
     // lane each takes is then read off the diagram rather than off the order the
     // author happened to type them in: a line keeps to one side of its own run.
-    // Links pointing the same way have no such signal and fall back to the file.
-    const order = new Map(group.links.map((link, index) => [link, index]));
-    const lanes = [...group.links].sort(
+    // Edges pointing the same way have no such signal and fall back to the file.
+    const order = new Map(group.edges.map((edge, index) => [edge, index]));
+    const lanes = [...group.edges].sort(
       (a, b) =>
         Number(a.from !== first.node) - Number(b.from !== first.node) ||
         order.get(a)! - order.get(b)!,
     );
 
-    // One lane apart moves a link's start by `step` along one side and its end
+    // One lane apart moves an edge's start by `step` along one side and its end
     // by `step` along the other, so the midpoint of the line — which is where
-    // its label goes — moves by the average of the two.
+    // its text goes — moves by the average of the two.
     const drift = { x: (t0.x + sense * t1.x) / 2, y: (t0.y + sense * t1.y) / 2 };
     const bundle: Bundle = {
       ends: group.ends,
@@ -824,12 +824,12 @@ function planBundles(
       aligned,
       step: Math.max(ATTACH_STEP, laneStep(lanes, drift, measurer, fontSize)),
     };
-    for (const link of lanes) bundles.set(link, bundle);
+    for (const edge of lanes) bundles.set(edge, bundle);
   }
   return bundles;
 }
 
-/** Where one link of a coincident group runs, relative to the line it would draw alone. */
+/** Where one edge of a coincident group runs, relative to the line it would draw alone. */
 interface Spread {
   /** How far its two ends are moved across the run. */
   offset: number;
@@ -842,39 +842,39 @@ interface Spread {
 }
 
 /**
- * The sideways offset each link takes when several run between the same two
+ * The sideways offset each edge takes when several run between the same two
  * boxes and none of them names a side.
  *
  * An unnamed end has no side to spread along: it aims at the far box's center
- * and attaches wherever that ray crosses the border, so every link in such a
+ * and attaches wherever that ray crosses the border, so every edge in such a
  * group produces the *same* ray and they are drawn on top of one another —
- * one visible line, every label stacked on one point. `planEndpoints` cannot
+ * one visible line, every text stacked on one point. `planEndpoints` cannot
  * see this and `planBundles` will not, since a bundle is a statement about two
  * named edges.
  *
  * The repair keeps the attachment rule exactly as it is and only stops two
- * links using it at the same place: the line a link would have drawn alone is
+ * edges using it at the same place: the line an edge would have drawn alone is
  * translated across its own run by a lane, which is the straight-line version
- * of the nesting a bundle already gives curves. A lone link is in no group and
+ * of the nesting a bundle already gives curves. A lone edge is in no group and
  * so is untouched.
  *
  * Where the boxes are too small to hold the group at full spacing, the ends
  * are squeezed evenly to fit the edge — there is nowhere further to attach —
  * and the shortfall is made up in the middle instead: each line bows across
- * its run by exactly what its endpoints could not give it, so the labels, which
+ * its run by exactly what its endpoints could not give it, so the texts, which
  * ride at the midpoints, come apart even though the arrows do not. The bow is
  * therefore derived rather than styled, and it is zero whenever the edge was
  * long enough, which is why the ordinary case is still a straight line.
  *
- * A `between` link is left out. Its route is the corridor it named, its lane
+ * A `between` edge is left out. Its route is the corridor it named, its lane
  * inside that corridor is `planCorridors`' business, and `aimFreeEnds` will
  * re-aim these ends at the corridor afterwards regardless.
  */
 function planSpreads(
-  links: LayoutLink[],
+  edges: LayoutEdge[],
   measurer: Measurer,
   fontSize: number,
-): Map<LayoutLink, Spread> {
+): Map<LayoutEdge, Spread> {
   const ids = new Map<LayoutNode, number>();
   const idOf = (node: LayoutNode): number => {
     let id = ids.get(node);
@@ -885,41 +885,41 @@ function planSpreads(
     return id;
   };
 
-  const groups = new Map<string, { first: LayoutNode; links: LayoutLink[] }>();
-  for (const link of links) {
-    if (sideAttr(link, 'from') || sideAttr(link, 'to')) continue;
-    if (link.from === link.to || link.between) continue;
+  const groups = new Map<string, { first: LayoutNode; edges: LayoutEdge[] }>();
+  for (const edge of edges) {
+    if (sideAttr(edge, 'from') || sideAttr(edge, 'to')) continue;
+    if (edge.from === edge.to || edge.between) continue;
 
-    const a = idOf(link.from);
-    const b = idOf(link.to);
+    const a = idOf(edge.from);
+    const b = idOf(edge.to);
     const swap = b < a;
     const key = swap ? `${b}|${a}` : `${a}|${b}`;
-    const first = swap ? link.to : link.from;
+    const first = swap ? edge.to : edge.from;
 
     const group = groups.get(key);
-    if (group) group.links.push(link);
-    else groups.set(key, { first, links: [link] });
+    if (group) group.edges.push(edge);
+    else groups.set(key, { first, edges: [edge] });
   }
 
-  const spreads = new Map<LayoutLink, Spread>();
+  const spreads = new Map<LayoutEdge, Spread>();
   for (const group of groups.values()) {
-    if (group.links.length < 2) continue;
+    if (group.edges.length < 2) continue;
     const from = centerOf(faceOf(group.first));
-    const sample = group.links[0]!;
+    const sample = group.edges[0]!;
     const other = sample.from === group.first ? sample.to : sample.from;
     const to = centerOf(faceOf(other));
     const dx = to.x - from.x;
     const dy = to.y - from.y;
     const length = Math.hypot(dx, dy) || 1;
-    // Translating the line moves its midpoint — where the label goes — by
+    // Translating the line moves its midpoint — where the text goes — by
     // exactly this, so it is the drift `laneStep` needs.
     const across = { x: -dy / length, y: dx / length };
 
-    // The same derived order a bundle uses: links pointing opposite ways each
+    // The same derived order a bundle uses: edges pointing opposite ways each
     // keep to one side of their own run, so a reciprocal pair reads as a
-    // circulation, and only links pointing the same way fall back to the file.
-    const order = new Map(group.links.map((link, index) => [link, index]));
-    const lanes = [...group.links].sort(
+    // circulation, and only edges pointing the same way fall back to the file.
+    const order = new Map(group.edges.map((edge, index) => [edge, index]));
+    const lanes = [...group.edges].sort(
       (a, b) =>
         Number(a.from !== group.first) - Number(b.from !== group.first) ||
         order.get(a)! - order.get(b)!,
@@ -927,9 +927,9 @@ function planSpreads(
 
     // How far a lane may be shifted before its line no longer passes through the
     // box at all. `exitAlong` clamps beyond that, which piles the outer lanes
-    // onto a corner and puts their labels back on top of each other — so the
+    // onto a corner and puts their texts back on top of each other — so the
     // group is squeezed evenly instead, exactly as `planEndpoints` squeezes a
-    // side too short for the links arriving on it, and just as silently.
+    // side too short for the edges arriving on it, and just as silently.
     const reach = (node: LayoutNode): number => {
       const face = faceOf(node);
       const byX = across.x === 0 ? Infinity : face.width / 2 / Math.abs(across.x);
@@ -938,22 +938,22 @@ function planSpreads(
     };
     // Which way lane 0 lies is arbitrary, so fix it the way the rest of the
     // renderer does — toward increasing x, or increasing y where the run is
-    // horizontal. Without this the first link written is topmost on a rightward
+    // horizontal. Without this the first edge written is topmost on a rightward
     // run and rightmost on a downward one, for no reason a reader could see.
     const orient = across.x < 0 || (across.x === 0 && across.y < 0) ? -1 : 1;
     const usable = 2 * Math.min(reach(group.first), reach(other));
     const wanted = Math.max(ATTACH_STEP, laneStep(lanes, across, measurer, fontSize));
     const step = Math.min(wanted, usable / (lanes.length - 1));
-    lanes.forEach((link, index) => {
+    lanes.forEach((edge, index) => {
       const place = index - (lanes.length - 1) / 2;
       // The lane is measured across the pair's own run, which has one direction;
-      // a link written the other way round travels the opposite way and would
+      // an edge written the other way round travels the opposite way and would
       // otherwise take the same offset to the opposite side, putting a
       // reciprocal pair back on one line. Negated, both keep to their own left,
       // which is the circulation a bundle already draws.
-      const sense = (link.from === group.first ? 1 : -1) * orient;
+      const sense = (edge.from === group.first ? 1 : -1) * orient;
       const shortfall = place * (wanted - step) * sense;
-      spreads.set(link, {
+      spreads.set(edge, {
         offset: place * step * sense,
         bow: { x: across.x * shortfall, y: across.y * shortfall },
       });
@@ -963,11 +963,11 @@ function planSpreads(
 }
 
 /**
- * The bow each bundled link needs, where the sides it was given were too short
- * to hold the group at the spacing its labels asked for.
+ * The bow each bundled edge needs, where the sides it was given were too short
+ * to hold the group at the spacing its texts asked for.
  *
  * A named side is squeezed exactly as an unnamed group's edge is — the step
- * shrinks to `usable / (n - 1)` and the labels ride down on top of each other —
+ * shrinks to `usable / (n - 1)` and the texts ride down on top of each other —
  * and until this existed, naming the two sides the tool would have chosen
  * anyway made the picture strictly worse than saying nothing. That is not a
  * line worth defending, so the same repair applies: a lane's midpoint is not
@@ -983,10 +983,10 @@ function planSpreads(
  * which is why nothing that already fitted has moved.
  */
 function bowBundles(
-  bundles: Map<LayoutLink, Bundle>,
+  bundles: Map<LayoutEdge, Bundle>,
   achieved: Map<LayoutNode, Map<Side, number>>,
-): Map<LayoutLink, { x: number; y: number }> {
-  const bows = new Map<LayoutLink, { x: number; y: number }>();
+): Map<LayoutEdge, { x: number; y: number }> {
+  const bows = new Map<LayoutEdge, { x: number; y: number }>();
   const stepOn = (end: BundleEnd): number => achieved.get(end.node)?.get(end.side) ?? 0;
 
   for (const bundle of new Set(bundles.values())) {
@@ -1005,36 +1005,36 @@ function bowBundles(
     };
     if (short.x === 0 && short.y === 0) continue;
 
-    bundle.lanes.forEach((link, index) => {
+    bundle.lanes.forEach((edge, index) => {
       const place = index - (bundle.lanes.length - 1) / 2;
-      bows.set(link, { x: short.x * place, y: short.y * place });
+      bows.set(edge, { x: short.x * place, y: short.y * place });
     });
   }
   return bows;
 }
 
 /**
- * How far apart adjacent lanes must sit for their labels to clear each other.
+ * How far apart adjacent lanes must sit for their texts to clear each other.
  *
- * The labels are knockout rectangles, so two of them clear when they are apart
+ * The texts are knockout rectangles, so two of them clear when they are apart
  * on *either* axis — hence the smaller of the two answers. `drift` is how far
  * the midpoint travels per unit of step, and it is never zero: the two ends
  * cancel only when both sides run the same way, and two such sides are always
  * `aligned`, which adds rather than subtracts.
  */
 function laneStep(
-  lanes: LayoutLink[],
+  lanes: LayoutEdge[],
   drift: { x: number; y: number },
   measurer: Measurer,
   fontSize: number,
 ): number {
-  const labeled = lanes.filter((link) => link.label !== undefined);
-  if (labeled.length < 2) return 0;
+  const withText = lanes.filter((edge) => edge.text !== undefined);
+  if (withText.length < 2) return 0;
 
   const need = (axis: Axis): number =>
     Math.max(
-      ...labeled.map((link) =>
-        labelExtent(link.label!, link.appearance, axis, measurer, fontSize, link.line),
+      ...withText.map((edge) =>
+        textExtent(edge.text!, edge.appearance, axis, measurer, fontSize, edge.line),
       ),
     );
 
@@ -1043,15 +1043,15 @@ function laneStep(
   return Math.min(along('x', drift.x), along('y', drift.y));
 }
 
-/** Which lane of its bundle a link's end at this side takes, if it is in one. */
+/** Which lane of its bundle an edge's end at this side takes, if it is in one. */
 function rankIn(
   bundle: Bundle | undefined,
-  link: LayoutLink,
+  edge: LayoutEdge,
   node: LayoutNode,
   side: Side,
 ): number | undefined {
   if (!bundle) return undefined;
-  const lane = bundle.lanes.indexOf(link);
+  const lane = bundle.lanes.indexOf(edge);
   const [first, second] = bundle.ends;
   if (node === first.node && side === first.side) return lane;
   if (node === second.node && side === second.side) return bundle.aligned ? lane : -lane;
@@ -1107,7 +1107,7 @@ function anchorOn(face: Box, side: Side, at: number): Anchor {
 
 /** An end with no side named: leave from the border, pointing at the far end. */
 function free(face: Box, toward: { x: number; y: number }): Anchor {
-  const point = edgePoint(face, toward);
+  const point = sidePoint(face, toward);
   const center = centerOf(face);
   const dx = point.x - center.x;
   const dy = point.y - center.y;
@@ -1118,7 +1118,7 @@ function free(face: Box, toward: { x: number; y: number }): Anchor {
 /**
  * Walk from a point inside a box along a direction, stopping at the border.
  *
- * `edgePoint` walks from the center, which is the only place a single line
+ * `sidePoint` walks from the center, which is the only place a single line
  * passes through. A fanned-out group's lines are parallel to that one and
  * beside it, so each needs the border crossing of its own line rather than of
  * the center's — which is what keeps the group parallel instead of splayed.
@@ -1140,17 +1140,17 @@ function exitAlong(
 }
 
 /**
- * Both ends of a link that named no side, moved `offset` sideways across its
+ * Both ends of an edge that named no side, moved `offset` sideways across its
  * own run.
  *
  * The whole line is translated rather than each end being nudged along its
- * border, so the result is genuinely parallel to the line the link would have
+ * border, so the result is genuinely parallel to the line the edge would have
  * drawn alone, exactly `offset` away from it. Where each end lands then falls
  * out of that: level boxes put both points further along the same two edges,
  * and a diagonal pair whose line leaves through a corner puts one point on each
  * of the two edges meeting there. Neither is a case in the code.
  */
-function parallelEnds(from: Box, to: Box, offset: number): LinkEnds {
+function parallelEnds(from: Box, to: Box, offset: number): EdgeEnds {
   const a = centerOf(from);
   const b = centerOf(to);
   const dx = b.x - a.x;
@@ -1175,20 +1175,20 @@ function controlReach(start: Anchor, end: Anchor): number {
 // --- corridors ----------------------------------------------------------------
 
 /**
- * Where a link runs while it is passing the two nodes a `between` clause named.
+ * Where an edge runs while it is passing the two nodes a `between` clause named.
  *
  * A corridor is *measured*, never solved for: both nodes are already placed by
  * the time the renderer sees them, so the gap between them is a pair of numbers
- * and the link is routed through it. Nothing here can move a box. That is the
+ * and the edge is routed through it. Nothing here can move a box. That is the
  * deliberate half of the feature — an arrow states where it goes, and if the
  * gap it names is too tight, that is something to report rather than repair.
  */
 interface Corridor {
   /** The axis the gap binds. A gap between something above and something below binds y. */
   axis: Axis;
-  /** Where on that axis this link runs. Several links in one gap take their own lanes. */
+  /** Where on that axis this edge runs. Several edges in one gap take their own lanes. */
   lane: number;
-  /** Where the run begins and ends on the other axis, in the order the link travels. */
+  /** Where the run begins and ends on the other axis, in the order the edge travels. */
   enter: number;
   leave: number;
 }
@@ -1276,83 +1276,83 @@ function gapBetween(
 }
 
 /**
- * Route every link that named a gap.
+ * Route every edge that named a gap.
  *
- * Links sharing one gap share its lanes, spread like attachments on a side and
+ * Edges sharing one gap share its lanes, spread like attachments on a side and
  * ordered the same derived way — by where their ends actually sit, so the two
  * arriving at the hub's left edge in one order run through the corridor in that
  * same order and never cross.
  */
 function planCorridors(
-  links: LayoutLink[],
-  ends: Map<LayoutLink, LinkEnds>,
+  edges: LayoutEdge[],
+  ends: Map<LayoutEdge, EdgeEnds>,
   measurer: Measurer,
   fontSize: number,
-): Map<LayoutLink, Corridor> {
-  const plans = new Map<LayoutLink, Corridor>();
+): Map<LayoutEdge, Corridor> {
+  const plans = new Map<LayoutEdge, Corridor>();
   const groups = new Map<
     string,
-    { axis: Axis; lo: number; hi: number; across: [number, number]; members: LayoutLink[] }
+    { axis: Axis; lo: number; hi: number; across: [number, number]; members: LayoutEdge[] }
   >();
 
-  for (const link of links) {
-    if (!link.between) continue;
-    const [first, second] = link.between.nodes;
+  for (const edge of edges) {
+    if (!edge.between) continue;
+    const [first, second] = edge.between.nodes;
     const gap = gapBetween(
       faceOf(first),
       faceOf(second),
       first.name,
       second.name,
-      link.between.axis,
-      link.line,
+      edge.between.axis,
+      edge.line,
     );
     // The pair names one gap however the author ordered them. The axis is in
-    // the key because a diagonal pair really does have two, and two links may
+    // the key because a diagonal pair really does have two, and two edges may
     // legitimately name the same pair and take different ones.
     const key = [gap.axis, ...[first.name, second.name].sort()].join(' ');
     const group = groups.get(key);
-    if (group) group.members.push(link);
-    else groups.set(key, { ...gap, members: [link] });
+    if (group) group.members.push(edge);
+    else groups.set(key, { ...gap, members: [edge] });
   }
 
   for (const group of groups.values()) {
-    const along = (link: LayoutLink): number => {
-      const { start, end } = ends.get(link)!;
+    const along = (edge: LayoutEdge): number => {
+      const { start, end } = ends.get(edge)!;
       return (start[group.axis] + end[group.axis]) / 2;
     };
     const ordered = [...group.members].sort((a, b) => along(a) - along(b));
 
     // Lanes are spread as attachments on a side are, including the squeeze when
     // there is not enough room — see `planEndpoints`. The step is wider here,
-    // because a lane carries a whole label rather than the point of an arrow,
-    // and two lanes closer together than a label is deep would draw the labels
+    // because a lane carries a whole text rather than the point of an arrow,
+    // and two lanes closer together than a text is deep would draw the texts
     // over each other. Still derived, not chosen: it is the size of what is
     // actually running along the corridor.
     const span = group.hi - group.lo;
     const usable = Math.max(0, span - ATTACH_MARGIN * 2);
     const want = Math.max(
       ATTACH_STEP,
-      ...ordered.map((link) => laneExtent(link, group.axis, measurer, fontSize)),
+      ...ordered.map((edge) => laneExtent(edge, group.axis, measurer, fontSize)),
     );
     const step = ordered.length > 1 ? Math.min(want, usable / (ordered.length - 1)) : 0;
     const firstLane = group.lo + span / 2 - (step * (ordered.length - 1)) / 2;
 
-    ordered.forEach((link, index) => {
-      const { start, end } = ends.get(link)!;
+    ordered.forEach((edge, index) => {
+      const { start, end } = ends.get(edge)!;
       const run: Axis = group.axis === 'y' ? 'x' : 'y';
-      // The corridor binds only where the link is actually passing the pair, so
-      // its reach is the overlap of the pair's extent with the link's own.
+      // The corridor binds only where the edge is actually passing the pair, so
+      // its reach is the overlap of the pair's extent with the edge's own.
       const enterAt = Math.max(group.across[0], Math.min(start[run], end[run]));
       const leaveAt = Math.min(group.across[1], Math.max(start[run], end[run]));
       if (leaveAt <= enterAt) {
-        const [a, b] = link.between!.nodes;
+        const [a, b] = edge.between!.nodes;
         throw new SourceError(
-          `this link never passes between "${a.name}" and "${b.name}"`,
-          link.line,
+          `this edge never passes between "${a.name}" and "${b.name}"`,
+          edge.line,
         );
       }
       const forward = end[run] >= start[run];
-      plans.set(link, {
+      plans.set(edge, {
         axis: group.axis,
         lane: firstLane + index * step,
         enter: forward ? enterAt : leaveAt,
@@ -1370,44 +1370,44 @@ function planCorridors(
  * on the way. Point those ends at the corridor instead.
  */
 function aimFreeEnds(
-  links: LayoutLink[],
-  ends: Map<LayoutLink, LinkEnds>,
-  corridors: Map<LayoutLink, Corridor>,
+  edges: LayoutEdge[],
+  ends: Map<LayoutEdge, EdgeEnds>,
+  corridors: Map<LayoutEdge, Corridor>,
 ): void {
-  for (const link of links) {
-    const plan = corridors.get(link);
+  for (const edge of edges) {
+    const plan = corridors.get(edge);
     if (!plan) continue;
-    const current = ends.get(link)!;
+    const current = ends.get(edge)!;
     const start =
       current.start.side === undefined
-        ? free(faceOf(link.from), corridorPoint(plan, plan.enter))
+        ? free(faceOf(edge.from), corridorPoint(plan, plan.enter))
         : current.start;
     const end =
       current.end.side === undefined
-        ? free(faceOf(link.to), corridorPoint(plan, plan.leave))
+        ? free(faceOf(edge.to), corridorPoint(plan, plan.leave))
         : current.end;
-    ends.set(link, { start, end });
+    ends.set(edge, { start, end });
   }
 }
 
 /**
- * How much room a link's label takes across the corridor — its depth in a
- * horizontal channel, its width in a vertical one. Zero for an unlabeled link,
+ * How much room an edge's text takes across the corridor — its depth in a
+ * horizontal channel, its width in a vertical one. Zero for an edge with no text,
  * which needs no more than the arrow spacing.
  *
- * `labelExtent` measures the knockout along whichever axis it is handed, and the
+ * `textExtent` measures the knockout along whichever axis it is handed, and the
  * axis wanted here is the one the channel is measured on rather than the one the
- * link runs along — a channel measured vertically carries links running
- * horizontally, and what has to fit between two lanes of it is a label's depth.
+ * edge runs along — a channel measured vertically carries edges running
+ * horizontally, and what has to fit between two lanes of it is a text's depth.
  */
 function laneExtent(
-  link: LayoutLink,
+  edge: LayoutEdge,
   axis: Axis,
   measurer: Measurer,
   fontSize: number,
 ): number {
-  if (link.label === undefined) return 0;
-  return labelExtent(link.label, link.appearance, axis, measurer, fontSize, link.line);
+  if (edge.text === undefined) return 0;
+  return textExtent(edge.text, edge.appearance, axis, measurer, fontSize, edge.line);
 }
 
 function corridorPoint(plan: Corridor, at: number): Point {
@@ -1415,7 +1415,7 @@ function corridorPoint(plan: Corridor, at: number): Point {
 }
 
 /**
- * The path a corridor link takes: a curve out of its start into the gap, the
+ * The path a corridor edge takes: a curve out of its start into the gap, the
  * straight run along the gap, and a curve out of the gap to its end. It is
  * three pieces rather than one cubic because a single curve has no way to stay
  * inside an interval over part of its length — which is the whole claim the
@@ -1468,13 +1468,13 @@ function corridorReach(from: Point, to: Point, axis: Axis): number {
   return Math.min(140, Math.max(8, Math.min(distance * 0.4, run / 2)));
 }
 
-function sideAttr(link: LayoutLink, key: 'from' | 'to'): Side | undefined {
-  const value = link.attrs[key];
+function sideAttr(edge: LayoutEdge, key: 'from' | 'to'): Side | undefined {
+  const value = edge.attrs[key];
   if (value === undefined) return undefined;
   if (!(SIDES as readonly string[]).includes(value)) {
     throw new SourceError(
       `"${key}: ${value}" is not a side — use ${SIDES.join(', ')}`,
-      link.line,
+      edge.line,
     );
   }
   return value as Side;
@@ -1544,7 +1544,7 @@ function textBlock(
     .map((line, index) => {
       if (line.length === 0) return '';
       const baseline = top + index * lineHeight + lineHeight / 2 + fontSize * 0.35;
-      // A label's first line is its name; anything after it is a qualifier, and
+      // A text's first line is its name; anything after it is a qualifier, and
       // `subtext:` is how a box says that qualifier should read as secondary.
       const color = index === 0 ? style.color : style.subColor ?? style.color;
       return `  <text x="${round(anchorX)}" y="${round(baseline)}" fill="${color}" text-anchor="${style.align}">${escapeXml(line)}</text>`;
@@ -1575,9 +1575,9 @@ function textOf(appearance: Record<string, string>, fallback: string): string {
 }
 
 /**
- * The color for every label line after the first, or undefined when the box
+ * The color for every text line after the first, or undefined when the box
  * said nothing and all its lines should read alike. `muted` is the one reserved
- * word: it defers to the theme, so a label's qualifier stays readable when the
+ * word: it defers to the theme, so a text's qualifier stays readable when the
  * theme changes. Anything else is a color, same as `text` and `fill` take.
  */
 function subtextOf(appearance: Record<string, string>, theme: Theme): string | undefined {

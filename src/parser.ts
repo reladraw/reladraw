@@ -1,12 +1,12 @@
 import type {
   Attrs,
-  BoxStmt,
-  Edge,
+  NodeStmt,
+  Side,
   Placement,
   DeckStmt,
   DiagramStmt,
   Document,
-  LinkStmt,
+  EdgeStmt,
   NoteStmt,
   Passage,
   Stmt,
@@ -15,10 +15,10 @@ import type {
 import {
   COLOR_KEYS,
   DIAGRAM_KEYS,
-  EDGE_AXIS,
-  EDGES,
+  SIDE_AXIS,
+  SIDES,
   PASSAGE_AXES,
-  LABEL_KEYS,
+  TEXT_KEYS,
   PLACEMENT_KEYS,
   isDirection,
   listTargets,
@@ -51,12 +51,12 @@ function parseStatement(tokens: Token[], line: number): Stmt {
   }
 
   switch (keyword.text) {
-    case 'box':
-      return parseBox(head, attrs, line);
+    case 'node':
+      return parseNode(head, attrs, line);
     case 'note':
       return parseNote(head, attrs, line);
-    case 'link':
-      return parseLink(head, attrs, line);
+    case 'edge':
+      return parseEdge(head, attrs, line);
     case 'deck':
       return parseDeck(head, line);
     case 'style':
@@ -64,8 +64,48 @@ function parseStatement(tokens: Token[], line: number): Stmt {
     case 'diagram':
       return parseDiagram(head, attrs, line);
     default:
-      throw new SourceError(`unknown statement "${keyword.text}"`, line);
+      throw new SourceError(substitution(keyword.text, head), line);
   }
+}
+
+/**
+ * The statement keywords that are not words in this language, and the word to
+ * write instead. `box` and `link` were the keywords until 0.3.0; `rect` and
+ * `arrow` never were, and are here because they are what somebody arriving from
+ * another format types first.
+ *
+ * Refused by name with the substitution quoted, the same treatment `stroke:`
+ * and `width:` get. A synonym was the other candidate and is refused for the
+ * reasons in the design record: an alias is a variant every reader has to
+ * learn, and the statement keyword would become the one place a misspelling
+ * silently succeeds.
+ */
+const SUBSTITUTIONS: Record<string, 'node' | 'edge'> = {
+  box: 'node',
+  rect: 'node',
+  link: 'edge',
+  arrow: 'edge',
+};
+
+/**
+ * What to say about a word that opens no statement. A word this language once
+ * used, or one another format uses, gets the replacement quoted back in the
+ * author's own name for the thing; anything else has no remedy but its
+ * spelling.
+ */
+function substitution(word: string, head: Token[]): string {
+  const replacement = SUBSTITUTIONS[word];
+  if (replacement === undefined) return `unknown statement "${word}"`;
+  const plural = replacement === 'node' ? 'nodes' : 'edges';
+  // Quote the fix in the line the author actually wrote. `node parser` and
+  // `edge a -> b` both say more than a placeholder does, and the whole head is
+  // what makes the second of those readable.
+  const rest = head
+    .slice(1)
+    .map((token) => (token.quoted ? quoteOf(token.text) : token.text))
+    .join(' ');
+  const example = rest === '' ? '' : ` \u2014 try \`${replacement} ${rest}\``;
+  return `reladraw calls these ${plural}, so there is no \`${word}\` statement${example}`;
 }
 
 /**
@@ -84,7 +124,7 @@ function attributesBegin(tokens: Token[]): number {
   return -1;
 }
 
-/** The value as the author would have to write it back into a label. */
+/** The value as the author would have to write it back into a text. */
 function quoteOf(text: string): string {
   return `"${text.replace(/"/g, '\\"')}"`;
 }
@@ -118,16 +158,16 @@ function parseAttrs(tokens: Token[], line: number): Attrs {
     if (key === 'stroke') {
       // Removed 2026-09-09. It meant a different part on every kind — the
       // border of a box, the text of a note or a glyph body, the line of a
-      // link — so it could never be wrong, and a box's text had no word at all.
+      // edge — so it could never be wrong, and a node's text had no word at all.
       // Refused by name rather than ignored: an older file must be told what
       // to write, not silently drawn without its colors.
       throw new SourceError(
-        '`stroke:` has been replaced by the part it colors — `border:` on a box, `text:` on a note or a glyph body, `line:` on a link. A style shared between boxes and links writes both, as in `border: #d2904e  line: #d2904e`',
+        '`stroke:` has been replaced by the part it colors — `border:` on a node, `text:` on a note or a glyph body, `line:` on an edge. A style shared between nodes and edges writes both, as in `border: #d2904e  line: #d2904e`',
         line,
       );
     }
     if (key === 'width') {
-      // Renamed 2026-09-09. It folds a label every n *characters* and never
+      // Renamed 2026-09-09. It folds a text every n *characters* and never
       // said how wide anything is, so `width: 200` meaning units was accepted,
       // wrapped at 200 characters, and did nothing visible — the silent drop
       // this vocabulary is otherwise free of. Refused by name for the reason
@@ -142,7 +182,7 @@ function parseAttrs(tokens: Token[], line: number): Attrs {
       // these keys takes a color. Without this the string is passed through as
       // a color, turns out not to be one, and nothing is drawn and nothing is
       // said. Name the likely intent rather than only the rule: the qualifier
-      // under a name is a second label line, not a `subtext` value.
+      // under a name is a second text line, not a `subtext` value.
       if (valueToken.text.startsWith('#')) {
         // A hex color that was merely quoted. The author wrote a color and the
         // remedy is punctuation, so say that rather than that it is not one.
@@ -151,17 +191,17 @@ function parseAttrs(tokens: Token[], line: number): Attrs {
           line,
         );
       }
-      // `text:` is the color of a label, not the label itself, and that is a
+      // `text:` is the color of a text, not the text itself, and that is a
       // mistake worth naming rather than only refusing — the word invites it.
       if (key === 'text') {
         throw new SourceError(
-          `\`text:\` is the color of a label, not the label — write the words in quotes after the name, as in \`box name ${quoteOf(valueToken.text)}\``,
+          `\`text:\` colors a node's text rather than setting it — write the words in quotes after the name, as in \`node name ${quoteOf(valueToken.text)}\``,
           line,
         );
       }
       if (key === 'subtext') {
         throw new SourceError(
-          `\`subtext:\` is the color of a label's later lines, not the words — write them into the label, as in \`"Name / ${valueToken.text}"\`, and \`subtext: muted\` to make them quieter`,
+          `\`subtext:\` colors a node's later text lines rather than setting them — write them into the text, as in \`"Name / ${valueToken.text}"\`, and \`subtext: muted\` to make them quieter`,
           line,
         );
       }
@@ -177,11 +217,11 @@ function parseAttrs(tokens: Token[], line: number): Attrs {
 }
 
 /**
- * `box <name> ["<text>"] [(<label modifiers>)] [<placement> ...]`
+ * `node <name> ["<text>"] [(<text modifiers>)] [<placement> ...]`
  *
- * The text is optional and the name stands in for it, because a bare `box a`
+ * The text is optional and the name stands in for it, because a bare `node a`
  * asking for an empty rectangle is a default nobody wants: the first lines
- * anybody types are `box a` and `box b right of a`, and they mean the two
+ * anybody types are `node a` and `node b right of a`, and they mean the two
  * boxes to say "a" and "b". `""` is how a box says it is deliberately blank —
  * an invisible container, a glyph body, a node that is nothing but its icon —
  * and every such box already writes it, so nothing that predates this changed
@@ -192,33 +232,33 @@ function parseAttrs(tokens: Token[], line: number): Attrs {
  * `server.docker` reading "docker" says everything the whole path would.
  *
  * A name now has two jobs, so renaming a node can change the picture. That is
- * the price, and it is honest: a file that states no label is saying the name
- * is the label.
+ * the price, and it is honest: a file that states no text is saying the name
+ * is the text.
  */
-function parseBox(head: Token[], attrs: Attrs, line: number): BoxStmt {
-  const name = requireName(head[1], 'box', line);
+function parseNode(head: Token[], attrs: Attrs, line: number): NodeStmt {
+  const name = requireName(head[1], 'node', line);
   const written = head[2];
   const textToken = written?.quoted ? written : undefined;
-  // A bare word here is a label somebody forgot to quote far more often than
+  // A bare word here is a text somebody forgot to quote far more often than
   // it is anything else, and `"Parser" is not a direction` would send them
   // looking in the wrong place.
   if (written && !textToken && !isAttrKey(written) && !startsPlacement(written) && written.text !== '(') {
     throw new SourceError(
-      `box "${name}": a label is quoted — write "${written.text}" rather than ${written.text}`,
+      `node "${name}": a text is quoted — write "${written.text}" rather than ${written.text}`,
       line,
     );
   }
   const text = textToken ? textToken.text : name.slice(name.lastIndexOf('.') + 1);
-  const subject = `box "${name}"`;
-  const label = readBracket(head, textToken ? 3 : 2, LABEL_KEYS, {
+  const subject = `node "${name}"`;
+  const bracket = readBracket(head, textToken ? 3 : 2, TEXT_KEYS, {
     subject,
-    what: 'the label',
-    kind: 'a label',
+    what: 'the text',
+    kind: 'a text',
     example: 'at: bottom',
     line,
   });
-  const placements = parsePlacements(head.slice(label.next), line, subject);
-  return { kind: 'box', name, text, label: label.values, placements, attrs, line };
+  const placements = parsePlacements(head.slice(bracket.next), line, subject);
+  return { kind: 'node', name, text, textAttrs: bracket.values, placements, attrs, line };
 }
 
 /** `note <name> "<text>" [<placement> ...]` */
@@ -228,11 +268,11 @@ function parseNote(head: Token[], attrs: Attrs, line: number): NoteStmt {
   if (!textToken || !textToken.quoted) {
     throw new SourceError(`note "${name}" needs quoted text`, line);
   }
-  // A note is bare text with no box, so it has no band for a label to sit in
+  // A note is bare text with no box, so it has no band for a text to sit in
   // and nowhere for `at:` to put one. Refused by name rather than ignored.
   if (follows(head, 3, '(')) {
     throw new SourceError(
-      `note "${name}" carries label modifiers. A note is bare text, so there is no box for its label to sit anywhere in`,
+      `note "${name}" carries text modifiers. A note is bare text, so there is no box for its text to sit anywhere in`,
       line,
     );
   }
@@ -241,30 +281,30 @@ function parseNote(head: Token[], attrs: Attrs, line: number): NoteStmt {
 }
 
 /**
- * `link <from> -> <to> ["<label>"] [between <a> and <b>]`, with `<->` for a
+ * `edge <from> -> <to> ["<text>"] [between <a> and <b>]`, with `<->` for a
  * two-headed arrow and `<-` for one pointing the other way.
  *
  * `a <- b` is exactly `b -> a` and carries no meaning of its own downstream.
  * What it buys is the ordering: the name written first is the one the line is
- * about, and plenty of links have the target as their subject.
+ * about, and plenty of edges have the target as their subject.
  */
 const ARROWS = ['->', '<->', '<-'];
 
-function parseLink(head: Token[], attrs: Attrs, line: number): LinkStmt {
-  const left = requireName(head[1], 'link', line);
+function parseEdge(head: Token[], attrs: Attrs, line: number): EdgeStmt {
+  const left = requireName(head[1], 'edge', line);
   const arrow = head[2];
   if (!arrow || arrow.quoted || !ARROWS.includes(arrow.text)) {
-    throw new SourceError('a link needs "->", "<-" or "<->" between its endpoints', line);
+    throw new SourceError('an edge needs "->", "<-" or "<->" between its endpoints', line);
   }
   const rightToken = head[3];
   if (!rightToken || rightToken.quoted) {
-    throw new SourceError('a link needs a node on the right of the arrow', line);
+    throw new SourceError('an edge needs a node on the right of the arrow', line);
   }
   const back = arrow.text === '<-';
 
   let at = 4;
-  const labelToken = head[at]?.quoted ? head[at] : undefined;
-  if (labelToken) at += 1;
+  const textToken = head[at]?.quoted ? head[at] : undefined;
+  if (textToken) at += 1;
 
   // A gap has two sides, so `between` takes exactly two targets rather than the
   // open list a placement takes. `right of a and b` means "clear of both", and
@@ -273,9 +313,9 @@ function parseLink(head: Token[], attrs: Attrs, line: number): LinkStmt {
   if (at < head.length) {
     const word = head[at]!;
     if (word.quoted || word.text !== 'between') {
-      throw new SourceError(`unexpected "${word.text}" after the link`, line);
+      throw new SourceError(`unexpected "${word.text}" after the edge`, line);
     }
-    const read = readTargets(head, at + 1, 'link', 'between', line);
+    const read = readTargets(head, at + 1, 'edge', 'between', line);
     if (read.targets.length !== 2) {
       throw new SourceError(
         `"between" takes two nodes, one for each side of the gap — found ${read.targets.length}`,
@@ -294,35 +334,35 @@ function parseLink(head: Token[], attrs: Attrs, line: number): LinkStmt {
     between = { targets: read.targets, ...(axis !== undefined ? { axis } : {}) };
   }
   if (at < head.length) {
-    throw new SourceError(`unexpected "${head[at]!.text}" after the link`, line);
+    throw new SourceError(`unexpected "${head[at]!.text}" after the edge`, line);
   }
 
   return {
-    kind: 'link',
+    kind: 'edge',
     from: back ? rightToken.text : left,
     to: back ? left : rightToken.text,
     both: arrow.text === '<->',
-    ...(labelToken ? { label: labelToken.text } : {}),
+    ...(textToken ? { text: textToken.text } : {}),
     ...(between ? { between } : {}),
     attrs,
     line,
   };
 }
 
-/** `deck <name> "<label>" ["<label>" ...]` */
+/** `deck <name> "<text>" ["<text>" ...]` */
 function parseDeck(head: Token[], line: number): DeckStmt {
   const name = requireName(head[1], 'deck', line);
-  const labels: string[] = [];
+  const texts: string[] = [];
   for (const token of head.slice(2)) {
     if (!token.quoted) {
-      throw new SourceError(`deck "${name}" takes quoted labels only`, line);
+      throw new SourceError(`deck "${name}" takes quoted texts only`, line);
     }
-    labels.push(token.text);
+    texts.push(token.text);
   }
-  if (labels.length === 0) {
-    throw new SourceError(`deck "${name}" needs at least one label`, line);
+  if (texts.length === 0) {
+    throw new SourceError(`deck "${name}" needs at least one text`, line);
   }
-  return { kind: 'deck', name, labels, line };
+  return { kind: 'deck', name, texts, line };
 }
 
 /** `style <name> <attributes>` */
@@ -387,15 +427,15 @@ function parsePlacements(tokens: Token[], line: number, subject: string): Placem
       throw new SourceError(`${subject}: unexpected text "${word.text}"`, line);
     }
 
-    // `top level with media` names an edge rather than the center line. `left`
-    // and `right` are edges as well as directions, so it is the word after them
+    // `top level with media` names a side rather than the center line. `left`
+    // and `right` are sides as well as directions, so it is the word after them
     // that says which was meant — "left of drive" against "left level with drive".
-    const edge = isEdgeWord(word.text) && follows(tokens, i + 1, 'level') ? word.text : undefined;
-    const head = edge ? tokens[i + 1]! : word;
+    const side = isSideWord(word.text) && follows(tokens, i + 1, 'level') ? word.text : undefined;
+    const head = side ? tokens[i + 1]! : word;
 
     if (head.text === 'level' && !head.quoted) {
-      const at = edge ? i + 1 : i;
-      const written = edge ? `${edge} level with` : 'level with';
+      const at = side ? i + 1 : i;
+      const written = side ? `${side} level with` : 'level with';
       if (!follows(tokens, at + 1, 'with')) {
         throw new SourceError(`${subject}: an alignment reads "${written} <node>"`, line);
       }
@@ -413,8 +453,8 @@ function parsePlacements(tokens: Token[], line: number, subject: string): Placem
       }
       placements.push({
         kind: 'align',
-        axis: EDGE_AXIS[edge ?? 'center'],
-        edge: edge ?? 'center',
+        axis: SIDE_AXIS[side ?? 'center'],
+        side: side ?? 'center',
         targets: read.targets,
         line,
       });
@@ -470,7 +510,7 @@ function readModifiers(
 
 /**
  * A bracketed `key: value` list, shared by a placement's modifiers and a
- * label's. Both exist for the same reason — a modifier belongs to the clause it
+ * text's. Both exist for the same reason — a modifier belongs to the clause it
  * modifies, and the brackets say which clause that is rather than leaving it to
  * be inferred from what happens to precede it.
  *
@@ -527,18 +567,18 @@ function follows(tokens: Token[], at: number, word: string): boolean {
   return token !== undefined && !token.quoted && token.text === word;
 }
 
-/** Could this token open a placement? `top` and `left` open the edge alignments. */
+/** Could this token open a placement? `top` and `left` open the side alignments. */
 function startsPlacement(token: Token): boolean {
   if (token.quoted) return false;
   return (
     isDirection(token.text) ||
     token.text === 'level' ||
-    (EDGES as readonly string[]).includes(token.text)
+    (SIDES as readonly string[]).includes(token.text)
   );
 }
 
-function isEdgeWord(word: string): word is Edge {
-  return word !== 'center' && (EDGES as readonly string[]).includes(word);
+function isSideWord(word: string): word is Side {
+  return word !== 'center' && (SIDES as readonly string[]).includes(word);
 }
 
 /**

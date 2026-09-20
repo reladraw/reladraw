@@ -1,10 +1,10 @@
-// Boxes never overlap. Nothing here says the wide box has to clear "left".
+// Nodes never overlap. Nothing here says the wide node has to clear "left".
 //
 // Which way it moves is read off the file: "middle" is right of "left", so
 // rightward is the way that contradicts nothing written. And "left" is tall, so
 // the two overlap far less horizontally than vertically.
 
-box left    "L/L/L/L/L/L/L/L/L/L/L/L/L/L"
-box right   "R"                             right of left
-box middle  "m"   right of left  left of right  level with left
-box wide    "a wide box that overruns both"    below middle  gap: tight
+node left    "L/L/L/L/L/L/L/L/L/L/L/L/L/L"
+node right   "R"                             right of left
+node middle  "m"   right of left  left of right  level with left
+node wide    "a wide box that overruns both"    below middle  gap: tight

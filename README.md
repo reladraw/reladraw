@@ -25,13 +25,13 @@ On the other end of the spectrum are the absolute-positioning tools — draw.io,
 reladraw aims at the middle. Every position is stated relative to something else, and nothing in the file is a coordinate:
 
 ```
-box app "Web app"
-box app.ui  "Interface"
-box app.api "API"  below app.ui
+node app "Web app"
+node app.ui  "Interface"
+node app.api "API"  below app.ui
 
-box store "Database"  right of app  level with app
+node store "Database"  right of app  level with app
 
-link app.api -> store  "queries"  from: right  to: left
+edge app.api -> store  "queries"  from: right  to: left
 ```
 
 Nothing is nested, so no line depends on another line's position or indentation.
@@ -44,7 +44,7 @@ The common case is not drawing a diagram, it is changing one. Ask for the auth s
 
 Writing has the same shape. An agent emitting Mermaid is guessing at a layout that an algorithm settles later, and its only way to find out is to render and look — a round trip that comes back as a picture rather than as a list of what is wrong.
 
-Intent is confirmable, outcomes are not, and the difference is worth being precise about. An agent can re-read its own file and see that the database is under the API and all four machines hang off the sync hub. It cannot see that two clusters anchored to different things now overlap, that a label overflowed its box, or that an edge crosses four others — those are resolved from the statements rather than stated, so they need the diagnostics in the scope section below.
+Intent is confirmable, outcomes are not, and the difference is worth being precise about. An agent can re-read its own file and see that the database is under the API and all four machines hang off the sync hub. It cannot see that two clusters anchored to different things now overlap, that a text overflowed its node, or that an edge crosses four others — those are resolved from the statements rather than stated, so they need the diagnostics in the scope section below.
 
 ### Using it with an agent
 
@@ -62,7 +62,7 @@ To install it for one agent rather than all of them, name it with `-a`:
 npx skills add reladraw/reladraw -g -a claude-code
 ```
 
-Re-run whichever command you used after a release that changes the syntax. The skill is a copy taken at install time, not a link, so nothing refreshes it on its own.
+Re-run whichever command you used after a release that changes the syntax. The skill is a copy taken at install time, not a live link, so nothing refreshes it on its own.
 
 It is [plain Markdown](.claude/skills/reladraw/SKILL.md) with the syntax reference beside it, so it is worth reading whatever you use, and copying the directory by hand works just as well.
 
@@ -85,18 +85,18 @@ node dist/cli.js examples/arch.reladraw -o out.svg
 Not built yet, roughly in the order they are missed:
 
 - **The diagnostics report.** The scope section below says what it is for. Today the tool either renders or fails; it will not tell you what is wrong with a picture it drew successfully.
-- **Edge routing around boxes.** A link can be told which side of a box to leave and arrive on, and which gap to run down on the way. A link that says none of that is a straight line between two centers, and it will cut through whatever stands in the way.
+- **Edge routing around nodes.** An edge can be told which side of a node to leave and arrive on, and which gap to run down on the way. An edge that says none of that is a straight line between two centers, and it will cut through whatever stands in the way.
 - **More glyphs.** Icons and shapes are closed sets drawn from path data inside the tool, so a diagram wanting one that is not there has nowhere to go.
 
 The language is not stable. Expect the syntax to change.
 
 ## How it works
 
-A gap is a *minimum* distance, never an exact one. Say two things sit side by side, then say a third goes between them, and the first two are pushed apart by exactly what the third needs; delete the third and they close back up. That is the step an author otherwise does by hand — shove things apart to make room, then drag everything back so the diagram is not full of holes — and no number goes stale when a label grows.
+A gap is a *minimum* distance, never an exact one. Say two things sit side by side, then say a third goes between them, and the first two are pushed apart by exactly what the third needs; delete the third and they close back up. That is the step an author otherwise does by hand — shove things apart to make room, then drag everything back so the diagram is not full of holes — and no number goes stale when a text grows.
 
 So the resolver solves a system rather than walking a chain. Each axis is a set of minimum distances, and the tightest arrangement satisfying all of them is found by longest paths: one answer, no search, no arrangement ever tried and rejected. The engine works out distances; which side of what a thing sits on came from the file.
 
-That is also what makes non-overlap affordable, so it holds for every pair of boxes without anyone writing it down. On its own "these two must not overlap" is a choice among four directions, which is the search this design refuses — but the file has usually settled it already: if your arrangement lets one box travel away from another and offers no way back, that is the only separation it permits. Where the file orders a pair on neither axis, the tool names them rather than guessing; where it orders them on both, the tie breaks toward the axis of least overlap, which is the smallest movement and the one place the tool decides something nobody wrote.
+That is also what makes non-overlap affordable, so it holds for every pair of nodes without anyone writing it down. On its own "these two must not overlap" is a choice among four directions, which is the search this design refuses — but the file has usually settled it already: if your arrangement lets one node travel away from another and offers no way back, that is the only separation it permits. Where the file orders a pair on neither axis, the tool names them rather than guessing; where it orders them on both, the tie breaks toward the axis of least overlap, which is the smallest movement and the one place the tool decides something nobody wrote.
 
 Nothing is nudged. Each round derives the separations the file already implied, adds them as ordinary minimum distances, and solves the whole thing again from scratch — repairing a solved layout in place is the thing being avoided.
 
@@ -106,22 +106,22 @@ Nothing is nudged. Each round derives the separations the file already implied, 
 - Deterministic resolver: minimum distances in, tightest arrangement out *(done)*
 - Static SVG renderer *(done)*
 - A command-line tool: text file in, SVG out *(done)*
-- A placement grammar that can say what a real diagram needs: several placements on one box, one thing between two others, exact edge-to-edge alignment *(done)*
-- Boxes that do not overlap by default, with the separation direction derived from the stated arrangement *(done)*
-- Minimal box-avoiding edge routing
+- A placement grammar that can say what a real diagram needs: several placements on one node, one thing between two others, exact side-to-side alignment *(done)*
+- Nodes that do not overlap by default, with the separation direction derived from the stated arrangement *(done)*
+- Minimal node-avoiding edge routing
 - Machine-readable diagnostics from the solved geometry
 
-Diagnostics are a real output rather than a debugging aid. What they cannot do is stand in for the grammar: a check catches only what the language genuinely leaves open, and "these must not overlap" rules arrangements out without naming one, so it can never place anything. Everything the source cannot tell you is computable once the geometry is solved, with no image involved: overlapping boxes, crossed edges, text exceeding its container, anything off-canvas, large dead regions. So the tool reports `hub overlaps laptop1` and `edge auth->db crosses 4 edges`, and the fix is written in the same vocabulary as the source. An agent working this way reads a report about a text file it wrote and edits that text file — no rendering, no vision model, no pixel arithmetic.
+Diagnostics are a real output rather than a debugging aid. What they cannot do is stand in for the grammar: a check catches only what the language genuinely leaves open, and "these must not overlap" rules arrangements out without naming one, so it can never place anything. Everything the source cannot tell you is computable once the geometry is solved, with no image involved: overlapping nodes, crossed edges, text exceeding its container, anything off-canvas, large dead regions. So the tool reports `hub overlaps laptop1` and `edge auth->db crosses 4 edges`, and the fix is written in the same vocabulary as the source. An agent working this way reads a report about a text file it wrote and edits that text file — no rendering, no vision model, no pixel arithmetic.
 
-A diagnostic never repairs a solved layout in place. That is the line the design holds: a checker allowed to nudge boxes is a layout algorithm with a bad search strategy, fixing one overlap into the next with no view of the whole. Deriving a constraint the file already implied and solving the whole system again is a different thing, and is how non-overlap works. What is left over — anything the source genuinely does not settle — is reported, naming the statement that was broken, and the author edits the source. Open, and it decides how far this goes: may a diagnostic describe a fix in words, or only name the symptom? Describing one means the tool has an opinion about layout, which is the auto-layout instinct coming back in through the side door.
+A diagnostic never repairs a solved layout in place. That is the line the design holds: a checker allowed to nudge nodes is a layout algorithm with a bad search strategy, fixing one overlap into the next with no view of the whole. Deriving a constraint the file already implied and solving the whole system again is a different thing, and is how non-overlap works. What is left over — anything the source genuinely does not settle — is reported, naming the statement that was broken, and the author edits the source. Open, and it decides how far this goes: may a diagnostic describe a fix in words, or only name the symptom? Describing one means the tool has an opinion about layout, which is the auto-layout instinct coming back in through the side door.
 
 Three design problems decide how much machinery this needs, and the first outranks the other two:
 
-**Saying enough.** The benchmark contains arrangements the grammar cannot express at all, which is why some boxes land in the wrong place no matter how the file is written. So the work is adding statements, not restricting them. Expressiveness is not the danger; the engine *choosing* an arrangement is.
+**Saying enough.** The benchmark contains arrangements the grammar cannot express at all, which is why some nodes land in the wrong place no matter how the file is written. So the work is adding statements, not restricting them. Expressiveness is not the danger; the engine *choosing* an arrangement is.
 
-**What the engine is allowed to decide.** Auto-layout is refused, because a picture chosen by an algorithm is not predictable from its source, and that predictability is the entire point. Working out coordinates from an arrangement the author stated is a different thing and is simply the job. The test between them: the engine's freedom may affect distances and never relationships. If a default can change which side of something a box sits on, the language was short a statement and the tool should say so rather than guess.
+**What the engine is allowed to decide.** Auto-layout is refused, because a picture chosen by an algorithm is not predictable from its source, and that predictability is the entire point. Working out coordinates from an arrangement the author stated is a different thing and is simply the job. The test between them: the engine's freedom may affect distances and never relationships. If a default can change which side of something a node sits on, the language was short a statement and the tool should say so rather than guess.
 
-**Overlap and edge routing.** Relative placement with default spacing collides as soon as two clusters grow toward each other. Stating placement and then routing edges afterward with no influence on them reproduces the exact failure this is meant to avoid, so minimal box-avoiding orthogonal routing belongs in the first version. Routing and diagnostics are complements, not substitutes: routing fixes what it can, and the diagnostics report what it could not.
+**Overlap and edge routing.** Relative placement with default spacing collides as soon as two clusters grow toward each other. Stating placement and then routing edges afterward with no influence on them reproduces the exact failure this is meant to avoid, so minimal node-avoiding orthogonal routing belongs in the first version. Routing and diagnostics are complements, not substitutes: routing fixes what it can, and the diagnostics report what it could not.
 
 ## Prior art
 
