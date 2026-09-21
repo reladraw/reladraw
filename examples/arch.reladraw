@@ -1,7 +1,8 @@
 // Transcribed from a draw.io diagram.
 
 // --- Styles -----------------------------------------------------------------
-style synced     fill: #142814  border: #486544  line: #486544  subtext: muted
+style synced     fill: #142814  border: #486544  line: #486544
+style dim        text: (color: muted)
 style backup     border: #d2904e  line: #d2904e
 style dump       fill: #460000  border: #4e4e4e  shape: document
 style invisible  fill: none  border: none
@@ -18,16 +19,16 @@ node cluster ""  style: invisible
 node cluster.hub "Cloud sync"  badge: package  style: synced
 
 node cluster.desktop1       "Desktop 1 / Linux"    above-left of cluster.hub   gap: tight  badge: desktop
-node cluster.desktop1.files "shared folder / synced"  style: synced
+node cluster.desktop1.files "shared folder / [dim]synced[/dim]"  style: synced
 
 node cluster.desktop2       "Desktop 2 / Windows"  above-right of cluster.hub  gap: tight  badge: desktop
-node cluster.desktop2.files "shared folder / synced"  style: synced
+node cluster.desktop2.files "shared folder / [dim]synced[/dim]"  style: synced
 
 node cluster.laptop1        "Laptop 1 / macOS"     below-left of cluster.hub   gap: tight  badge: laptop
-node cluster.laptop1.files  "shared folder / synced"  style: synced
+node cluster.laptop1.files  "shared folder / [dim]synced[/dim]"  style: synced
 
 node cluster.laptop2        "Laptop 2 / macOS"     below-right of cluster.hub  gap: tight  badge: laptop
-node cluster.laptop2.files  "shared folder / synced"  style: synced
+node cluster.laptop2.files  "shared folder / [dim]synced[/dim]"  style: synced
 
 edge cluster.desktop1.files <-> cluster.hub  style: synced  from: right  to: top
 edge cluster.desktop2.files <-> cluster.hub  style: synced  from: left   to: top
@@ -43,7 +44,7 @@ node dumps ""  right of server.docker  left of cluster (gap: wide)  level with s
 node dumps.db1 "db dump / (app 1)"  style: dump
 node dumps.db2 "db dump / (app 2)"  style: dump
 
-node dumps_note "Written by nightly cron job."  below dumps  gap: tight  wrap: 30  shape: none
+node dumps_note "Written by nightly cron job." (wrap: 30)  below dumps  gap: tight  shape: none
 
 
 // --- The server -------------------------------------------------------------
@@ -55,7 +56,7 @@ node server.deploy  "deploy dir"  below server.mirror  gap: normal
 // The cubes are nodes rather than ornament: two of them are where the dump
 // arrows start. The lower pair is centered under the upper three by naming two
 // targets and nothing else.
-node server.docker  "Docker" (at: bottom, align: center)  below server.deploy  gap: normal
+node server.docker  "Docker" (at: bottom-center, align: center)  below server.deploy  gap: normal
 node server.docker.a  icon: cube
 node server.docker.b  right of server.docker.a  gap: tight  icon: cube
 node server.docker.db1  right of server.docker.b  gap: tight  icon: cube
@@ -84,4 +85,4 @@ node drive.archive  "archive"
 
 edge server.mirror -> drive.mirror  style: backup  from: left  to: right
 
-node drive_note "Swapped with a second drive weekly."  left of drive.mirror  gap: tight  wrap: 22  shape: none
+node drive_note "Swapped with a second drive weekly." (wrap: 22)  left of drive.mirror  gap: tight  shape: none

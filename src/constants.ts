@@ -1,7 +1,9 @@
 /** Spacing and text sizes shared by the resolver and the renderer, so the two cannot drift. */
-import type { Attrs } from './ast.js';
+import type { Attrs, Position } from './ast.js';
+import { POSITIONS, isPosition } from './ast.js';
 import { SourceError } from './errors.js';
 import type { Measurer } from './measure.js';
+import { plain, type Line } from './text.js';
 
 /** Inside a box, between its border and its contents. */
 export const PAD = 14;
@@ -92,16 +94,31 @@ export const TEXT_CLEARANCE = 20;
  * the channel, so an edge traveling horizontally down one needs its height.
  */
 export function textExtent(
-  text: string,
-  appearance: Attrs,
+  lines: Line[],
+  textAttrs: Attrs,
   axis: 'x' | 'y',
   measurer: Measurer,
   fontSize: number,
   line: number,
 ): number {
-  const size = fontSizeFor('edge', appearance, fontSize, line);
-  const { width, lines } = measurer.measure(text, size);
+  const size = fontSizeFor('edge', textAttrs, fontSize, line);
+  const width = lines.reduce(
+    (widest, drawn) => Math.max(widest, measurer.measure(plain(drawn), size).width),
+    0,
+  );
   return axis === 'x' ? width + 10 : lines.length * measurer.lineHeight(size);
+}
+
+/**
+ * The widest of these lines, which is how wide the block of them is. Shared by
+ * the resolver, which sizes a node to hold its text, and the renderer, which
+ * places that block in the room the node gave it.
+ */
+export function widestLine(lines: Line[], measurer: Measurer, fontSize: number): number {
+  return lines.reduce(
+    (widest, line) => Math.max(widest, measurer.measure(plain(line), fontSize).width),
+    0,
+  );
 }
 
 /**
@@ -140,8 +157,9 @@ export const TEXT_SIZES: Record<string, number> = {
  * What each kind of text is set at when the file says nothing. A node with no
  * body annotates the diagram rather than being part of it, and at the size of a
  * box text an aside reads as a statement — so `shape: none` starts small and
- * says so by having no body. This is a default and not a ceiling: `size:`
- * overrides it, the same way `fill:` overrides the theme's color.
+ * says so by having no body. This is a default and not a ceiling: `(size: …)`
+ * in the text's brackets overrides it, the same way `fill:` overrides the
+ * theme's color.
  */
 const DEFAULT_TEXT_SIZE: Record<string, string> = { none: 'small' };
 
@@ -152,11 +170,11 @@ const DEFAULT_TEXT_SIZE: Record<string, string> = { none: 'small' };
  */
 export function fontSizeFor(
   kind: string,
-  appearance: Attrs,
+  textAttrs: Attrs,
   fontSize: number,
   line: number,
 ): number {
-  const named = appearance['size'] ?? DEFAULT_TEXT_SIZE[kind] ?? 'normal';
+  const named = textAttrs['size'] ?? DEFAULT_TEXT_SIZE[kind] ?? 'normal';
   const scale = TEXT_SIZES[named];
   if (scale === undefined) {
     throw new SourceError(`size takes ${Object.keys(TEXT_SIZES).join(', ')}, not "${named}"`, line);
@@ -167,26 +185,34 @@ export function fontSizeFor(
 export const DEFAULT_MARGIN = 40;
 
 /**
- * Where a container's own text sits. Every container reserves a band for its
- * text and its icon; `at` says which end of the box that band is, and the
- * contents take what is left. `align` says how the text sits across it.
+ * Where a node's own text sits, and how its lines range once it is there.
  *
- * The two are independent and neither implies the other. A text at the bottom
- * is an ordinary text that happens to be at the bottom — there is no kind of
- * text being named here and no second thing quietly coming along with the
- * first. An earlier version bundled them as `text: heading | caption`, which
- * read a position as though it were a meaning; a folded corner means "artifact
- * rather than process" and a reader decodes it, while "lower down" means only
- * lower down.
+ * `at` names one of the nine positions of the box — the same closed set the
+ * overlay placement uses, and for the same reason: a box has nine points anyone
+ * can name without measuring, and a diagram written in them still moves
+ * correctly when a box moves. It replaced `top | bottom`, which was a slot: two
+ * of the nine handed out because those were the two somebody needed.
  *
- * A leaf has no band, so `at` says nothing about one and is refused there. But
- * `align` is not about the band: a text of more than one line has lines of
- * unequal length whatever kind of box it is in, and how those sit across each
- * other is a real question anywhere. A leaf's default is centered rather than
- * ranged left, which is why the fallback is a parameter.
+ * The two halves are read independently, exactly as `overlaidAt` reads an
+ * overlay's. The vertical half says which end of the box the text's band sits
+ * at, and the contents of a container take the other end. The horizontal half
+ * says where the block of text sits across the room it is given.
+ *
+ * `align` is a different question and stays one: a text of more than one line
+ * has lines of unequal length wherever the block sits, and how those range
+ * against each other is not where the block is. A container's lines default to
+ * ranged left and a leaf's to centered, which is why the fallback is a
+ * parameter.
  */
-export const TEXT_ENDS = ['top', 'bottom'] as const;
-export type TextEnd = (typeof TEXT_ENDS)[number];
+export interface TextStyle {
+  at: Position;
+  /** Which end of the box the text's band sits at, from `at`'s vertical half. */
+  end: 'top' | 'center' | 'bottom';
+  /** Where the block sits across the room, from `at`'s horizontal half. */
+  side: 'left' | 'center' | 'right';
+  /** How the lines range against each other, in the renderer's own vocabulary. */
+  align: 'start' | 'middle' | 'end';
+}
 
 /**
  * Author's word to the SVG's. One spelling of each, per the rule that refuses
@@ -199,13 +225,6 @@ const TEXT_ALIGNMENTS: Record<string, 'start' | 'middle' | 'end'> = {
   right: 'end',
 };
 
-export interface TextStyle {
-  /** Which end of the box the band sits at. */
-  at: TextEnd;
-  /** How the text sits in the band, in the renderer's own vocabulary. */
-  align: 'start' | 'middle' | 'end';
-}
-
 /**
  * Read a text's bracketed modifiers. Shared by the resolver, which offsets the
  * contents away from the band, and the renderer, which draws into it, so the two
@@ -215,17 +234,31 @@ export function textStyleFor(
   attrs: Attrs,
   line: number,
   fallbackAlign: 'start' | 'middle' = 'start',
+  fallbackAt: Position = 'top-left',
 ): TextStyle {
-  const at = attrs['at'];
-  if (at !== undefined && !(TEXT_ENDS as readonly string[]).includes(at)) {
-    throw new SourceError(`a text's at takes ${TEXT_ENDS.join(' or ')}, not "${at}"`, line);
+  const written = attrs['at'];
+  if (written !== undefined && !isPosition(written)) {
+    // A bare side word is the one mistake worth naming rather than only
+    // refusing: it was the whole vocabulary until 0.3.0, and the point at the
+    // middle of that side is exactly one word away.
+    const midpoint = `${written}-center`;
+    throw new SourceError(
+      isPosition(midpoint)
+        ? `a text sits at a *point* of the box, and "${written}" names a side — write "${midpoint}" for the point at the middle of it`
+        : `a text's at takes one of ${POSITIONS.join(', ')}, not "${written}"`,
+      line,
+    );
   }
+  const at = (written as Position | undefined) ?? fallbackAt;
   const align = attrs['align'];
   if (align !== undefined && TEXT_ALIGNMENTS[align] === undefined) {
     throw new SourceError(`a text's align takes left, center or right, not "${align}"`, line);
   }
+  const parts = at.split('-');
   return {
-    at: (at as TextEnd | undefined) ?? 'top',
+    at,
+    end: parts.includes('top') ? 'top' : parts.includes('bottom') ? 'bottom' : 'center',
+    side: parts.includes('left') ? 'left' : parts.includes('right') ? 'right' : 'center',
     align: align === undefined ? fallbackAlign : TEXT_ALIGNMENTS[align]!,
   };
 }

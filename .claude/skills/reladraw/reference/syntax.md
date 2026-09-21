@@ -23,14 +23,14 @@ node server "Home Server" left of cluster  gap: wide  badge: desktop
      name
 ```
 
-`node aside "…"  shape: none  below dumps (gap: tight)  wrap: 30` is one statement with a placement in the middle of its attributes, and reads the same as any other arrangement of those three. Until 0.3.0 placements had to come first; that rule existed only because a bare `gap:` between two placements could not be told from the node-wide default, and [bracketing a gap onto its placement](#a-gap-belongs-to-the-placement) removed the ambiguity that made it necessary.
+`node aside "…"  shape: none  below dumps (gap: tight)  overlap: allow` is one statement with a placement in the middle of its attributes, and reads the same as any other arrangement of those three. Until 0.3.0 placements had to come first; that rule existed only because a bare `gap:` between two placements could not be told from the node-wide default, and [bracketing a gap onto its placement](#a-gap-belongs-to-the-placement) removed the ambiguity that made it necessary.
 
 Attribute values are a single bare word unless quoted. No commas between attributes.
 
 ## Nodes
 
 ```
-node <name> ["<text>"] [<placement> ...] [attributes]
+node <name> ["<text>" [(<text properties>)]] [<placement> | <attribute>] ...
 ```
 
 `name` identifies the node and must be unique. `text` is what appears inside it, with ` / ` — a slash with whitespace on both sides — marking a line break.
@@ -50,15 +50,9 @@ A name written this way is doing two jobs, so renaming such a node changes the p
 
 The whitespace is part of the marker, not decoration. A slash inside a word is an ordinary character, so `TCP/IP`, `16/9`, `I/O` and `https://example.com/x` all render as written. An earlier version broke on every `/` and quietly tore those texts in half.
 
-For a text that wants a spaced slash and no break, `\/` escapes it: `"Before \/ After"` is one line. The escapes are `\"`, `\\` and `\/`.
+For a text that wants a spaced slash and no break, `\/` escapes it: `"Before \/ After"` is one line. The escapes are `\"`, `\\`, `\/` and `\[`.
 
-`wrap: <n>` folds the text at word boundaries every `n` characters, on top of whatever ` / ` already breaks. It is how you make a block of text narrow and tall so it can sit snugly beside something, rather than wide and short so it cannot.
-
-It was called `width` until it was renamed, and the old name is now an error naming the new one. `width` was wrong in the way this project's naming rule catches: it says how wide something is, and this says nothing of the sort — `width: 200` meaning units was accepted, folded at two hundred characters, and did nothing visible. The reference had to carry a sentence explaining that the number was not a distance, which is the tell that a name is doing the wrong job.
-
-`size: small | normal | large` sets how big the text is, and works on any node or edge text. The sizes are named for the reason gaps are named: a number would be typography by coordinate, stale the moment the document is set at another size, and silent about *why* one piece of text is smaller than another. An unrecognized value is an error naming it.
-
-Every kind of text has a default, and `size:` overrides it exactly as `fill:` overrides the theme's color. Only `shape: none` defaults to anything other than `normal`, and it defaults to `small`.
+Everything else a text has to say about itself it says in brackets after it — see "The text and its brackets" below.
 
 Containment is a dotted name. A node named `server.docker` is inside `server`. The parent must be declared before the child.
 
@@ -84,23 +78,68 @@ node server "Home Server"  left of cluster
 
 Here the server clears the whole cluster. Placed `left of cluster.hub` instead, it would only clear the hub, and the machines around the hub would be free to grow into it.
 
-A container's text can say where in the node it goes, in brackets on the text itself:
-
-```
-node docker "Docker" (at: bottom, align: center)  below deploy
-```
-
-`at: top | bottom` says which end of the node the text sits at; the contents take the other end. `align: left | center | right` says how the text sits across it. The defaults are `top` and `left` in a container, and the comma is optional punctuation.
-
-The two are independent and neither implies the other. `(at: bottom)` on its own is an ordinary text that happens to be at the bottom.
-
-They are bracketed onto the text rather than written among the node's attributes for the same reason [a gap is bracketed onto its placement](#a-gap-belongs-to-the-placement): they modify that one thing, and the brackets make the scope visible instead of leaving it to be inferred from what happens to sit nearby.
-
-A leaf has no contents, so there is no band and nothing for `at` to be at either end of; writing it on a childless node is an error. `align` is fine there, and its default is `center` rather than `left`, because a leaf's text is centered in its node. It is worth having: any text of more than one line — from a ` / ` break or from `wrap:` — has lines of unequal length, and how those sit across each other is a real question in a leaf as much as in a container.
-
-Both are refused on a node with no body, which has no box at all.
+A container's text can say where in the node it goes — see "The text and its brackets" below.
 
 `align: widths` on a container widens every direct child to match the widest of them, so a stack of nodes with texts of different lengths draws as a column with one edge rather than a ragged one. It is the only value the key accepts; anything else is an error. Widths are the only thing it touches — it never moves a child.
+
+### The text and its brackets
+
+Everything a text says about itself rides in brackets after it. The keys are `color`, `size`, `wrap`, `align` and `at`, in any order, with the comma optional punctuation:
+
+```
+node docker "Docker" (at: bottom-center, align: center)  below deploy
+node aside "Written by a nightly cron job." (size: small, wrap: 30)  shape: none
+```
+
+They are bracketed onto the text rather than written among the node's attributes for the same reason [a gap is bracketed onto its placement](#a-gap-belongs-to-the-placement): they modify that one thing, and the brackets make the scope visible instead of leaving it to be inferred from what happens to sit nearby. What is left at the top level is then about the node — its body, its color, where it goes.
+
+An edge's text takes the same brackets, less `at`: a node's text sits somewhere in a box and an edge's rides at the middle of its line, so there is no position to name.
+
+```
+edge a -> b  "rclone" (color: muted, size: small)
+```
+
+A **style** has no text of its own for a bracket to hang off, so it hangs the bracket off a key instead:
+
+```
+style aside  text: (size: small, color: muted)
+```
+
+Bundling a text's properties into a style is how they come to mean something: `style aside` applied to several nodes says those are the same kind of remark, which `(size: small)` written out at each of them does not.
+
+`color` takes a color written as the viewer will receive it — `#8b8b8b`, or any CSS color — or the one reserved word `muted`, which means the theme's secondary text color and so survives a change of theme.
+
+`size: small | normal | large` sets how big the text is set. The sizes are named for the reason gaps are named: a number would be typography by coordinate, stale the moment the document is set at another size, and silent about *why* one piece of text is smaller than another. Every kind of text has a default and `size` overrides it, exactly as `fill:` overrides the theme's color; only `shape: none` defaults to anything but `normal`, and it defaults to `small`.
+
+`wrap: <n>` folds the text at word boundaries every `n` characters, on top of whatever ` / ` already breaks. It is how you make a block of text narrow and tall so it can sit snugly beside something, rather than wide and short so it cannot. The number is a count of characters and not a distance: it says how much fits on a line and nothing about where anything sits.
+
+`at: <position>` is where the block of text sits in the node, named from [the nine positions](#on-a-box-overlays) — `top-left`, `bottom-center`, `center` and the rest. In a container the vertical half of the word says which end of the node the text's band is at, and the contents take the other end; a container whose text names neither end is an error, since there would be no other end left for the contents. The default is `top-left` in a container and `center` in a leaf.
+
+`align: left | center | right` is a different question and stays one: it says how the block's own *lines* range against each other, which matters whenever they are of unequal length and is not the same as where the block is. Its default is `left` in a container and `center` in a leaf.
+
+Where the node is exactly the size of what it holds — which is most leaves, since a leaf is sized from its own text — there is no slack and `at` changes nothing. It bites where there is some: a badge is two lines tall, so a one-line text beside one has room to sit at either end of.
+
+#### Markup in a text
+
+A word or a stretch of a text can borrow the look of a style:
+
+```
+style dim  text: (color: muted)
+
+node pc.files "shared folder / [dim]synced[/dim]"
+```
+
+The opener names a **style**, never a color, so the marked words borrow a meaning the file already has instead of restating a value that goes stale the day the thing it means is recolored. A style that says nothing about text is an error naming the missing part, and so is a name no style answers to.
+
+The closer repeats the name. `[/dim]`, not `[/]` — a reader should never have to count openers, and a mismatched close is then refused by name. Marks do not nest.
+
+A mark may cross a line break or a fold, so `"[dim]placement is / an output[/dim]"` quiets both lines. That is what it buys over the `subtext:` it replaced, which could only quiet everything after the first line and did it by counting, in a style somewhere else in the file, where a reader of the text could not see it.
+
+`[` opens a mark, so a literal one is written `\[`:
+
+```
+node sizes "sizes \[small, normal, large]"  shape: none
+```
 
 ### The body
 
@@ -128,7 +167,7 @@ Every node has a *body*: the thing that is drawn where the node is. Two keys nam
 
 ```
 node dump "db dump / (app 1)"  shape: document
-node aside "Written by a nightly cron job."  shape: none  wrap: 30
+node aside "Written by a nightly cron job." (wrap: 30)  shape: none
 node svc  icon: cube
 ```
 
@@ -158,7 +197,7 @@ node drive "External HD"  badge: disk
 
 **A badge decorates a node; `icon:` replaces its body.** The test is whether the node still sizes itself from its text: a badged node does, a picture does not. The same artwork serves both.
 
-The badge is two lines of the text tall, so it follows `size:` down and up with the text, and it sits at the top of a container beside the title and centered in a leaf beside the text. There is nothing to write about where it goes or how big it is. It takes a column of its own, so the node grows to hold the text and the badge side by side and one never runs under the other.
+The badge is two lines of the text tall, so it follows `(size: …)` down and up with the text, and it follows the text to whichever end of the node `at` puts it — the top of a container beside the title, the middle of a leaf beside its words. There is nothing to write about where it goes or how big it is. It takes a column of its own, so the node grows to hold the text and the badge side by side and one never runs under the other.
 
 `badge` is appearance, so a style can carry one and every store in a diagram then looks alike without the word being written more than once:
 
@@ -316,7 +355,7 @@ edge <from> <-> <to> ["<text>"] [between <a> and <b> [vertically|horizontally]] 
 
 Endpoints may be nested (`desktop1.files`). An edge never says where a node goes and routing is the renderer's problem, with one exception: an edge with text claims room in the gap it crosses, which is the next section.
 
-An edge's text breaks on ` / ` exactly as a node's does, and the block centers on the point the text would otherwise have occupied, so ``"run `deploy` / shell command"`` stacks its two lines around the midpoint of the line rather than running off along it. `wrap:` is a node attribute and does not apply — an edge text folds where you say and nowhere else.
+An edge's text breaks on ` / ` exactly as a node's does, and the block centers on the point the text would otherwise have occupied, so ``"run `deploy` / shell command"`` stacks its two lines around the midpoint of the line rather than running off along it. An edge's text takes the same brackets a node's does, less `at`, so `(wrap: 20)` folds it and `(color: muted)` quiets it.
 
 ### A text makes room for itself
 
@@ -450,14 +489,14 @@ One target only. A direction may name several — `right of a and b` means "clea
 There is no `note` statement. A note is a node with no body:
 
 ```
-node aside "Written by a nightly cron job."  shape: none  below dumps  gap: tight  wrap: 30
+node aside "Written by a nightly cron job." (wrap: 30)  shape: none  below dumps  gap: tight
 ```
 
 A keyword names a picture, and "note" names a use. The picture is *text with no box*, and that serves plenty of uses which are not asides — a caption on a brace, a title over a diagram. So the keyword went and the picture stayed. An older file writing `note` gets an error quoting the replacement.
 
 Nothing bounds bare text the way a border bounds a node, so a sentence-length one without a `wrap` is drawn as one very long line and will cross whatever is beside it. Give every one a wrap.
 
-`shape: none` starts one step smaller than a node's text, because an aside at the same size reads as a statement. That is a default, not a ceiling: say `size:` and it does what you said.
+`shape: none` starts one step smaller than a node's text, because an aside at the same size reads as a statement. That is a default, not a ceiling: say `(size: …)` and it does what you said.
 
 ## Decks
 
@@ -474,10 +513,8 @@ Every attribute, and what takes one. The kinds here are what a node's **body** i
 | attribute | `shape:` | `icon:` | `shape: none` | edge | says |
 |---|---|---|---|---|---|
 | `style` | ✓ | ✓ | ✓ | ✓ | the named bundle to take appearance from |
-| `size` | ✓ | ✓ | ✓ | ✓ | how big the text is set |
 | `gap` | ✓ | ✓ | ✓ | | the default distance to whatever it is placed against |
 | `overlap` | ✓ | ✓ | ✓ | | `allow`, to opt out of non-overlap |
-| `wrap` | ✓ | ✓ | ✓ | | how many characters fit on a line before the text folds |
 | `align` | ✓ | | | | `widths`, to widen every child to the widest of them |
 | `badge` | ✓ | ✓ | ✓ | | the picture that takes the column beside the text |
 | `shape` | ✓ | | ✓ | | the outline the node is drawn with, `none` included |
@@ -485,8 +522,7 @@ Every attribute, and what takes one. The kinds here are what a node's **body** i
 | `from` `to` | | | | ✓ | which side the line leaves and arrives on |
 | `fill` | ✓ | | | | color — see "A color names the part it colors" |
 | `border` | ✓ | | | | color |
-| `text` | ✓ | ✓ | ✓ | ✓ | color |
-| `subtext` | ✓ | ✓ | | | color |
+| `text` | ✓ | ✓ | ✓ | ✓ | the text's properties, in brackets — a style's form of what a node or an edge writes after its own words |
 | `line` | | | | ✓ | color |
 
 The `diagram` statement has a vocabulary of its own — `background`, and so far nothing else — which is checked the same way. Writing `background:` on a node is an error that points at `fill:`.
@@ -494,7 +530,7 @@ The `diagram` statement has a vocabulary of its own — `background`, and so far
 **A word this table does not give the kind is an error.** The two ways of being wrong get different answers, because they have different remedies. A word that is an attribute nowhere is a misspelling, and the error lists what the kind does take. A word that is an attribute *somewhere else* is usually a real statement written on the wrong half of the diagram, so the error says where it belongs:
 
 ```
-"one" is a node and has from: left. `from:` belongs to an edge — a node takes style, size, gap, ...
+"one" is a node and has from: left. `from:` belongs to an edge — a node takes style, gap, ...
 ```
 
 Some of the gaps in the table are worth saying out loud, because none of them looks like a mistake while you are writing it. A picture and a bodiless node take no `fill:` or `border:` — there is no outline for either to reach. Neither takes `align:` either, which widens a node's children, and neither may have any. `shape:` and `icon:` each appear only on the kind they make, and writing both is an error naming both. An edge takes no `gap:` or `overlap:` — those say where a node sits, and an edge is not placed, it joins two things that are.
@@ -514,7 +550,7 @@ style backup  border: #d2904e
 node server.mirror "shared folder / mirror"  style: backup
 ```
 
-The appearance attributes are `fill`, `border`, `text`, `line`, `subtext`, `size`, `icon` and `shape`. The first five each take a color written as the viewer will receive it — `#142814`, or any CSS color, or `none`.
+The appearance attributes are `fill`, `border`, `line`, `text`, `badge`, `icon` and `shape`. The first three each take a color written as the viewer will receive it — `#142814`, or any CSS color, or `none`; `text` takes the bracket described under "The text and its brackets".
 
 ### A color names the part it colors
 
@@ -524,13 +560,12 @@ A color attribute says which part of a thing it colors, and a part exists only o
 |---|---|---|
 | `fill` | the area inside the outline | a node |
 | `border` | the outline | a node |
-| `text` | the text | every node, and an edge |
+| `text: (color: …)` | the text | every node, and an edge |
 | `line` | the drawn line and its arrowheads | an edge |
-| `subtext` | every text line after the first | a node with a `shape:` or an `icon:` body |
 
 A word written on a kind that has no such part is refused by name, and the error lists the parts that kind does have — `border:` on a node with no body is a mistake, not something to ignore, for the same reason an unknown `diagram` key is.
 
-An edge's text takes the line's color unless `text` says otherwise, so an edge that means something by being orange means it in its words too, and there is still a way to say the words are not orange.
+An edge's text takes the line's color unless its own brackets say otherwise, so an edge that means something by being orange means it in its words too, and there is still a way to say the words are not orange.
 
 A style contributes a part only to the kinds that have it, so a style shared between nodes and edges writes one key for each:
 
@@ -542,7 +577,7 @@ The nodes take the border, the edges take the line, and neither sees the other's
 
 ### A style may carry what a thing cannot use
 
-The table under "Attributes" is checked against what you wrote *on the statement*, never against what a style handed it. That is what makes a bundle spanning kinds possible at all: the benchmark's `style synced` carries a fill, a border and a subtext for five nodes and a `line` for the four edges joining them, and every use of it leaves some of its keys unused. That is the style doing its job, not a mistake, so nothing is said about it.
+The table under "Attributes" is checked against what you wrote *on the statement*, never against what a style handed it. That is what makes a bundle spanning kinds possible at all: the benchmark's `style synced` carries a fill and a border for five nodes and a `line` for the four edges joining them, and every use of it leaves some of its keys unused. That is the style doing its job, not a mistake, so nothing is said about it.
 
 What is refused is a style that gives a thing **nothing at all**:
 
@@ -555,24 +590,25 @@ A node with no body is bare text, with neither a fill nor a badge, so `boxy` dre
 
 A style's own keys are checked against the whole vocabulary, since a word that is an attribute of nothing is a misspelling wherever it sits. `style s  wibble: red` is an error; a style was the last place one could hide.
 
-**Removed: `stroke`.** It named no part — it meant the border of a node, the *text* of one drawn as a picture or with no body at all, and the line of an edge, whichever the thing happened to have. That is coherent one kind at a time and ambiguous read across them; it meant no ink attribute could ever be *wrong*; and it left one thing with no way to be said at all, the color of the text on an ordinary node, which is why `subtext` exists in the odd shape it does. An older file carrying it gets an error naming the word to use instead.
+**Removed: `stroke`.** It named no part — it meant the border of a node, the *text* of one drawn as a picture or with no body at all, and the line of an edge, whichever the thing happened to have. That is coherent one kind at a time and ambiguous read across them; it meant no ink attribute could ever be *wrong*; and it left one thing with no way to be said at all, the color of the text on an ordinary node. An older file carrying it gets an error naming the word to use instead.
 
-A color is never written in quotes, and a quoted one is refused. There is nothing to check a color *against* — the tool keeps no list of color words, as below — so this is the one thing that can be checked, and it is the mistake that actually gets made: `subtext: "medium-fine"` reads as the text that goes underneath, and every attribute that takes a color would otherwise accept the string, find it is not a color, and draw nothing without saying so. The qualifier under a name is a second line of the text, not a `subtext` value.
+A color is never written in quotes, and a quoted one is refused. There is nothing to check a color *against* — the tool keeps no list of color words, as below — so this is the one thing that can be checked, and it is the mistake that actually gets made: every attribute that takes a color would otherwise accept a quoted string, find it is not a color, and draw nothing without saying so.
 
 There is no list of color words the tool knows. An earlier version had one, and it was wrong in the way such lists always are: `dark-green` existed only because somebody added it to a map in the renderer, and the next color a diagram wanted would have needed a code change to say. Writing the color directly removes both the list and the reason to grow it. `green` still works, because it is a CSS color, not because this tool has heard of it.
 
-`subtext` colors every text line after the first, so a node can carry a name and a quieter qualifier under it:
+A style carrying `text: (color: muted)` is what a marked-up word borrows from, which is how a node carries a name with a quieter qualifier under it:
 
 ```
-style synced  fill: #142814  border: #486544  subtext: muted
-node pc.files "shared folder / synced"  style: synced
+style synced  fill: #142814  border: #486544
+style dim     text: (color: muted)
+node pc.files "shared folder / [dim]synced[/dim]"  style: synced
 ```
+
+**Removed: `subtext`.** It colored every text line after the first, which is a positional slice: the rule lived in a style elsewhere in the file and was applied by counting, so a reader of `"shared folder / synced"` could not see that the second line was quiet. The mark says what is quiet where it is quiet, and reaches a word in the middle of a line, which the slice never could. An older file carrying it gets an error naming the mark to write instead.
 
 `badge`, `icon` and `shape` belong in a style for the same reason a color does: they say what kind of thing this is, and a kind wants to look alike everywhere it appears. `style artifact  fill: #460000  shape: document` puts the folded corner on every dump in the diagram, and the use site stays one word.
 
-Bundling `size` into a style is how a size comes to mean something. `style aside  size: small  text: #8b8b8b` applied to several nodes says they are the same kind of remark, which a `size: small` written out at each of them does not.
-
-`muted` is the one reserved word left, and it earns the exception: it means the theme's secondary text color rather than a fixed one, so a qualifier stays readable when the theme changes. Writing `subtext: #8b8b8b` instead would pin it to one theme. Say nothing and every line of a text reads alike, which is what most texts want — `Computer 1 / Ubuntu` is two lines of one name, not a name and a qualifier, and the distinction is the author's to make rather than the renderer's to guess.
+`muted` is the one reserved word left, and it earns the exception: it means the theme's secondary text color rather than a fixed one, so a quiet line stays readable when the theme changes. Writing `#8b8b8b` instead would pin it to one theme. Say nothing and every line of a text reads alike, which is what most texts want — `Computer 1 / Ubuntu` is two lines of one name, not a name and a qualifier, and the distinction is the author's to make rather than the renderer's to guess.
 
 ## The diagram itself
 
@@ -642,6 +678,8 @@ That one was found by testing the lexer, not by rendering — and it could not h
 ~~Two edges between the same pair of sides were drawn on top of each other.~~ Fixed. Each side was ordered on its own, by where the far ends sat, and for edges that share both ends that signal says nothing — so the two edges were ordered without reference to each other and the lines converged in the middle instead of nesting. The visible damage was to the texts: both landed at the same point and the second knocked a hole through the first, leaving one word of it. A group like this now takes one lane order used at both ends. See "Several edges between the same two sides".
 
 ~~Several edges between the same two nodes with no side named were drawn on top of each other.~~ Fixed. This is the same defect as the one above, one step out: a bundle is a statement about two named sides, and an end with no side named has not made one, so nothing saw the group. `edge a -> b` three times drew one visible line carrying one text. Each such edge now takes its own line, parallel to the one it would have drawn alone and a lane away from it. Note what did *not* change: an unnamed end still attaches where the center-to-center ray crosses the border, so no single edge anywhere moved. See "Several edges with no side named at all".
+
+~~A text's properties sat among the node's.~~ Gone in 0.3.0. `size:`, `wrap:` and the text color `text:` were top-level attributes, sitting beside `fill:` and `shape:` as though how big a text is set were a fact about the node. They are in the brackets after the text now, where the reader can see what they modify, and an older file writing one at the top level gets an error naming the bracket. `at:` came with them and grew from `top | bottom` to the nine named positions, which is the same repair one level down: two of the nine had been handed out because those were the two somebody needed.
 
 ~~An unknown attribute was ignored in silence.~~ Fixed. `wibble: red` on a node parsed, was stored, and was never read again — nothing drew and nothing was said. So did every real attribute written on a kind with no use for it: `align:` on a node that may have no children, `gap:` on an edge. This was the same defect the color parts had closed one level down a version earlier, and it is how that migration produced false results from the repository's own regression check, since the older build simply dropped every `border:` it had not heard of. See "Attributes".
 

@@ -7,9 +7,9 @@
 
 diagram  background: #111111
 
-style mark   shape: none  text: #8b8b8b
+style mark   shape: none  text: (color: #8b8b8b)
 style spacer  fill: none  border: none
-style link  shape: none  text: #6fa8dc
+style link  shape: none  text: (color: #6fa8dc)
 
 // All nine positions at once. The board is held open by six invisible children
 // with nothing in them, which is also the point being made: a box is sized by

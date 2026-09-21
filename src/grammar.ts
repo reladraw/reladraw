@@ -32,6 +32,8 @@ export type TokenKind =
   | 'comment'
   /** A quoted string, quotes included. Unterminated ones count, so typing is quiet. */
   | 'string'
+  /** A markup tag inside a text: `[dim]` and `[/dim]`. */
+  | 'markup'
   /** The word a statement opens with: `node`, `edge`, … */
   | 'keyword'
   /** The name a statement declares, right after its keyword. */
@@ -119,6 +121,17 @@ export const PATTERNS = {
   color: '#[0-9A-Fa-f]{3,8}\\b',
   relation: `(?:${alternation(RELATION_WORDS)})\\b`,
   bracket: '[()]',
+  /**
+   * A markup tag, which appears only inside a string. An editor grammar that
+   * scopes patterns should apply this one inside the string scope; the scanner
+   * below does the same thing by splitting a matched string span.
+   *
+   * The escape is `\[`, and this pattern deliberately does not exclude it —
+   * doing so needs a lookbehind, which several grammar formats lack, and a
+   * wrongly-colored escaped bracket is a much smaller wrong than a highlighter
+   * that cannot be ported.
+   */
+  markup: '\\[\\/?[A-Za-z][A-Za-z0-9_-]*\\]',
   // Matches what `tokenizeLine` treats as one bare token, and the awkwardness is
   // load-bearing rather than accidental. A `(` counts as punctuation only where
   // a token starts, so `rgb(20,20,20)` is one word — hence the first character
@@ -252,7 +265,14 @@ export function highlightLine(line: string): Span[] {
           ? 'value'
           : rule.kind;
       expectingValue = rule.kind === 'attribute';
-      push(kind, at + text.length);
+      // A string is the one span with something inside it: markup naming a
+      // style. The spans still cover the line exactly, which is what a
+      // highlighter drawn behind a textarea needs.
+      if (rule.kind === 'string') {
+        for (const part of splitMarkup(text, at)) push(part.kind, part.end);
+      } else {
+        push(kind, at + text.length);
+      }
       matched = true;
       break;
     }
@@ -262,6 +282,25 @@ export function highlightLine(line: string): Span[] {
   }
 
   return spans;
+}
+
+/**
+ * One string span cut into the plain stretches and the markup tags inside it.
+ * An escaped bracket is left to be colored as a tag when it looks like one,
+ * which is the wrong the pattern's doc comment accepts in exchange for being
+ * portable.
+ */
+function splitMarkup(text: string, from: number): Array<{ kind: TokenKind; end: number }> {
+  const parts: Array<{ kind: TokenKind; end: number }> = [];
+  const tag = new RegExp(PATTERNS.markup, 'g');
+  let at = 0;
+  for (let found = tag.exec(text); found !== null; found = tag.exec(text)) {
+    if (found.index > at) parts.push({ kind: 'string', end: from + found.index });
+    parts.push({ kind: 'markup', end: from + found.index + found[0].length });
+    at = found.index + found[0].length;
+  }
+  if (at < text.length || parts.length === 0) parts.push({ kind: 'string', end: from + text.length });
+  return parts;
 }
 
 /** Every line of a source file, classified. Line endings are not included. */

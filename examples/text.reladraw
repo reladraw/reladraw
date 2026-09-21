@@ -34,3 +34,31 @@ edge roomy -> spare  "fits"  from: right  to: left
 node high "High"  right of writer (gap: wide)  style: plain
 node low  "Low"   below high  right of high  style: plain
 edge high -> low  "diagonal"
+
+
+// --- What the brackets after a text say ------------------------------------
+// `at` is where the block of text sits — one of the nine named positions —
+// and `align` is how its lines range against each other once it is there.
+// Neither implies the other.
+
+style dim  text: (color: muted)
+
+node shelf "Shelf" (at: bottom-right, align: right)  below roomy (gap: wide)  style: plain
+node shelf.one "first"   style: plain
+node shelf.two "second"  below shelf.one (gap: tight)  style: plain
+
+// A leaf is usually the size of its own text, so `at` is inert on one. A badge
+// is two lines tall, which gives a shorter text beside it room to move.
+node tall "Top" (at: top-left)     right of shelf (gap: wide)  badge: disk  style: plain
+node deep "Bottom" (at: bottom-left)  below tall (gap: tight)  badge: disk  style: plain
+
+// `size` and `wrap` are properties of the text too. The wrap is a count of
+// characters, not a distance: it says how much fits on a line and nothing
+// about where anything sits.
+node aside "A quiet remark that folds itself, with [dim]one word[/dim] quieter than the rest." (size: small, wrap: 28)  right of tall (gap: wide)  shape: none
+
+// A literal bracket is written \[, since [ opens markup.
+node literal "sizes \[small, normal, large]"  below aside  gap: tight  shape: none
+
+// An edge's text takes the same brackets, less `at`.
+edge tall -> aside  "carried" (color: muted)  from: right  to: left

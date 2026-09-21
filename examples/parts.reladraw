@@ -1,29 +1,33 @@
-// A color names the part it colors: fill, border, text, line.
+// A color names the part it colors: fill, border, text, line. A text says its
+// own in the brackets after it; a style, having no text of its own, says it as
+// `text: (color: …)`.
 
 diagram background: #111111
 
 // All three parts of a node.
-node ledger "Ledger / append only"  fill: #142814  border: #486544  text: #cfe8c4  subtext: muted
+style dim  text: (color: muted)
+
+node ledger "Ledger / [dim]append only[/dim]" (color: #cfe8c4)  fill: #142814  border: #486544
 
 // Text on its own.
-node plain "Plain"  right of ledger (gap: wide)  text: #ff9d4d
+node plain "Plain" (color: #ff9d4d)  right of ledger (gap: wide)
 
-// A node with no body is text and nothing else, so `text:` is its only color.
+// A node with no body is text and nothing else, so its text is its only color.
 // `border:` here is an error rather than a no-op.
-node remark "no body, so text is the only part"  below ledger  text: #66ccff  shape: none
+node remark "no body, so text is the only part" (color: #66ccff)  below ledger  shape: none
 
 // A style shared between nodes and edges writes one key per kind. The node takes
 // the border, the edge takes the line, and neither sees the other's word.
 style traced  border: #d2904e  line: #d2904e
 
 // A picture body is a picture and the text under it.
-node store "store"  right of plain (gap: wide)  icon: database  text: #ff9d4d
+node store "store" (color: #ff9d4d)  right of plain (gap: wide)  icon: database
 
-// An edge's text takes the line's color unless `text:` says otherwise.
+// An edge's text takes the line's color unless its own brackets say otherwise.
 node worker "Worker"  below remark (gap: wide)  style: traced
 node queue  "Queue"   right of worker (gap: wide)  level with worker
 edge worker -> queue  "inherits the line"  style: traced  from: right  to: left
 
 node reader "Reader"  below worker (gap: wide)
 node cache  "Cache"   right of reader (gap: wide)  level with reader
-edge reader -> cache  "says its own"  line: #ff9d4d  text: #d9d9d9  from: right  to: left
+edge reader -> cache  "says its own" (color: #d9d9d9)  line: #ff9d4d  from: right  to: left

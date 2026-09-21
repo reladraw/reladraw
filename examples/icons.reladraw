@@ -20,5 +20,5 @@ node row2.db       "Records"           right of row2.cubes    gap: tight  style:
 node bare ""  below row2  gap: tight  badge: disk
 
 // A badge is two lines tall, so it shrinks and grows with the text beside it.
-node small "Small text / and a small icon"  right of bare  gap: tight  size: small  badge: laptop
-node large "Large text / and a large icon"  right of small gap: tight  size: large  badge: laptop
+node small "Small text / and a small icon" (size: small)  right of bare   gap: tight  badge: laptop
+node large "Large text / and a large icon" (size: large)  right of small  gap: tight  badge: laptop

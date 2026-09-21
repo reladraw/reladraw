@@ -31,10 +31,10 @@ edge bare2 -> sink  from: right  to: left
 node store  below bare2 (gap: normal)  icon: database
 node drive  right of store  gap: tight  icon: disk
 
-// `at: bottom` puts the text under the contents and `align: center` centers
-// it; neither implies the other. The lower cube is centered under the upper
+// `at: bottom-center` puts the text under the contents, and `align: center`
+// ranges its lines against each other; neither implies the other. The lower cube is centered under the upper
 // pair by naming both of them and nothing else.
-node pool "Worker pool" (at: bottom, align: center)  right of store and drive (gap: wide)  level with store, drive 
+node pool "Worker pool" (at: bottom-center, align: center)  right of store and drive (gap: wide)  level with store, drive 
 node pool.one  icon: cube
 node pool.two  right of pool.one  gap: tight  icon: cube
 node pool.three  below pool.one and pool.two  gap: tight  icon: cube

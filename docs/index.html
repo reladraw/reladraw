@@ -265,6 +265,11 @@
       .t-bracket {
         color: var(--syn-comment);
       }
+      /* A mark inside a text. Drawn in the bracket color for the same reason
+         brackets are: it is punctuation around the words, not the words. */
+      .t-markup {
+        color: var(--syn-comment);
+      }
 
       /* The cheatsheet. Closed it is one line; open it takes height off the
          editor rather than off the diagram, because it is answering a question
@@ -471,11 +476,7 @@
               <code>style: <i>name</i></code>
               <code>fill: #191728</code>
               <code>border: none</code>
-              <code>text: #d9d9d9</code>
               <code>line: #d2904e</code> <i>(an edge)</i>
-              <code>subtext: muted</code><br />
-              <code>size: small|normal|large</code>
-              <code>wrap: 24</code> <i>(characters, folds the text)</i>
               <code>align: widths</code>
               <code>overlap: allow</code>
             </dd>
@@ -490,10 +491,19 @@
               <code>package</code> <code>cubes</code> <code>cube</code> <code>database</code>.
             </dd>
 
-            <dt>Labels</dt>
+            <dt>Text</dt>
             <dd>
-              <code>"Docker" (at: bottom, align: center)</code> on a container's text.
-              <code>" / "</code> in any text is a line break; <code>\/</code> is a literal slash.
+              Everything a text says about itself goes in brackets after it:
+              <code>"Docker" (at: bottom-center, align: center)</code>
+              <code>(color: muted)</code>
+              <code>(size: small|normal|large)</code>
+              <code>(wrap: 24)</code> <i>(characters, folds the text)</i>.
+              <code>at:</code> takes the nine positions above. In a style, which has no
+              text of its own, the bracket hangs off the key:
+              <code>text: (color: muted)</code>.<br />
+              <code>" / "</code> in any text is a line break; <code>\/</code> is a literal slash.<br />
+              <code>"name / <b>[dim]</b>quieter<b>[/dim]</b>"</code> draws those words in the
+              text color of <code>style dim</code>; <code>\[</code> is a literal bracket.
             </dd>
 
             <dt>Links</dt>
@@ -523,7 +533,7 @@
     </main>
 
     <script>
-globalThis.reladrawExamples = [{"name":"arch","source":"// Transcribed from a draw.io diagram.\n\n// --- Styles -----------------------------------------------------------------\nstyle synced     fill: #142814  border: #486544  line: #486544  subtext: muted\nstyle backup     border: #d2904e  line: #d2904e\nstyle dump       fill: #460000  border: #4e4e4e  shape: document\nstyle invisible  fill: none  border: none\n\ndiagram  background: #111111\n\n\n// --- The hub and its four machines ------------------------------------------\n// The cluster is wrapped in an invisible container so things outside it can be\n// placed against the whole cluster rather than against the hub alone.\n\nnode cluster \"\"  style: invisible\n\nnode cluster.hub \"Cloud sync\"  badge: package  style: synced\n\nnode cluster.desktop1       \"Desktop 1 / Linux\"    above-left of cluster.hub   gap: tight  badge: desktop\nnode cluster.desktop1.files \"shared folder / synced\"  style: synced\n\nnode cluster.desktop2       \"Desktop 2 / Windows\"  above-right of cluster.hub  gap: tight  badge: desktop\nnode cluster.desktop2.files \"shared folder / synced\"  style: synced\n\nnode cluster.laptop1        \"Laptop 1 / macOS\"     below-left of cluster.hub   gap: tight  badge: laptop\nnode cluster.laptop1.files  \"shared folder / synced\"  style: synced\n\nnode cluster.laptop2        \"Laptop 2 / macOS\"     below-right of cluster.hub  gap: tight  badge: laptop\nnode cluster.laptop2.files  \"shared folder / synced\"  style: synced\n\nedge cluster.desktop1.files <-> cluster.hub  style: synced  from: right  to: top\nedge cluster.desktop2.files <-> cluster.hub  style: synced  from: left   to: top\nedge cluster.laptop1.files  <-> cluster.hub  style: synced  from: right  to: bottom\nedge cluster.laptop2.files  <-> cluster.hub  style: synced  from: left   to: bottom\n\n\n// --- The database dumps -----------------------------------------------------\n// Nothing says how wide the corridor between the server and the machines is.\n// Putting the dumps in between is what pushes those two apart.\n\nnode dumps \"\"  right of server.docker  left of cluster (gap: wide)  level with server.docker  style: invisible\nnode dumps.db1 \"db dump / (app 1)\"  style: dump\nnode dumps.db2 \"db dump / (app 2)\"  style: dump\n\nnode dumps_note \"Written by nightly cron job.\"  below dumps  gap: tight  wrap: 30  shape: none\n\n\n// --- The server -------------------------------------------------------------\n\nnode server         \"Home Server\"  left of cluster  badge: desktop  align: widths\nnode server.mirror  \"shared folder / mirror\"  style: backup\nnode server.deploy  \"deploy dir\"  below server.mirror  gap: normal\n\n// The cubes are nodes rather than ornament: two of them are where the dump\n// arrows start. The lower pair is centered under the upper three by naming two\n// targets and nothing else.\nnode server.docker  \"Docker\" (at: bottom, align: center)  below server.deploy  gap: normal\nnode server.docker.a  icon: cube\nnode server.docker.b  right of server.docker.a  gap: tight  icon: cube\nnode server.docker.db1  right of server.docker.b  gap: tight  icon: cube\nnode server.docker.c  below server.docker.a and server.docker.b    gap: tight  icon: cube\nnode server.docker.db2  below server.docker.b and server.docker.db1  gap: tight  icon: cube\n\nedge server.deploy -> server.docker  \"compose up\"\n\nedge server.docker.db1 -> dumps.db1  from: right  to: left\nedge server.docker.db2 -> dumps.db2  from: right  to: left\n\n// The rclone lines run up the channel between the two left-hand machines, so\n// the dumps arrive through the middle of the cluster rather than across one.\nedge dumps.db1 -> cluster.hub  \"rclone\"  between cluster.desktop1 and cluster.laptop1  from: right  to: left\nedge dumps.db2 -> cluster.hub  \"rclone\"  between cluster.desktop1 and cluster.laptop1  from: right  to: left\n\nedge cluster.desktop1.files -> server.mirror  \"backup script\"  style: backup  from: left  to: right\nedge cluster.desktop1.files -> server.deploy  \"deploy script\"                 from: left  to: right\n\n\n// --- The backup drive -------------------------------------------------------\n\nnode drive          \"External HD\"  left of server  top level with server  badge: disk  align: widths\nnode drive.mirror   \"shared folder / backup\"  style: backup\nnode drive.archive  \"archive\"\n\nedge server.mirror -> drive.mirror  style: backup  from: left  to: right\n\nnode drive_note \"Swapped with a second drive weekly.\"  left of drive.mirror  gap: tight  wrap: 22  shape: none\n"},{"name":"regions","source":"// Naming several targets places a node against the region that bounds them all.\n\nnode one    \"first\"\nnode two    \"second\"                 below one\nnode three  \"third with a longer label\"  below two\n\n// A direction clears the furthest of them. This one says nothing about its own\n// vertical position — that comes from the region.\nnode spans  \"level with all three, and clear of the widest\"  right of one and three  wrap: 24  gap: wide  shape: none\n\n// An alignment uses the region as a position. \"top\" is its top edge, not its middle.\nnode tops   \"top level with the second box\"                  right of two  top level with two  wrap: 20  gap: tight  shape: none\n\nnode beside  \"centered on the top two\"  right of spans  level with one and two  gap: wide\n"},{"name":"gaps","source":"// Gaps: on a placement, on a node, and what happens when both ends ask.\n\ndiagram background: #111111\n\nstyle plain  fill: #191728  border: #4f5367\n\nnode left_wall  \"Left wall\"   style: plain\nnode right_wall \"Right wall\"  right of left_wall  style: plain\n\n// Both sides bind and they want different distances, so each placement carries\n// its own gap.\nnode wedge \"Wedged tight left, wide right\"  right of left_wall (gap: tight)  left of right_wall (gap: wide)  level with left_wall  style: plain\n\n// `gap:` on the node is the default for whatever the placements do not say.\nnode stack \"Node default is wide\"  below wedge  right of left_wall (gap: tight)  gap: wide  style: plain\n\n// `none` is contact, and the other placement still keeps its distance.\nnode shelf \"Flat on the stack\"  below stack (gap: none)  right of left_wall (gap: tight)  style: plain\n\nedge left_wall -> wedge  from: right  to: left\nedge wedge -> right_wall  from: right  to: left\n\n// A node's gap also reaches placements written against it. `island` names nobody\n// and asks for wide, so both neighbors are held off at that distance. `west`\n// asks for tight and gets wide: a gap is a minimum, so the larger one holds.\nnode island \"States wide, names nobody\"  below shelf  gap: wide  style: plain\nnode east   \"Takes the island's wide\"    right of island  level with island  style: plain\nnode west   \"Asks tight, gets wide\"      left of island   level with island  gap: tight  style: plain\n"},{"name":"snug","source":"// A node sits as close to what it names as its placements allow.\n\nnode anchor \"anchor\"\nnode far    \"far\"   right of anchor\nnode near   \"near\"  right of far\n\nnode trailing \"one tight gap from near\"  left of near  below anchor  gap: tight  overlap: allow  shape: none\n"},{"name":"separation","source":"// Nodes never overlap. Nothing here says the wide node has to clear \"left\".\n//\n// Which way it moves is read off the file: \"middle\" is right of \"left\", so\n// rightward is the way that contradicts nothing written. And \"left\" is tall, so\n// the two overlap far less horizontally than vertically.\n\nnode left    \"L/L/L/L/L/L/L/L/L/L/L/L/L/L\"\nnode right   \"R\"                             right of left\nnode middle  \"m\"   right of left  left of right  level with left\nnode wide    \"a wide box that overruns both\"    below middle  gap: tight\n"},{"name":"shapes","source":"// What a node is drawn as. `shape:` is the outline it is drawn with; `icon:` is\n// a picture it is drawn as, with no box at all.\n\ndiagram  background: #111111\n\nstyle artifact  fill: #460000  border: #4e4e4e  shape: document\n\n// The fold is a fixed size rather than a fraction of the box, so it looks the\n// same on all three of these.\nnode narrow \"Report\"  style: artifact\nnode medium \"Nightly database dump\"        right of narrow  gap: tight  style: artifact\nnode wide   \"A very much longer file name than either of the other two\"  right of medium  gap: tight  style: artifact\n\n// A picture has no outline, no fill and no padding. The text goes underneath.\nnode services \"\"  below narrow  gap: normal  fill: none  border: none\nnode services.web    \"web\"                          icon: cube\nnode services.api    \"api\"     right of services.web  gap: tight  icon: cube\nnode services.worker \"worker\"  right of services.api  gap: tight  icon: cube\n\n// No text at all: a picture usually is the statement, so it gets no caption.\nnode bare1  below services (gap: normal)  icon: cube\nnode bare2  below bare1     gap: tight  icon: cube\n\n// A picture body is an ordinary node, so it takes edges and sides like any\n// other. That is what it buys over a badge, which cannot be the end of an arrow.\nnode sink \"collector\"  right of bare1 and bare2 (gap: wide)  level with bare1, bare2\nedge bare1 -> sink  from: right  to: left\nedge bare2 -> sink  from: right  to: left\n\n// Any icon works as a body, not just the cube.\nnode store  below bare2 (gap: normal)  icon: database\nnode drive  right of store  gap: tight  icon: disk\n\n// `at: bottom` puts the text under the contents and `align: center` centers\n// it; neither implies the other. The lower cube is centered under the upper\n// pair by naming both of them and nothing else.\nnode pool \"Worker pool\" (at: bottom, align: center)  right of store and drive (gap: wide)  level with store, drive \nnode pool.one  icon: cube\nnode pool.two  right of pool.one  gap: tight  icon: cube\nnode pool.three  below pool.one and pool.two  gap: tight  icon: cube\n"},{"name":"icons","source":"// The seven icons, and the ways to use one.\n\ndiagram  background: #111111\n\n// A style can carry a badge, so every store in a diagram looks alike without\n// anyone typing the word twice.\nstyle store  fill: #142814  border: #486544  badge: database\n\nnode row1 \"\"  fill: none  border: none\nnode row1.disk     \"Spinning disk\"     badge: disk\nnode row1.desktop  \"Workstation\"       right of row1.disk     gap: tight  badge: desktop\nnode row1.laptop   \"Portable\"          right of row1.desktop  gap: tight  badge: laptop\n\nnode row2 \"\"  below row1  gap: tight  fill: none  border: none\nnode row2.package  \"Archive\"           badge: package\nnode row2.cubes    \"Service instances\" right of row2.package  gap: tight  badge: cubes\nnode row2.db       \"Records\"           right of row2.cubes    gap: tight  style: store\n\n// No text, so the node is just the badge and its padding.\nnode bare \"\"  below row2  gap: tight  badge: disk\n\n// A badge is two lines tall, so it shrinks and grows with the text beside it.\nnode small \"Small text / and a small icon\"  right of bare  gap: tight  size: small  badge: laptop\nnode large \"Large text / and a large icon\"  right of small gap: tight  size: large  badge: laptop\n"},{"name":"overlays","source":"// `on X at <position>` holds a node on another's box, at one of nine named\n// points, inset from that corner or edge and overlapping by construction.\n//\n// It is not containment. A dotted name is what puts something *inside* a box —\n// padded, widening it, a member of its constraint system. An overlay is stamped\n// on the box and changes nothing about it.\n\ndiagram  background: #111111\n\nstyle mark   shape: none  text: #8b8b8b\nstyle spacer  fill: none  border: none\nstyle link  shape: none  text: #6fa8dc\n\n// All nine positions at once. The board is held open by six invisible children\n// with nothing in them, which is also the point being made: a box is sized by\n// what it *holds*, and the nine marks stamped on it are not held by anything.\nnode board \"\"  fill: #191728  border: #4f5367\nnode board.nw \"\"  style: spacer\nnode board.n  \"\"  style: spacer  right of board.nw  gap: wide\nnode board.ne \"\"  style: spacer  right of board.n   gap: wide\nnode board.sw \"\"  style: spacer  below board.nw  gap: wide\nnode board.s  \"\"  style: spacer  right of board.sw  below board.n   gap: wide\nnode board.se \"\"  style: spacer  right of board.s   below board.ne  gap: wide\n\nnode p1 \"top-left\"       on board at top-left       style: mark\nnode p2 \"top-center\"     on board at top-center     style: mark\nnode p3 \"top-right\"      on board at top-right      style: mark\nnode p4 \"left-center\"    on board at left-center    style: mark\nnode p5 \"center\"         on board at center         style: mark\nnode p6 \"right-center\"   on board at right-center   style: mark\nnode p7 \"bottom-left\"    on board at bottom-left    style: mark\nnode p8 \"bottom-center\"  on board at bottom-center  style: mark\nnode p9 \"bottom-right\"   on board at bottom-right   style: mark\n\n// The case the design record names: an ordinary box with its text in the middle\n// and, centred at the bottom inside it, a small link. No one-position slot\n// could say that, and the primitive says it in one line.\nnode bob \"Bob the builder\"  below board  gap: normal\nnode bob.card \"\"  style: spacer\nnode bob_link \"bob.example.com\"  on bob at bottom-center  style: link\n\n// The inset is a named gap on the placement, and `none` puts the node hard\n// against the edge. It is deliberately not the node's own `gap:`, which says\n// how this node stands off its neighbours rather than how far in a stamp sits.\nnode plate \"A wide plate to stamp on\"  right of bob  gap: wide\nnode flush \"flush\"  on plate at top-right (gap: none)  style: mark\n\n// An overlay sits on a picture as readily as on a box, and the picture is an\n// ordinary node underneath it.\nnode unit  icon: cube  right of plate  gap: normal\nnode tag \"x3\"  on unit at bottom-right  style: mark\n\n// The overlap exemption is for the pair and nothing else: `flush` is still kept\n// clear of everything in the drawing that is not `plate`.\nedge bob -> plate  from: right  to: left\n"},{"name":"labels","source":"// An edge with text widens the gap it crosses.\n\ndiagram background: #111111\n\nstyle plain  fill: #191728  border: #4f5367\n\n// Nothing here says how far apart these two sit. The default gap is sized for\n// two nodes to breathe, not to hold a word, so the text opens it.\nnode parser   \"Parser\"                     style: plain\nnode resolver \"Resolver\"  right of parser  style: plain\nedge parser -> resolver  \"statements\"  from: right  to: left\n\n// The same two placements with nothing on the edge, for comparison.\nnode sink  \"Sink\"   below parser (gap: wide)  style: plain\nnode quiet \"Quiet\"  right of sink  level with sink       style: plain\nedge sink -> quiet  from: right  to: left\n\n// Going downward the text is only a line deep, so it opens the gap by one line\n// and hangs out either side.\n//\n// Written with `<-`, which is the same edge as `writer -> disk` and draws the\n// same picture. It just puts the node the line is about first.\nnode writer \"Writer\"  right of resolver (gap: wide)  style: plain\nnode disk   \"Disk\"    below writer                  style: plain\nedge disk <- writer  \"flushed to disk\"  from: bottom  to: top\n\n// Already wider than the text needs, so nothing moves.\nnode roomy \"Roomy\"        below sink                                 style: plain\nnode spare \"Plenty spare\"  right of roomy (gap: wide)  level with roomy  style: plain\nedge roomy -> spare  \"fits\"  from: right  to: left\n\n// Corner to corner, so there is no single gap the text sits in and nothing is\n// widened for it.\nnode high \"High\"  right of writer (gap: wide)  style: plain\nnode low  \"Low\"   below high  right of high  style: plain\nedge high -> low  \"diagonal\"\n"},{"name":"lanes","source":"// Several edges between the same two sides nest instead of crossing. The lanes\n// are as wide as the texts riding in them.\n\ndiagram background: #111111\n\nstyle plain  fill: #191728  border: #4f5367\n\n// A reciprocal pair around a corner. Further left along Gateway's bottom is\n// further down Queue's left, so the order reverses between the two ends.\nnode gateway \"Gateway\"  style: plain\nnode queue   \"Queue\"    below gateway  right of gateway (gap: wide)  style: plain\nedge gateway -> queue  \"publishes messages\"  from: bottom  to: left\nedge queue -> gateway  \"receives messages\"   from: left    to: bottom\n\n// Two edges facing each other, where the order runs the same way at both ends.\nnode client \"Client\"  below queue (gap: wide)  left of queue  style: plain\nnode server \"Server\"  right of client (gap: wide)  level with client  style: plain\nedge client -> server  \"request\"   from: right  to: left\nedge server -> client  \"response\"  from: left   to: right\n\n// Five lanes down a vertical run. The texts all sit at the same height, so the\n// only way they clear each other is sideways and a lane has to be a whole text\n// wide. These two nodes are wide enough for five of them.\nnode fan  \"Fan of five, spread wide\"  below client (gap: wide)  left of client  style: plain\nnode hub  \"Hub of the same five\"     below fan (gap: wide)  style: plain\nedge fan -> hub  \"one\"    from: bottom  to: top\nedge fan -> hub  \"two\"    from: bottom  to: top\nedge fan -> hub  \"three\"  from: bottom  to: top\nedge fan -> hub  \"four\"   from: bottom  to: top\nedge fan -> hub  \"five\"   from: bottom  to: top\n\n// Two edges pointing the same way. Nothing tells them apart, so the order they\n// are written in decides. Swap these two lines and the texts swap lanes.\nnode left_wall  \"Producer\"  below hub (gap: wide)  left of hub  style: plain\nnode right_wall \"Consumer\"  right of left_wall (gap: wide)  level with left_wall  style: plain\nedge left_wall -> right_wall  \"bulk\"     from: right  to: left\nedge left_wall -> right_wall  \"control\"  from: right  to: left\n\n// Sharing one side only is not a bundle. The far ends differ, and that is\n// enough to order them.\nnode spoke \"Spoke\"  below right_wall (gap: wide)  style: plain\nnode up    \"Up\"     above spoke  right of spoke (gap: wide)  style: plain\nnode down  \"Down\"   below spoke  right of spoke (gap: wide)  style: plain\nedge spoke -> up    from: right  to: left\nedge spoke -> down  from: right  to: left\n\n// More edges than the two sides can hold. The arrowheads squeeze together\n// because there is nowhere further along an edge to go, and each line makes up\n// the shortfall by bowing out in the middle, where the texts ride.\nnode narrow \"Narrow\"  below spoke (gap: wide)  left of spoke  style: plain\nnode also   \"Also\"    right of narrow (gap: wide)  level with narrow  style: plain\nedge narrow -> also  \"first\"   from: right  to: left\nedge narrow -> also  \"second\"  from: right  to: left\nedge narrow -> also  \"third\"   from: right  to: left\nedge narrow -> also  \"fourth\"  from: right  to: left\nedge narrow -> also  \"fifth\"   from: right  to: left\n"},{"name":"coincident","source":"// Several edges between the same two nodes with no side named anywhere. Each\n// line is shifted sideways off the one a single edge would draw, so they stay\n// parallel and each end lands wherever its own line crosses the border.\n\ndiagram background: #111111\n\nstyle plain  fill: #191728  border: #4f5367\n\n// Level nodes, so the run is horizontal and the lanes fan out vertically.\nnode a \"A\"  style: plain\nnode b \"B\"  right of a (gap: wide)  level with a  style: plain\nedge a -> b  \"first\"\nedge a -> b  \"second\"\nedge a -> b  \"third\"\n\n// A perfect diagonal, where the single line would leave through the corner\n// exactly. These two straddle it, one point on each of the edges meeting there.\nnode low  \"Low\"   below a (gap: wide)  left of a  style: plain\nnode high \"High\"  above low  right of low (gap: wide)  style: plain\nedge low -> high   \"up\"\nedge high -> low   \"down\"\n\n// A near diagonal, where the crossing point sits on one edge but close to the\n// corner.\nnode near \"Near\"  below low (gap: wide)  style: plain\nnode far  \"Far\"   right of near (gap: wide)  above near  style: plain\nedge near -> far  \"one\"\nedge near -> far  \"two\"\n\n// A lone edge is in no group and does not move.\nnode solo  \"Solo\"   below near (gap: wide)  style: plain\nnode alone \"Alone\"  right of solo (gap: wide)  level with solo  style: plain\nedge solo -> alone  \"by itself\"\n\n// Naming a side on either end takes an edge out of the group.\nnode named \"Named\"  below solo (gap: wide)  style: plain\nnode other \"Other\"  right of named (gap: wide)  level with named  style: plain\nedge named -> other  \"free\"\nedge named -> other  \"free too\"\nedge named -> other  \"top\"  from: top  to: top\n\n// More than the edges can hold. The ends squeeze together and each line bows\n// out in the middle to make up what its ends could not give it, so the texts\n// still come apart. The middle line has no shortfall and stays straight.\nnode many \"Many\"  below named (gap: wide)  style: plain\nnode one  \"One\"   right of many (gap: wide)  level with many  style: plain\nedge many -> one  \"first\"\nedge many -> one  \"second\"\nedge many -> one  \"third\"\nedge many -> one  \"fourth\"\nedge many -> one  \"fifth\"\n\n// The same on a vertical run, where the texts sit at one height and a lane is\n// a whole text wide.\nnode top    \"Top\"     below many (gap: wide)  style: plain\nnode bottom \"Bottom\"  below top (gap: wide)  style: plain\nedge top -> bottom  \"alpha\"\nedge top -> bottom  \"beta\"\nedge top -> bottom  \"gamma\"\n"},{"name":"corridors","source":"// `between a and b` sends an edge through the gap between two named things, for\n// the stretch where it is passing them. Before and after, it goes wherever its\n// ends take it.\n\ndiagram background: #111111\n\nstyle channel  fill: #191920  border: #25242f\n\n// North and South are apart vertically, so that is the gap. Both edges start\n// well to the left, climb into the channel, run along it and leave for East.\n// They share it, so they take a lane each.\n\nnode west   \"West\"\nnode lower  \"Lower\"   below west     gap: tight\nnode north  \"North\"   right of west  gap: wide   style: channel\nnode south  \"South\"   below north    gap: wide   style: channel\nnode east   \"East\"    right of north and south  level with west  gap: wide\n\nedge west  -> east  \"over\"   between north and south  from: right  to: left\nedge lower -> east  \"under\"  between north and south  from: right  to: left\n\n// Port and Starboard are apart horizontally, so here the line runs down the gap\n// instead. This edge names no sides: the open end aims at the channel rather\n// than at the far node, so it leaves Bow already heading for the gap.\n\nnode bow        \"Bow\"        below lower  gap: wide\nnode port       \"Port\"       below bow    gap: wide       style: channel\nnode starboard  \"Starboard\"  right of port  level with port  gap: wide  style: channel\nnode stern      \"Stern\"      below port   gap: wide\n\nedge bow -> stern  \"down\"  between port and starboard\n\n// The same channel travelled the other way. No text on this one, so its lane\n// needs only the room two arrows need.\n\nedge stern -> bow  between port and starboard  from: top  to: bottom\n\n// High and Low sit diagonally, so there are two gaps between them and the file\n// has to say which. `vertically` is the gap you measure with a vertical ruler —\n// under High, over Low — so a line running along it travels sideways.\n\nnode far   \"Far\"    below stern  gap: wide\nnode high  \"High\"   right of far  gap: wide  style: channel\nnode low   \"Low\"    below-right of high  gap: wide  style: channel\nnode near  \"Near\"   right of low  level with high  gap: wide\n\nedge far -> near  \"threaded\"  between high and low vertically\n"},{"name":"overhang","source":"// Edges that leave the area the nodes cover. The page grows to hold them: the\n// nodes here cover 378x230 and the page comes out 428x312.\n\ndiagram background: #111111\n\nstyle plain  fill: #191728  border: #4f5367\n\nnode a \"A\"                            style: plain\nnode b \"B\"  right of a  (gap: wide)   style: plain\nnode c \"C\"  right of b                style: plain\n\nnode d \"D\"  below a and c             style: plain\n\n// A long arch over everything, with the text at the top of it.\nedge a -> b  \"over the top\"  from: top  to: top\n\n// The same shape across a narrow gap.\nedge b -> c  from: top  to: top\n\n// Out the left and back into the bottom, so the loop hangs off the left edge.\nedge d -> a  \"round the side\"  from: left  to: left\n\n// And one under the bottom row.\nedge a -> d  from: bottom  to: bottom\n"}];
+globalThis.reladrawExamples = [{"name":"arch","source":"// Transcribed from a draw.io diagram.\n\n// --- Styles -----------------------------------------------------------------\nstyle synced     fill: #142814  border: #486544  line: #486544\nstyle dim        text: (color: muted)\nstyle backup     border: #d2904e  line: #d2904e\nstyle dump       fill: #460000  border: #4e4e4e  shape: document\nstyle invisible  fill: none  border: none\n\ndiagram  background: #111111\n\n\n// --- The hub and its four machines ------------------------------------------\n// The cluster is wrapped in an invisible container so things outside it can be\n// placed against the whole cluster rather than against the hub alone.\n\nnode cluster \"\"  style: invisible\n\nnode cluster.hub \"Cloud sync\"  badge: package  style: synced\n\nnode cluster.desktop1       \"Desktop 1 / Linux\"    above-left of cluster.hub   gap: tight  badge: desktop\nnode cluster.desktop1.files \"shared folder / [dim]synced[/dim]\"  style: synced\n\nnode cluster.desktop2       \"Desktop 2 / Windows\"  above-right of cluster.hub  gap: tight  badge: desktop\nnode cluster.desktop2.files \"shared folder / [dim]synced[/dim]\"  style: synced\n\nnode cluster.laptop1        \"Laptop 1 / macOS\"     below-left of cluster.hub   gap: tight  badge: laptop\nnode cluster.laptop1.files  \"shared folder / [dim]synced[/dim]\"  style: synced\n\nnode cluster.laptop2        \"Laptop 2 / macOS\"     below-right of cluster.hub  gap: tight  badge: laptop\nnode cluster.laptop2.files  \"shared folder / [dim]synced[/dim]\"  style: synced\n\nedge cluster.desktop1.files <-> cluster.hub  style: synced  from: right  to: top\nedge cluster.desktop2.files <-> cluster.hub  style: synced  from: left   to: top\nedge cluster.laptop1.files  <-> cluster.hub  style: synced  from: right  to: bottom\nedge cluster.laptop2.files  <-> cluster.hub  style: synced  from: left   to: bottom\n\n\n// --- The database dumps -----------------------------------------------------\n// Nothing says how wide the corridor between the server and the machines is.\n// Putting the dumps in between is what pushes those two apart.\n\nnode dumps \"\"  right of server.docker  left of cluster (gap: wide)  level with server.docker  style: invisible\nnode dumps.db1 \"db dump / (app 1)\"  style: dump\nnode dumps.db2 \"db dump / (app 2)\"  style: dump\n\nnode dumps_note \"Written by nightly cron job.\" (wrap: 30)  below dumps  gap: tight  shape: none\n\n\n// --- The server -------------------------------------------------------------\n\nnode server         \"Home Server\"  left of cluster  badge: desktop  align: widths\nnode server.mirror  \"shared folder / mirror\"  style: backup\nnode server.deploy  \"deploy dir\"  below server.mirror  gap: normal\n\n// The cubes are nodes rather than ornament: two of them are where the dump\n// arrows start. The lower pair is centered under the upper three by naming two\n// targets and nothing else.\nnode server.docker  \"Docker\" (at: bottom-center, align: center)  below server.deploy  gap: normal\nnode server.docker.a  icon: cube\nnode server.docker.b  right of server.docker.a  gap: tight  icon: cube\nnode server.docker.db1  right of server.docker.b  gap: tight  icon: cube\nnode server.docker.c  below server.docker.a and server.docker.b    gap: tight  icon: cube\nnode server.docker.db2  below server.docker.b and server.docker.db1  gap: tight  icon: cube\n\nedge server.deploy -> server.docker  \"compose up\"\n\nedge server.docker.db1 -> dumps.db1  from: right  to: left\nedge server.docker.db2 -> dumps.db2  from: right  to: left\n\n// The rclone lines run up the channel between the two left-hand machines, so\n// the dumps arrive through the middle of the cluster rather than across one.\nedge dumps.db1 -> cluster.hub  \"rclone\"  between cluster.desktop1 and cluster.laptop1  from: right  to: left\nedge dumps.db2 -> cluster.hub  \"rclone\"  between cluster.desktop1 and cluster.laptop1  from: right  to: left\n\nedge cluster.desktop1.files -> server.mirror  \"backup script\"  style: backup  from: left  to: right\nedge cluster.desktop1.files -> server.deploy  \"deploy script\"                 from: left  to: right\n\n\n// --- The backup drive -------------------------------------------------------\n\nnode drive          \"External HD\"  left of server  top level with server  badge: disk  align: widths\nnode drive.mirror   \"shared folder / backup\"  style: backup\nnode drive.archive  \"archive\"\n\nedge server.mirror -> drive.mirror  style: backup  from: left  to: right\n\nnode drive_note \"Swapped with a second drive weekly.\" (wrap: 22)  left of drive.mirror  gap: tight  shape: none\n"},{"name":"regions","source":"// Naming several targets places a node against the region that bounds them all.\n\nnode one    \"first\"\nnode two    \"second\"                 below one\nnode three  \"third with a longer label\"  below two\n\n// A direction clears the furthest of them. This one says nothing about its own\n// vertical position — that comes from the region.\nnode spans  \"level with all three, and clear of the widest\" (wrap: 24)  right of one and three  gap: wide  shape: none\n\n// An alignment uses the region as a position. \"top\" is its top edge, not its middle.\nnode tops   \"top level with the second box\" (wrap: 20)                  right of two  top level with two  gap: tight  shape: none\n\nnode beside  \"centered on the top two\"  right of spans  level with one and two  gap: wide\n"},{"name":"gaps","source":"// Gaps: on a placement, on a node, and what happens when both ends ask.\n\ndiagram background: #111111\n\nstyle plain  fill: #191728  border: #4f5367\n\nnode left_wall  \"Left wall\"   style: plain\nnode right_wall \"Right wall\"  right of left_wall  style: plain\n\n// Both sides bind and they want different distances, so each placement carries\n// its own gap.\nnode wedge \"Wedged tight left, wide right\"  right of left_wall (gap: tight)  left of right_wall (gap: wide)  level with left_wall  style: plain\n\n// `gap:` on the node is the default for whatever the placements do not say.\nnode stack \"Node default is wide\"  below wedge  right of left_wall (gap: tight)  gap: wide  style: plain\n\n// `none` is contact, and the other placement still keeps its distance.\nnode shelf \"Flat on the stack\"  below stack (gap: none)  right of left_wall (gap: tight)  style: plain\n\nedge left_wall -> wedge  from: right  to: left\nedge wedge -> right_wall  from: right  to: left\n\n// A node's gap also reaches placements written against it. `island` names nobody\n// and asks for wide, so both neighbors are held off at that distance. `west`\n// asks for tight and gets wide: a gap is a minimum, so the larger one holds.\nnode island \"States wide, names nobody\"  below shelf  gap: wide  style: plain\nnode east   \"Takes the island's wide\"    right of island  level with island  style: plain\nnode west   \"Asks tight, gets wide\"      left of island   level with island  gap: tight  style: plain\n"},{"name":"snug","source":"// A node sits as close to what it names as its placements allow.\n\nnode anchor \"anchor\"\nnode far    \"far\"   right of anchor\nnode near   \"near\"  right of far\n\nnode trailing \"one tight gap from near\"  left of near  below anchor  gap: tight  overlap: allow  shape: none\n"},{"name":"separation","source":"// Nodes never overlap. Nothing here says the wide node has to clear \"left\".\n//\n// Which way it moves is read off the file: \"middle\" is right of \"left\", so\n// rightward is the way that contradicts nothing written. And \"left\" is tall, so\n// the two overlap far less horizontally than vertically.\n\nnode left    \"L/L/L/L/L/L/L/L/L/L/L/L/L/L\"\nnode right   \"R\"                             right of left\nnode middle  \"m\"   right of left  left of right  level with left\nnode wide    \"a wide box that overruns both\"    below middle  gap: tight\n"},{"name":"shapes","source":"// What a node is drawn as. `shape:` is the outline it is drawn with; `icon:` is\n// a picture it is drawn as, with no box at all.\n\ndiagram  background: #111111\n\nstyle artifact  fill: #460000  border: #4e4e4e  shape: document\n\n// The fold is a fixed size rather than a fraction of the box, so it looks the\n// same on all three of these.\nnode narrow \"Report\"  style: artifact\nnode medium \"Nightly database dump\"        right of narrow  gap: tight  style: artifact\nnode wide   \"A very much longer file name than either of the other two\"  right of medium  gap: tight  style: artifact\n\n// A picture has no outline, no fill and no padding. The text goes underneath.\nnode services \"\"  below narrow  gap: normal  fill: none  border: none\nnode services.web    \"web\"                          icon: cube\nnode services.api    \"api\"     right of services.web  gap: tight  icon: cube\nnode services.worker \"worker\"  right of services.api  gap: tight  icon: cube\n\n// No text at all: a picture usually is the statement, so it gets no caption.\nnode bare1  below services (gap: normal)  icon: cube\nnode bare2  below bare1     gap: tight  icon: cube\n\n// A picture body is an ordinary node, so it takes edges and sides like any\n// other. That is what it buys over a badge, which cannot be the end of an arrow.\nnode sink \"collector\"  right of bare1 and bare2 (gap: wide)  level with bare1, bare2\nedge bare1 -> sink  from: right  to: left\nedge bare2 -> sink  from: right  to: left\n\n// Any icon works as a body, not just the cube.\nnode store  below bare2 (gap: normal)  icon: database\nnode drive  right of store  gap: tight  icon: disk\n\n// `at: bottom-center` puts the text under the contents, and `align: center`\n// ranges its lines against each other; neither implies the other. The lower cube is centered under the upper\n// pair by naming both of them and nothing else.\nnode pool \"Worker pool\" (at: bottom-center, align: center)  right of store and drive (gap: wide)  level with store, drive \nnode pool.one  icon: cube\nnode pool.two  right of pool.one  gap: tight  icon: cube\nnode pool.three  below pool.one and pool.two  gap: tight  icon: cube\n"},{"name":"icons","source":"// The seven icons, and the ways to use one.\n\ndiagram  background: #111111\n\n// A style can carry a badge, so every store in a diagram looks alike without\n// anyone typing the word twice.\nstyle store  fill: #142814  border: #486544  badge: database\n\nnode row1 \"\"  fill: none  border: none\nnode row1.disk     \"Spinning disk\"     badge: disk\nnode row1.desktop  \"Workstation\"       right of row1.disk     gap: tight  badge: desktop\nnode row1.laptop   \"Portable\"          right of row1.desktop  gap: tight  badge: laptop\n\nnode row2 \"\"  below row1  gap: tight  fill: none  border: none\nnode row2.package  \"Archive\"           badge: package\nnode row2.cubes    \"Service instances\" right of row2.package  gap: tight  badge: cubes\nnode row2.db       \"Records\"           right of row2.cubes    gap: tight  style: store\n\n// No text, so the node is just the badge and its padding.\nnode bare \"\"  below row2  gap: tight  badge: disk\n\n// A badge is two lines tall, so it shrinks and grows with the text beside it.\nnode small \"Small text / and a small icon\" (size: small)  right of bare   gap: tight  badge: laptop\nnode large \"Large text / and a large icon\" (size: large)  right of small  gap: tight  badge: laptop\n"},{"name":"overlays","source":"// `on X at <position>` holds a node on another's box, at one of nine named\n// points, inset from that corner or edge and overlapping by construction.\n//\n// It is not containment. A dotted name is what puts something *inside* a box —\n// padded, widening it, a member of its constraint system. An overlay is stamped\n// on the box and changes nothing about it.\n\ndiagram  background: #111111\n\nstyle mark   shape: none  text: (color: #8b8b8b)\nstyle spacer  fill: none  border: none\nstyle link  shape: none  text: (color: #6fa8dc)\n\n// All nine positions at once. The board is held open by six invisible children\n// with nothing in them, which is also the point being made: a box is sized by\n// what it *holds*, and the nine marks stamped on it are not held by anything.\nnode board \"\"  fill: #191728  border: #4f5367\nnode board.nw \"\"  style: spacer\nnode board.n  \"\"  style: spacer  right of board.nw  gap: wide\nnode board.ne \"\"  style: spacer  right of board.n   gap: wide\nnode board.sw \"\"  style: spacer  below board.nw  gap: wide\nnode board.s  \"\"  style: spacer  right of board.sw  below board.n   gap: wide\nnode board.se \"\"  style: spacer  right of board.s   below board.ne  gap: wide\n\nnode p1 \"top-left\"       on board at top-left       style: mark\nnode p2 \"top-center\"     on board at top-center     style: mark\nnode p3 \"top-right\"      on board at top-right      style: mark\nnode p4 \"left-center\"    on board at left-center    style: mark\nnode p5 \"center\"         on board at center         style: mark\nnode p6 \"right-center\"   on board at right-center   style: mark\nnode p7 \"bottom-left\"    on board at bottom-left    style: mark\nnode p8 \"bottom-center\"  on board at bottom-center  style: mark\nnode p9 \"bottom-right\"   on board at bottom-right   style: mark\n\n// The case the design record names: an ordinary box with its text in the middle\n// and, centred at the bottom inside it, a small link. No one-position slot\n// could say that, and the primitive says it in one line.\nnode bob \"Bob the builder\"  below board  gap: normal\nnode bob.card \"\"  style: spacer\nnode bob_link \"bob.example.com\"  on bob at bottom-center  style: link\n\n// The inset is a named gap on the placement, and `none` puts the node hard\n// against the edge. It is deliberately not the node's own `gap:`, which says\n// how this node stands off its neighbours rather than how far in a stamp sits.\nnode plate \"A wide plate to stamp on\"  right of bob  gap: wide\nnode flush \"flush\"  on plate at top-right (gap: none)  style: mark\n\n// An overlay sits on a picture as readily as on a box, and the picture is an\n// ordinary node underneath it.\nnode unit  icon: cube  right of plate  gap: normal\nnode tag \"x3\"  on unit at bottom-right  style: mark\n\n// The overlap exemption is for the pair and nothing else: `flush` is still kept\n// clear of everything in the drawing that is not `plate`.\nedge bob -> plate  from: right  to: left\n"},{"name":"text","source":"// An edge with text widens the gap it crosses.\n\ndiagram background: #111111\n\nstyle plain  fill: #191728  border: #4f5367\n\n// Nothing here says how far apart these two sit. The default gap is sized for\n// two nodes to breathe, not to hold a word, so the text opens it.\nnode parser   \"Parser\"                     style: plain\nnode resolver \"Resolver\"  right of parser  style: plain\nedge parser -> resolver  \"statements\"  from: right  to: left\n\n// The same two placements with nothing on the edge, for comparison.\nnode sink  \"Sink\"   below parser (gap: wide)  style: plain\nnode quiet \"Quiet\"  right of sink  level with sink       style: plain\nedge sink -> quiet  from: right  to: left\n\n// Going downward the text is only a line deep, so it opens the gap by one line\n// and hangs out either side.\n//\n// Written with `<-`, which is the same edge as `writer -> disk` and draws the\n// same picture. It just puts the node the line is about first.\nnode writer \"Writer\"  right of resolver (gap: wide)  style: plain\nnode disk   \"Disk\"    below writer                  style: plain\nedge disk <- writer  \"flushed to disk\"  from: bottom  to: top\n\n// Already wider than the text needs, so nothing moves.\nnode roomy \"Roomy\"        below sink                                 style: plain\nnode spare \"Plenty spare\"  right of roomy (gap: wide)  level with roomy  style: plain\nedge roomy -> spare  \"fits\"  from: right  to: left\n\n// Corner to corner, so there is no single gap the text sits in and nothing is\n// widened for it.\nnode high \"High\"  right of writer (gap: wide)  style: plain\nnode low  \"Low\"   below high  right of high  style: plain\nedge high -> low  \"diagonal\"\n\n\n// --- What the brackets after a text say ------------------------------------\n// `at` is where the block of text sits — one of the nine named positions —\n// and `align` is how its lines range against each other once it is there.\n// Neither implies the other.\n\nstyle dim  text: (color: muted)\n\nnode shelf \"Shelf\" (at: bottom-right, align: right)  below roomy (gap: wide)  style: plain\nnode shelf.one \"first\"   style: plain\nnode shelf.two \"second\"  below shelf.one (gap: tight)  style: plain\n\n// A leaf is usually the size of its own text, so `at` is inert on one. A badge\n// is two lines tall, which gives a shorter text beside it room to move.\nnode tall \"Top\" (at: top-left)     right of shelf (gap: wide)  badge: disk  style: plain\nnode deep \"Bottom\" (at: bottom-left)  below tall (gap: tight)  badge: disk  style: plain\n\n// `size` and `wrap` are properties of the text too. The wrap is a count of\n// characters, not a distance: it says how much fits on a line and nothing\n// about where anything sits.\nnode aside \"A quiet remark that folds itself, with [dim]one word[/dim] quieter than the rest.\" (size: small, wrap: 28)  right of tall (gap: wide)  shape: none\n\n// A literal bracket is written \\[, since [ opens markup.\nnode literal \"sizes \\[small, normal, large]\"  below aside  gap: tight  shape: none\n\n// An edge's text takes the same brackets, less `at`.\nedge tall -> aside  \"carried\" (color: muted)  from: right  to: left\n"},{"name":"lanes","source":"// Several edges between the same two sides nest instead of crossing. The lanes\n// are as wide as the texts riding in them.\n\ndiagram background: #111111\n\nstyle plain  fill: #191728  border: #4f5367\n\n// A reciprocal pair around a corner. Further left along Gateway's bottom is\n// further down Queue's left, so the order reverses between the two ends.\nnode gateway \"Gateway\"  style: plain\nnode queue   \"Queue\"    below gateway  right of gateway (gap: wide)  style: plain\nedge gateway -> queue  \"publishes messages\"  from: bottom  to: left\nedge queue -> gateway  \"receives messages\"   from: left    to: bottom\n\n// Two edges facing each other, where the order runs the same way at both ends.\nnode client \"Client\"  below queue (gap: wide)  left of queue  style: plain\nnode server \"Server\"  right of client (gap: wide)  level with client  style: plain\nedge client -> server  \"request\"   from: right  to: left\nedge server -> client  \"response\"  from: left   to: right\n\n// Five lanes down a vertical run. The texts all sit at the same height, so the\n// only way they clear each other is sideways and a lane has to be a whole text\n// wide. These two nodes are wide enough for five of them.\nnode fan  \"Fan of five, spread wide\"  below client (gap: wide)  left of client  style: plain\nnode hub  \"Hub of the same five\"     below fan (gap: wide)  style: plain\nedge fan -> hub  \"one\"    from: bottom  to: top\nedge fan -> hub  \"two\"    from: bottom  to: top\nedge fan -> hub  \"three\"  from: bottom  to: top\nedge fan -> hub  \"four\"   from: bottom  to: top\nedge fan -> hub  \"five\"   from: bottom  to: top\n\n// Two edges pointing the same way. Nothing tells them apart, so the order they\n// are written in decides. Swap these two lines and the texts swap lanes.\nnode left_wall  \"Producer\"  below hub (gap: wide)  left of hub  style: plain\nnode right_wall \"Consumer\"  right of left_wall (gap: wide)  level with left_wall  style: plain\nedge left_wall -> right_wall  \"bulk\"     from: right  to: left\nedge left_wall -> right_wall  \"control\"  from: right  to: left\n\n// Sharing one side only is not a bundle. The far ends differ, and that is\n// enough to order them.\nnode spoke \"Spoke\"  below right_wall (gap: wide)  style: plain\nnode up    \"Up\"     above spoke  right of spoke (gap: wide)  style: plain\nnode down  \"Down\"   below spoke  right of spoke (gap: wide)  style: plain\nedge spoke -> up    from: right  to: left\nedge spoke -> down  from: right  to: left\n\n// More edges than the two sides can hold. The arrowheads squeeze together\n// because there is nowhere further along an edge to go, and each line makes up\n// the shortfall by bowing out in the middle, where the texts ride.\nnode narrow \"Narrow\"  below spoke (gap: wide)  left of spoke  style: plain\nnode also   \"Also\"    right of narrow (gap: wide)  level with narrow  style: plain\nedge narrow -> also  \"first\"   from: right  to: left\nedge narrow -> also  \"second\"  from: right  to: left\nedge narrow -> also  \"third\"   from: right  to: left\nedge narrow -> also  \"fourth\"  from: right  to: left\nedge narrow -> also  \"fifth\"   from: right  to: left\n"},{"name":"coincident","source":"// Several edges between the same two nodes with no side named anywhere. Each\n// line is shifted sideways off the one a single edge would draw, so they stay\n// parallel and each end lands wherever its own line crosses the border.\n\ndiagram background: #111111\n\nstyle plain  fill: #191728  border: #4f5367\n\n// Level nodes, so the run is horizontal and the lanes fan out vertically.\nnode a \"A\"  style: plain\nnode b \"B\"  right of a (gap: wide)  level with a  style: plain\nedge a -> b  \"first\"\nedge a -> b  \"second\"\nedge a -> b  \"third\"\n\n// A perfect diagonal, where the single line would leave through the corner\n// exactly. These two straddle it, one point on each of the edges meeting there.\nnode low  \"Low\"   below a (gap: wide)  left of a  style: plain\nnode high \"High\"  above low  right of low (gap: wide)  style: plain\nedge low -> high   \"up\"\nedge high -> low   \"down\"\n\n// A near diagonal, where the crossing point sits on one edge but close to the\n// corner.\nnode near \"Near\"  below low (gap: wide)  style: plain\nnode far  \"Far\"   right of near (gap: wide)  above near  style: plain\nedge near -> far  \"one\"\nedge near -> far  \"two\"\n\n// A lone edge is in no group and does not move.\nnode solo  \"Solo\"   below near (gap: wide)  style: plain\nnode alone \"Alone\"  right of solo (gap: wide)  level with solo  style: plain\nedge solo -> alone  \"by itself\"\n\n// Naming a side on either end takes an edge out of the group.\nnode named \"Named\"  below solo (gap: wide)  style: plain\nnode other \"Other\"  right of named (gap: wide)  level with named  style: plain\nedge named -> other  \"free\"\nedge named -> other  \"free too\"\nedge named -> other  \"top\"  from: top  to: top\n\n// More than the edges can hold. The ends squeeze together and each line bows\n// out in the middle to make up what its ends could not give it, so the texts\n// still come apart. The middle line has no shortfall and stays straight.\nnode many \"Many\"  below named (gap: wide)  style: plain\nnode one  \"One\"   right of many (gap: wide)  level with many  style: plain\nedge many -> one  \"first\"\nedge many -> one  \"second\"\nedge many -> one  \"third\"\nedge many -> one  \"fourth\"\nedge many -> one  \"fifth\"\n\n// The same on a vertical run, where the texts sit at one height and a lane is\n// a whole text wide.\nnode top    \"Top\"     below many (gap: wide)  style: plain\nnode bottom \"Bottom\"  below top (gap: wide)  style: plain\nedge top -> bottom  \"alpha\"\nedge top -> bottom  \"beta\"\nedge top -> bottom  \"gamma\"\n"},{"name":"corridors","source":"// `between a and b` sends an edge through the gap between two named things, for\n// the stretch where it is passing them. Before and after, it goes wherever its\n// ends take it.\n\ndiagram background: #111111\n\nstyle channel  fill: #191920  border: #25242f\n\n// North and South are apart vertically, so that is the gap. Both edges start\n// well to the left, climb into the channel, run along it and leave for East.\n// They share it, so they take a lane each.\n\nnode west   \"West\"\nnode lower  \"Lower\"   below west     gap: tight\nnode north  \"North\"   right of west  gap: wide   style: channel\nnode south  \"South\"   below north    gap: wide   style: channel\nnode east   \"East\"    right of north and south  level with west  gap: wide\n\nedge west  -> east  \"over\"   between north and south  from: right  to: left\nedge lower -> east  \"under\"  between north and south  from: right  to: left\n\n// Port and Starboard are apart horizontally, so here the line runs down the gap\n// instead. This edge names no sides: the open end aims at the channel rather\n// than at the far node, so it leaves Bow already heading for the gap.\n\nnode bow        \"Bow\"        below lower  gap: wide\nnode port       \"Port\"       below bow    gap: wide       style: channel\nnode starboard  \"Starboard\"  right of port  level with port  gap: wide  style: channel\nnode stern      \"Stern\"      below port   gap: wide\n\nedge bow -> stern  \"down\"  between port and starboard\n\n// The same channel travelled the other way. No text on this one, so its lane\n// needs only the room two arrows need.\n\nedge stern -> bow  between port and starboard  from: top  to: bottom\n\n// High and Low sit diagonally, so there are two gaps between them and the file\n// has to say which. `vertically` is the gap you measure with a vertical ruler —\n// under High, over Low — so a line running along it travels sideways.\n\nnode far   \"Far\"    below stern  gap: wide\nnode high  \"High\"   right of far  gap: wide  style: channel\nnode low   \"Low\"    below-right of high  gap: wide  style: channel\nnode near  \"Near\"   right of low  level with high  gap: wide\n\nedge far -> near  \"threaded\"  between high and low vertically\n"},{"name":"overhang","source":"// Edges that leave the area the nodes cover. The page grows to hold them: the\n// nodes here cover 378x230 and the page comes out 428x312.\n\ndiagram background: #111111\n\nstyle plain  fill: #191728  border: #4f5367\n\nnode a \"A\"                            style: plain\nnode b \"B\"  right of a  (gap: wide)   style: plain\nnode c \"C\"  right of b                style: plain\n\nnode d \"D\"  below a and c             style: plain\n\n// A long arch over everything, with the text at the top of it.\nedge a -> b  \"over the top\"  from: top  to: top\n\n// The same shape across a narrow gap.\nedge b -> c  from: top  to: top\n\n// Out the left and back into the bottom, so the loop hangs off the left edge.\nedge d -> a  \"round the side\"  from: left  to: left\n\n// And one under the bottom row.\nedge a -> d  from: bottom  to: bottom\n"}];
 </script>
     <script>
 (function () {
@@ -637,15 +647,22 @@ function describeAxis(axis) {
     return axis === 'y' ? 'vertically' : 'horizontally';
 }
 /**
- * What a text's brackets may say: `"Docker" (at: bottom, align: center)`.
+ * What a text's brackets may say: `"Docker" (at: bottom-center, color: muted)`.
  *
  * They are bracketed onto the text rather than written among the node's
  * attributes for the same reason a gap is bracketed onto its placement — they
  * modify that one thing, and the brackets make the scope visible instead of
- * positional. `at` and `align` are independent: neither implies the other, and a
- * text at the bottom is an ordinary text that happens to be at the bottom.
+ * positional. What is left at the top level is then about the node itself:
+ * `shape`, `icon`, `fill`, `border`, `gap`, `overlap`, `style`.
+ *
+ * In a style, which has no string for a bracket to hang off, the bracket hangs
+ * off the key instead: `style synced  text: (color: muted)`.
+ *
+ * `at` and `align` are independent and neither implies the other. `at` is where
+ * the block of text sits in the node — one of the nine named positions — and
+ * `align` is how its lines range against each other once it is there.
  */
-const TEXT_KEYS = ['at', 'align'];
+const TEXT_KEYS = ['color', 'size', 'wrap', 'align', 'at'];
 /** The attributes a `diagram` statement understands. */
 const DIAGRAM_KEYS = ['background'];
 /**
@@ -661,9 +678,7 @@ const DIAGRAM_KEYS = ['background'];
 const COLOR_KEYS = [
     'fill',
     'border',
-    'text',
     'line',
-    'subtext',
     'background',
 ];
 /**
@@ -676,16 +691,19 @@ const COLOR_KEYS = [
  * for the same reason: an attribute that silently does nothing looks like the
  * tool being broken.
  *
+ * Each entry is written the way the author would write it, since the text's is
+ * a bracket rather than a bare key, and this list is only ever quoted back.
+ *
  * A style spanning kinds writes one key per kind — `border: #d2904e  line:
  * #d2904e` — since a style contributes a part only to the kinds that have it.
  * That is what replaced `stroke:`, which named no part and so could never be
  * wrong, and which is why a node's text had no word of its own until now.
  */
 const COLOR_PARTS = {
-    shape: ['fill', 'border', 'text', 'subtext'],
-    icon: ['text', 'subtext'],
-    none: ['text'],
-    edge: ['line', 'text'],
+    shape: ['fill:', 'border:', 'text: (color: …)'],
+    icon: ['text: (color: …)'],
+    none: ['text: (color: …)'],
+    edge: ['line:', 'text: (color: …)'],
 };
 /**
  * Every attribute each kind understands. An attribute a kind has no use for is
@@ -713,23 +731,10 @@ const COLOR_PARTS = {
  *   an edge is not placed — it joins two things that are.
  */
 const ATTR_KEYS = {
-    shape: [
-        'style',
-        'size',
-        'gap',
-        'overlap',
-        'align',
-        'wrap',
-        'badge',
-        'shape',
-        'fill',
-        'border',
-        'text',
-        'subtext',
-    ],
-    icon: ['style', 'size', 'gap', 'overlap', 'wrap', 'badge', 'icon', 'text', 'subtext'],
-    none: ['style', 'size', 'gap', 'overlap', 'wrap', 'badge', 'shape', 'text'],
-    edge: ['style', 'size', 'from', 'to', 'line', 'text'],
+    shape: ['style', 'gap', 'overlap', 'align', 'badge', 'shape', 'fill', 'border', 'text'],
+    icon: ['style', 'gap', 'overlap', 'badge', 'icon', 'text'],
+    none: ['style', 'gap', 'overlap', 'badge', 'shape', 'text'],
+    edge: ['style', 'from', 'to', 'line', 'text'],
 };
 /**
  * Every word that is an attribute *somewhere*, which is what separates a
@@ -811,11 +816,12 @@ function tokenizeLine(line, lineNumber) {
                 const c = line[i];
                 if (c === '\\' && i + 1 < line.length) {
                     const next = line[i + 1];
-                    // `\/` is the one escape that must survive tokenizing. The line break
-                    // it escapes is not resolved until `splitLines`, long after this, so
-                    // collapsing it to a bare `/` here would lose the fact that the
-                    // author asked for a literal. Every other escape resolves now.
-                    text += next === '/' ? '\\/' : next;
+                    // `\/` and `\[` are the two escapes that must survive tokenizing.
+                    // Neither of the things they escape is resolved here — the line break
+                    // waits for `splitRuns` and the markup tag for `parseMarkup` — so
+                    // collapsing either to a bare character now would lose the fact that
+                    // the author asked for a literal. Every other escape resolves here.
+                    text += next === '/' || next === '[' ? `\\${next}` : next;
                     i += 2;
                     continue;
                 }
@@ -959,7 +965,7 @@ function parseTail(tokens, start, line, subject, other) {
     while (i < tokens.length) {
         const token = tokens[i];
         if (isAttrKey(token)) {
-            i = readAttr(tokens, i, attrs, line);
+            i = readAttr(tokens, i, attrs, line, subject);
             continue;
         }
         const taken = other?.(tokens, i);
@@ -973,10 +979,42 @@ function parseTail(tokens, start, line, subject, other) {
     }
     return { attrs, placements };
 }
+/**
+ * The attribute keys whose value is a bracket rather than a word, and what may
+ * be written inside it. Only `text:` today: a style has no string for a text's
+ * bracket to hang off, so the bracket hangs off the key instead.
+ */
+const BRACKET_KEYS = { text: TEXT_KEYS };
+/**
+ * The top-level keys that moved into the text's bracket in 0.3.0, and the
+ * substitution each one gets. They are properties of a node's *text* and never
+ * of the node, and leaving them at the top level is what let `size:` sit beside
+ * `fill:` as though the two were the same sort of statement.
+ */
+const MOVED_INTO_BRACKET = ['size', 'wrap', 'align'];
 /** Read one `key: value` pair, and refuse the words that used to be keys. */
-function readAttr(tokens, at, attrs, line) {
+function readAttr(tokens, at, attrs, line, subject) {
     const keyToken = tokens[at];
     const key = keyToken.text.slice(0, -1);
+    const bracketKeys = BRACKET_KEYS[key];
+    if (bracketKeys !== undefined && follows(tokens, at + 1, '(')) {
+        // `text: (color: muted)` — the whole bracket belongs to one part, and it is
+        // stored under dotted keys so that a style merges into a node exactly the
+        // way every other attribute does.
+        const read = readBracket(tokens, at + 1, bracketKeys, {
+            subject,
+            what: `\`${key}:\``,
+            kind: 'a text',
+            example: 'color: muted',
+            line,
+        });
+        if (Object.keys(read.values).length === 0) {
+            throw new SourceError(`${subject}: \`${key}:\` opens empty brackets`, line);
+        }
+        for (const [inner, value] of Object.entries(read.values))
+            attrs[`${key}.${inner}`] = value;
+        return read.next;
+    }
     const valueToken = tokens[at + 1];
     if (!valueToken || isAttrKey(valueToken) || valueToken.text === ')') {
         throw new SourceError(`attribute "${key}" has no value`, line);
@@ -987,34 +1025,44 @@ function readAttr(tokens, at, attrs, line) {
         // edge — so it could never be wrong, and a node's text had no word at all.
         // Refused by name rather than ignored: an older file must be told what
         // to write, not silently drawn without its colors.
-        throw new SourceError('`stroke:` has been replaced by the part it colors — `border:` on a node, `text:` on a node with no body or an icon body, `line:` on an edge. A style shared between nodes and edges writes both, as in `border: #d2904e  line: #d2904e`', line);
+        throw new SourceError('`stroke:` has been replaced by the part it colors — `border:` on a node, `text: (color: …)` on the text of anything, `line:` on an edge. A style shared between nodes and edges writes both, as in `border: #d2904e  line: #d2904e`', line);
     }
     if (key === 'width') {
-        // Renamed 2026-09-09. It folds a text every n *characters* and never
-        // said how wide anything is, so `width: 200` meaning units was accepted,
-        // wrapped at 200 characters, and did nothing visible — the silent drop
-        // this vocabulary is otherwise free of. Refused by name for the reason
-        // `stroke:` is: an older file must be told, not quietly drawn unwrapped.
-        throw new SourceError('`width:` is now `wrap:`, because it folds the text every n characters and says nothing about how wide anything is', line);
+        // Renamed 2026-09-09, and moved into the text's bracket in 0.3.0.
+        throw new SourceError('`width:` is now `wrap:` and belongs to the text — it folds the text every n characters and says nothing about how wide anything is, so write it as `"…" (wrap: 30)`', line);
+    }
+    if (key === 'subtext') {
+        // Removed in 0.3.0. It colored "every line after the first", which is a
+        // positional slice: the rule lived in a style elsewhere in the file and was
+        // applied by counting, so a reader of the text could not see it. Markup
+        // says what is quiet where it is quiet, and reaches a word in the middle of
+        // a line, which the slice never could.
+        throw new SourceError('`subtext:` has been replaced by markup in the text — write `style dim  text: (color: muted)` ' +
+            'and mark the quiet words as `"Dropbox / [dim]synced[/dim]"`', line);
+    }
+    if (key === 'text') {
+        // `text:` is the text's bracket now, so a bare word after it is either the
+        // old color key or an attempt to set the words themselves. The quotes tell
+        // the two apart, and they want different remedies.
+        throw new SourceError(valueToken.quoted
+            ? `\`text:\` is how a style says something about text, not how anything sets it — write the words in quotes after the name, as in \`node name ${quoteOf(valueToken.text)}\``
+            : `\`text:\` takes the text's properties in brackets — write \`text: (color: ${valueToken.text})\` in a style, and \`(color: ${valueToken.text})\` in the brackets after a node's or an edge's own text`, line);
+    }
+    // `align: widths` is the contents key and still belongs to the node; every
+    // other `align` is the text ranging its lines, which moved into the bracket.
+    if (MOVED_INTO_BRACKET.includes(key) && !(key === 'align' && valueToken.text === 'widths')) {
+        throw new SourceError(`\`${key}:\` belongs to the text rather than to the node — write it in the brackets after ` +
+            `the text, as in \`"…" (${key}: ${valueToken.text})\`, or as \`text: (${key}: ${valueToken.text})\` in a style`, line);
     }
     if (valueToken.quoted && COLOR_KEYS.includes(key)) {
         // A quoted value is the author saying "this is text", and every one of
         // these keys takes a color. Without this the string is passed through as
         // a color, turns out not to be one, and nothing is drawn and nothing is
-        // said. Name the likely intent rather than only the rule: the qualifier
-        // under a name is a second text line, not a `subtext` value.
+        // said.
         if (valueToken.text.startsWith('#')) {
             // A hex color that was merely quoted. The author wrote a color and the
             // remedy is punctuation, so say that rather than that it is not one.
             throw new SourceError(`a color is written without quotes — "${key}: ${valueToken.text}"`, line);
-        }
-        // `text:` is the color of a text, not the text itself, and that is a
-        // mistake worth naming rather than only refusing — the word invites it.
-        if (key === 'text') {
-            throw new SourceError(`\`text:\` colors a node's text rather than setting it — write the words in quotes after the name, as in \`node name ${quoteOf(valueToken.text)}\``, line);
-        }
-        if (key === 'subtext') {
-            throw new SourceError(`\`subtext:\` colors a node's later text lines rather than setting them — write them into the text, as in \`"Name / ${valueToken.text}"\`, and \`subtext: muted\` to make them quieter`, line);
         }
         throw new SourceError(`"${key}" takes a color and a quoted value is text — drop the quotes if ${valueToken.text} is a color`, line);
     }
@@ -1030,9 +1078,25 @@ function attrsOnly(tokens, start, line, subject) {
         if (!isAttrKey(token)) {
             throw new SourceError(`${subject}: expected an attribute like "key: value", found "${token.text}"`, line);
         }
-        i = readAttr(tokens, i, attrs, line);
+        i = readAttr(tokens, i, attrs, line, subject);
     }
     return attrs;
+}
+/** Everything a text takes, less the one word that needs a box to sit in. */
+const EDGE_TEXT_KEYS = TEXT_KEYS.filter((key) => key !== 'at');
+/**
+ * `text:` is how a *style* says something about the text of whatever wears it,
+ * because a style has no string of its own. A node and an edge do, so they say
+ * it in the brackets after that string, and there is one spelling per place.
+ */
+function refuseTextKey(attrs, subject, where, line) {
+    for (const key of Object.keys(attrs)) {
+        if (!key.startsWith('text.'))
+            continue;
+        const inner = key.slice('text.'.length);
+        throw new SourceError(`${subject}: \`text: (…)\` is how a style says it, having no text of its own. This has one, ` +
+            `so write \`(${inner}: ${attrs[key]})\` in the brackets ${where}`, line);
+    }
 }
 /**
  * `node <name> ["<text>"] [(<text modifiers>)] [<placement> ...]`
@@ -1073,6 +1137,7 @@ function parseNode(head, line) {
         line,
     });
     const tail = parseTail(head, bracket.next, line, subject);
+    refuseTextKey(tail.attrs, subject, 'after the name', line);
     return {
         kind: 'node',
         name,
@@ -1109,6 +1174,17 @@ function parseEdge(head, line) {
     if (textToken)
         at += 1;
     const subject = `edge ${left} ${arrow.text} ${rightToken.text}`;
+    // An edge's text takes the same bracket a node's does, less `at:`: a node's
+    // text sits somewhere in a box and an edge's rides at the middle of its line,
+    // so there is no position to name until a diagram asks for one.
+    const bracket = readBracket(head, at, EDGE_TEXT_KEYS, {
+        subject,
+        what: 'the text',
+        kind: "an edge's text",
+        example: 'color: muted',
+        line,
+    });
+    at = bracket.next;
     let between;
     // An edge is not placed, so its tail holds attributes and the one clause that
     // is neither: `between`, which says which gap the line travels down.
@@ -1139,8 +1215,10 @@ function parseEdge(head, line) {
         throw new SourceError(`${subject}: "${describePlacement(tail.placements[0])}" places a node, and an edge is not ` +
             'placed — it joins two things that are', line);
     }
+    refuseTextKey(tail.attrs, subject, 'after the arrow', line);
     return {
         kind: 'edge',
+        textAttrs: bracket.values,
         from: back ? rightToken.text : left,
         to: back ? left : rightToken.text,
         both: arrow.text === '<->',
@@ -1423,6 +1501,204 @@ function readTargets(tokens, start, subject, placement, line) {
     }
 }
 
+// ---- text.js ----
+/**
+ * A text and the runs inside it.
+ *
+ * A text is a string, and the one piece of structure it may carry is markup:
+ * `[dim]synced[/dim]` draws that word in the text color of `style dim`. The
+ * opener names a *style* and never a color, so the word borrows a meaning the
+ * file already has rather than restating a value that goes stale the day the
+ * thing it means is recolored.
+ *
+ * Markup replaced `subtext:`, which colored "every line after the first". That
+ * was a positional slice: a reader of `node a "Dropbox / synced"` could not see
+ * that line two was quiet, because the rule lived in a style elsewhere and was
+ * applied by counting. Markup says what is quiet where it is quiet, and it
+ * reaches a word in the middle of a line, which the slice never could.
+ *
+ * Everything downstream therefore works in *runs* rather than strings: a drawn
+ * line is a list of runs, each with the style it borrows its color from, and
+ * line breaking and wrapping carry the runs along rather than re-parsing text
+ * that has already been read.
+ */
+
+/** A markup tag: `[name]` or `[/name]`, with the same name spelling as a style. */
+const TAG = /\[(\/?)([A-Za-z][A-Za-z0-9_-]*)\]/y;
+/**
+ * Read a text into runs, stripping the markup as it goes.
+ *
+ * `\[` is the escape, and it is why a bare `[` had to be reserved in 0.3.0
+ * rather than left alone: a text containing one is legal in 0.2.0 and would
+ * change meaning the day this landed.
+ *
+ * The closer repeats the name — `[/dim]` and not `[/]` — so a mismatch is
+ * refused by name rather than by counting, which is the thing a reader can
+ * never do reliably. Nesting is refused for the same reason: two colors on one
+ * word is not a picture anything here can draw, so it is a mistake rather than
+ * a shorthand.
+ */
+function parseMarkup(text, subject, line) {
+    const runs = [];
+    let open;
+    let buffer = '';
+    let i = 0;
+    const flush = () => {
+        if (buffer.length === 0)
+            return;
+        runs.push(open === undefined ? { text: buffer } : { text: buffer, style: open });
+        buffer = '';
+    };
+    while (i < text.length) {
+        const ch = text[i];
+        if (ch === '\\' && text[i + 1] === '[') {
+            buffer += '[';
+            i += 2;
+            continue;
+        }
+        if (ch === '[') {
+            TAG.lastIndex = i;
+            const found = TAG.exec(text);
+            if (found) {
+                const closing = found[1] === '/';
+                const name = found[2];
+                if (closing) {
+                    if (open === undefined) {
+                        throw new SourceError(`${subject}: "[/${name}]" closes markup that was never opened — write \\[ for a literal bracket`, line);
+                    }
+                    if (open !== name) {
+                        throw new SourceError(`${subject}: "[${open}]" is closed by "[/${name}]" — a closer repeats the name it opened with`, line);
+                    }
+                    flush();
+                    open = undefined;
+                }
+                else {
+                    if (open !== undefined) {
+                        throw new SourceError(`${subject}: "[${name}]" opens inside "[${open}]", and a run of text takes one style`, line);
+                    }
+                    flush();
+                    open = name;
+                }
+                i = found.index + found[0].length;
+                continue;
+            }
+            // Not a tag at all — a lone bracket in the middle of a word. Refused by
+            // name rather than passed through, because `[` is reserved and a text
+            // that means one has an escape to say so.
+            throw new SourceError(`${subject}: "[" opens markup in a text — write \\[ for a literal bracket`, line);
+        }
+        buffer += ch;
+        i += 1;
+    }
+    if (open !== undefined) {
+        throw new SourceError(`${subject}: "[${open}]" is never closed`, line);
+    }
+    flush();
+    return runs;
+}
+/**
+ * A slash with whitespace on both sides marks a line break, so a text is
+ * really a short stack of lines. Each line is trimmed; empty ones are dropped.
+ *
+ * The whitespace is what makes the marker safe. Splitting on a bare `/` meant
+ * no text could contain one, so `TCP/IP` came out as two lines, and so did
+ * `16/9`, `I/O` and every path or URL. Requiring the spaces keeps the marker
+ * legible where it is meant — `"Computer 1 / Ubuntu"` — while a slash inside a
+ * word stays an ordinary character.
+ *
+ * That leaves the text that wants a spaced slash and no break — `Before / After`
+ * — which writes it `\/`. The lexer preserves that escape rather than resolving
+ * it, so the backslash is still here to suppress the split, and is dropped once
+ * the splitting is done.
+ *
+ * A break inside a marked-up run is an ordinary break: `[dim]one / two[/dim]`
+ * quiets both lines, which is what made the markup general where the slice it
+ * replaced could only reach the tail of a text.
+ */
+function splitRuns(runs) {
+    const lines = [[]];
+    for (const run of runs) {
+        const parts = run.text.split(/\s+\/\s+/);
+        parts.forEach((part, index) => {
+            if (index > 0)
+                lines.push([]);
+            lines[lines.length - 1].push({ ...run, text: part });
+        });
+    }
+    return tidy(lines);
+}
+/** Trim each line's ends, drop the empty ones, and resolve the `\/` escape. */
+function tidy(lines) {
+    const kept = [];
+    for (const line of lines) {
+        const runs = line
+            .map((run, index) => {
+            let text = run.text.replace(/\\\//g, '/');
+            if (index === 0)
+                text = text.replace(/^\s+/, '');
+            if (index === line.length - 1)
+                text = text.replace(/\s+$/, '');
+            return { ...run, text };
+        })
+            .filter((run) => run.text.length > 0);
+        if (runs.length > 0)
+            kept.push(runs);
+    }
+    return kept.length > 0 ? kept : [[{ text: '' }]];
+}
+/** Fold one line onto several at word boundaries, never exceeding `columns`. */
+function wrapLine(line, columns) {
+    const lines = [];
+    let current = [];
+    let length = 0;
+    for (const word of words(line)) {
+        const space = length === 0 ? 0 : 1;
+        if (length > 0 && length + space + word.text.length > columns) {
+            lines.push(current);
+            current = [];
+            length = 0;
+        }
+        append(current, length === 0 ? word : { ...word, text: ` ${word.text}` });
+        length += (length === 0 ? 0 : 1) + word.text.length;
+    }
+    if (current.length > 0)
+        lines.push(current);
+    return lines.length > 0 ? lines : [[{ text: '' }]];
+}
+/** The line's words, each carrying the style of the run it came from. */
+function words(line) {
+    const found = [];
+    for (const run of line) {
+        for (const word of run.text.split(/\s+/).filter(Boolean)) {
+            found.push({ ...run, text: word });
+        }
+    }
+    return found;
+}
+/** Add a word to a line, joining it to the last run when the style is the same. */
+function append(line, word) {
+    const last = line[line.length - 1];
+    if (last && last.style === word.style) {
+        last.text += word.text;
+        return;
+    }
+    line.push(word);
+}
+/** The line as it reads, with no markup — what gets measured. */
+function plain(line) {
+    return line.map((run) => run.text).join('');
+}
+/** Every style name the markup in these lines refers to, without repeats. */
+function markupStyles(lines) {
+    const names = new Set();
+    for (const line of lines) {
+        for (const run of line)
+            if (run.style !== undefined)
+                names.add(run.style);
+    }
+    return [...names];
+}
+
 // ---- constants.js ----
 /** Inside a box, between its border and its contents. */
 const PAD = 14;
@@ -1507,10 +1783,18 @@ const TEXT_CLEARANCE = 20;
  * traveling horizontally needs the text's width; the renderer measures *across*
  * the channel, so an edge traveling horizontally down one needs its height.
  */
-function textExtent(text, appearance, axis, measurer, fontSize, line) {
-    const size = fontSizeFor('edge', appearance, fontSize, line);
-    const { width, lines } = measurer.measure(text, size);
+function textExtent(lines, textAttrs, axis, measurer, fontSize, line) {
+    const size = fontSizeFor('edge', textAttrs, fontSize, line);
+    const width = lines.reduce((widest, drawn) => Math.max(widest, measurer.measure(plain(drawn), size).width), 0);
     return axis === 'x' ? width + 10 : lines.length * measurer.lineHeight(size);
+}
+/**
+ * The widest of these lines, which is how wide the block of them is. Shared by
+ * the resolver, which sizes a node to hold its text, and the renderer, which
+ * places that block in the room the node gave it.
+ */
+function widestLine(lines, measurer, fontSize) {
+    return lines.reduce((widest, line) => Math.max(widest, measurer.measure(plain(line), fontSize).width), 0);
 }
 /**
  * An icon is two lines of the text tall, and that ratio is what makes it a
@@ -1545,8 +1829,9 @@ const TEXT_SIZES = {
  * What each kind of text is set at when the file says nothing. A node with no
  * body annotates the diagram rather than being part of it, and at the size of a
  * box text an aside reads as a statement — so `shape: none` starts small and
- * says so by having no body. This is a default and not a ceiling: `size:`
- * overrides it, the same way `fill:` overrides the theme's color.
+ * says so by having no body. This is a default and not a ceiling: `(size: …)`
+ * in the text's brackets overrides it, the same way `fill:` overrides the
+ * theme's color.
  */
 const DEFAULT_TEXT_SIZE = { none: 'small' };
 /**
@@ -1554,8 +1839,8 @@ const DEFAULT_TEXT_SIZE = { none: 'small' };
  * the room, and the renderer, which fills it, so the two cannot disagree about
  * how much room there is.
  */
-function fontSizeFor(kind, appearance, fontSize, line) {
-    const named = appearance['size'] ?? DEFAULT_TEXT_SIZE[kind] ?? 'normal';
+function fontSizeFor(kind, textAttrs, fontSize, line) {
+    const named = textAttrs['size'] ?? DEFAULT_TEXT_SIZE[kind] ?? 'normal';
     const scale = TEXT_SIZES[named];
     if (scale === undefined) {
         throw new SourceError(`size takes ${Object.keys(TEXT_SIZES).join(', ')}, not "${named}"`, line);
@@ -1563,26 +1848,6 @@ function fontSizeFor(kind, appearance, fontSize, line) {
     return Math.round(fontSize * scale);
 }
 const DEFAULT_MARGIN = 40;
-/**
- * Where a container's own text sits. Every container reserves a band for its
- * text and its icon; `at` says which end of the box that band is, and the
- * contents take what is left. `align` says how the text sits across it.
- *
- * The two are independent and neither implies the other. A text at the bottom
- * is an ordinary text that happens to be at the bottom — there is no kind of
- * text being named here and no second thing quietly coming along with the
- * first. An earlier version bundled them as `text: heading | caption`, which
- * read a position as though it were a meaning; a folded corner means "artifact
- * rather than process" and a reader decodes it, while "lower down" means only
- * lower down.
- *
- * A leaf has no band, so `at` says nothing about one and is refused there. But
- * `align` is not about the band: a text of more than one line has lines of
- * unequal length whatever kind of box it is in, and how those sit across each
- * other is a real question anywhere. A leaf's default is centered rather than
- * ranged left, which is why the fallback is a parameter.
- */
-const TEXT_ENDS = ['top', 'bottom'];
 /**
  * Author's word to the SVG's. One spelling of each, per the rule that refuses
  * synonyms for `node` and `edge`: an alias is a variant a reader has to learn,
@@ -1598,17 +1863,27 @@ const TEXT_ALIGNMENTS = {
  * contents away from the band, and the renderer, which draws into it, so the two
  * cannot disagree about which end the band is at.
  */
-function textStyleFor(attrs, line, fallbackAlign = 'start') {
-    const at = attrs['at'];
-    if (at !== undefined && !TEXT_ENDS.includes(at)) {
-        throw new SourceError(`a text's at takes ${TEXT_ENDS.join(' or ')}, not "${at}"`, line);
+function textStyleFor(attrs, line, fallbackAlign = 'start', fallbackAt = 'top-left') {
+    const written = attrs['at'];
+    if (written !== undefined && !isPosition(written)) {
+        // A bare side word is the one mistake worth naming rather than only
+        // refusing: it was the whole vocabulary until 0.3.0, and the point at the
+        // middle of that side is exactly one word away.
+        const midpoint = `${written}-center`;
+        throw new SourceError(isPosition(midpoint)
+            ? `a text sits at a *point* of the box, and "${written}" names a side — write "${midpoint}" for the point at the middle of it`
+            : `a text's at takes one of ${POSITIONS.join(', ')}, not "${written}"`, line);
     }
+    const at = written ?? fallbackAt;
     const align = attrs['align'];
     if (align !== undefined && TEXT_ALIGNMENTS[align] === undefined) {
         throw new SourceError(`a text's align takes left, center or right, not "${align}"`, line);
     }
+    const parts = at.split('-');
     return {
-        at: at ?? 'top',
+        at,
+        end: parts.includes('top') ? 'top' : parts.includes('bottom') ? 'bottom' : 'center',
+        side: parts.includes('left') ? 'left' : parts.includes('right') ? 'right' : 'center',
         align: align === undefined ? fallbackAlign : TEXT_ALIGNMENTS[align],
     };
 }
@@ -1930,7 +2205,7 @@ function render(layout, options = {}) {
     const theme = stated === undefined ? base : { ...base, background: stated };
     const body = [];
     for (const root of layout.roots) {
-        body.push(drawNode(root, theme, measurer, fontSize));
+        body.push(drawNode(root, theme, measurer, fontSize, layout.markup));
     }
     // Everything the boxes cover. Edges are added to it as they are drawn.
     let ink = { minX: 0, minY: 0, maxX: layout.width, maxY: layout.height };
@@ -1942,7 +2217,7 @@ function render(layout, options = {}) {
     const corridors = planCorridors(layout.edges, ends, measurer, fontSize);
     aimFreeEnds(layout.edges, ends, corridors);
     for (const edge of layout.edges) {
-        const drawn = drawEdge(edge, ends.get(edge), corridors.get(edge), theme, measurer, fontSize);
+        const drawn = drawEdge(edge, ends.get(edge), corridors.get(edge), theme, measurer, fontSize, layout.markup);
         body.push(drawn.svg);
         ink = union(ink, grow(drawn.ink, layout.margin));
     }
@@ -1969,29 +2244,39 @@ function render(layout, options = {}) {
     ].join('\n');
 }
 // --- nodes -------------------------------------------------------------------
-function drawNode(node, theme, measurer, fontSize) {
+function drawNode(node, theme, measurer, fontSize, markup) {
     // A note is set smaller than a box text by default, and `size:` overrides
     // that on anything. Only this node's own text takes the size — children are
     // drawn by their own call and carry whatever they say themselves.
-    const size = fontSizeFor(node.kind, node.appearance, fontSize, node.line);
+    const size = fontSizeFor(node.kind, node.textAttrs, fontSize, node.line);
     const textHeight = measurer.lineHeight(size);
+    const blockWidth = widestLine(node.lines, measurer, size);
+    const ink = (run, own) => runInk(run, own, markup, theme);
     if (node.body.kind === 'none') {
+        const style = textStyleFor(node.textAttrs, node.line, 'start', 'center');
         return sized(textBlock(node.lines, node.x, node.y, node.width, textHeight, size, {
-            color: textOf(node.appearance, theme.text),
-            align: 'start',
+            color: textColorOf(node.textAttrs, theme, theme.text),
+            align: style.align,
+            side: style.side,
+            blockWidth,
+            ink,
         }), size, fontSize);
     }
-    const textStyle = textStyleFor(node.textAttrs, node.line);
     const glyphSide = ICON_LINES * textHeight;
     if (node.body.kind === 'icon') {
         // No outline, no fill, no padding — the node is the picture. The text, if
-        // there is one, sits under it and centered.
+        // there is one, sits under it. `at`'s vertical half has nothing to say
+        // here — the caption is under the picture and nowhere else — so only its
+        // horizontal half is read.
+        const style = textStyleFor(node.textAttrs, node.line, 'middle', 'center');
         const drawn = [drawIcon(node.body.icon, node.x + (node.width - glyphSide) / 2, node.y, glyphSide, theme)];
-        if (node.lines.some((line) => line.length > 0)) {
+        if (node.lines.some((line) => plain(line).length > 0)) {
             drawn.push(sized(textBlock(node.lines, node.x, node.y + glyphSide + ICON_GAP, node.width, textHeight, size, {
-                color: textOf(node.appearance, theme.text),
-                subColor: subtextOf(node.appearance, theme),
-                align: 'middle',
+                color: textColorOf(node.textAttrs, theme, theme.text),
+                align: style.align,
+                side: style.side,
+                blockWidth,
+                ink,
             }), size, fontSize));
         }
         return drawn.join('\n');
@@ -2004,8 +2289,7 @@ function drawNode(node, theme, measurer, fontSize) {
     const fill = fillOf(node.appearance, container ? theme.containerFill : theme.boxFill);
     // A box is the one kind with two inkable parts, which is why its text needs
     // a word of its own — `border:` cannot stand in for it.
-    const text = textOf(node.appearance, theme.text);
-    const subColor = subtextOf(node.appearance, theme);
+    const text = textColorOf(node.textAttrs, theme, theme.text);
     // Deck copies sit behind the front face, furthest back drawn first.
     for (let depth = node.deckTexts.length; depth >= 1; depth -= 1) {
         const x = face.x - depth * DECK_STEP;
@@ -2013,9 +2297,12 @@ function drawNode(node, theme, measurer, fontSize) {
         parts.push(`  <path d="${outlinePath(outline, x, y, face.width, face.height)}" fill="${theme.containerFill}" stroke="${border}"/>`);
         const copy = node.deckTexts[depth - 1];
         if (copy !== undefined) {
-            parts.push(sized(textBlock([copy], x + PAD, y + PAD, face.width - PAD * 2, textHeight, size, {
+            parts.push(sized(textBlock([[{ text: copy }]], x + PAD, y + PAD, face.width - PAD * 2, textHeight, size, {
                 color: text,
                 align: 'start',
+                side: 'left',
+                blockWidth: face.width - PAD * 2,
+                ink,
             }), size, fontSize));
         }
     }
@@ -2027,34 +2314,40 @@ function drawNode(node, theme, measurer, fontSize) {
     // left, which is the room the resolver already reserved for exactly this.
     const icon = badgeFor(node.appearance, node.line);
     const iconSide = icon === undefined ? 0 : glyphSide;
-    const hasText = node.lines.some((line) => line.length > 0);
+    const hasText = node.lines.some((line) => plain(line).length > 0);
     const iconRoom = icon === undefined ? 0 : iconSide + (hasText ? ICON_GAP : 0);
+    // A leaf's text defaults to the middle of its box, a container's to the top
+    // left of the band; both then read `at` for where it really goes.
+    const textStyle = textStyleFor(node.textAttrs, node.line, container ? 'start' : 'middle', container ? 'top-left' : 'center');
+    const textDepth = node.lines.length * textHeight;
     if (!container) {
-        // A leaf centers its text in the box, both ways — in the room beside the
-        // icon rather than the whole box, so the two sit side by side. Centered
-        // across is only the default: a text of several lines may say `align`, and
-        // there is genuine slack between lines of unequal length to range them in.
-        const leafAlign = textStyleFor(node.textAttrs, node.line, 'middle').align;
-        const top = face.y + (face.height - node.lines.length * textHeight) / 2;
+        // A leaf's text sits in the room beside the badge rather than in the whole
+        // box, so the two sit side by side. Wherever the box is exactly the size of
+        // what it holds there is no slack and `at` changes nothing; a badge is two
+        // lines tall, so a shorter text beside one has room to move.
+        const top = leafTop(textStyle.end, face.y, face.height, textDepth);
         parts.push(sized(textBlock(node.lines, face.x, top, face.width - iconRoom, textHeight, size, {
             color: text,
-            subColor,
-            align: leafAlign,
+            align: textStyle.align,
+            side: textStyle.side,
+            blockWidth,
+            ink,
         }), size, fontSize));
     }
     else {
         // The text and the icon share a band at one end of the box, and the
-        // resolver has already given the contents the other end. A heading is
-        // ranged left at the top; a caption is centered at the bottom.
-        const band = Math.max(node.lines.length * textHeight, iconSide);
-        const bandTop = textStyle.at === 'top' ? face.y + PAD : face.y + face.height - PAD - band;
+        // resolver has already given the contents the other end.
+        const band = Math.max(textDepth, iconSide);
+        const bandTop = textStyle.end === 'top' ? face.y + PAD : face.y + face.height - PAD - band;
         parts.push(sized(textBlock(node.lines, face.x + PAD, bandTop, face.width - PAD * 2 - iconRoom, textHeight, size, {
             color: text,
-            subColor,
             align: textStyle.align,
+            side: textStyle.side,
+            blockWidth,
+            ink,
         }), size, fontSize));
         for (const child of node.children) {
-            parts.push(drawNode(child, theme, measurer, fontSize));
+            parts.push(drawNode(child, theme, measurer, fontSize, markup));
         }
     }
     if (icon !== undefined) {
@@ -2064,10 +2357,10 @@ function drawNode(node, theme, measurer, fontSize) {
         // keeps an icon reading as part of the title block and not as a sticker.
         const left = face.x + face.width - PAD - iconSide;
         const top = container
-            ? textStyle.at === 'top'
+            ? textStyle.end === 'top'
                 ? face.y + PAD
                 : face.y + face.height - PAD - iconSide
-            : face.y + (face.height - iconSide) / 2;
+            : leafTop(textStyle.end, face.y, face.height, iconSide);
         parts.push(drawIcon(icon, left, top, iconSide, theme));
     }
     return parts.join('\n');
@@ -2139,7 +2432,7 @@ function drawIcon(icon, x, y, side, theme) {
     ].join('\n');
 }
 // --- edges -------------------------------------------------------------------
-function drawEdge(edge, ends, corridor, theme, measurer, fontSize) {
+function drawEdge(edge, ends, corridor, theme, measurer, fontSize, markup) {
     const { start, end } = ends;
     const color = lineOf(edge.appearance, theme.edge);
     const markerEnd = ` marker-end="url(#${markerId(color)})"`;
@@ -2210,9 +2503,10 @@ function drawEdge(edge, ends, corridor, theme, measurer, fontSize) {
         // An edge text breaks on ` / ` exactly as a box text does, so a two-line
         // caption on an arrow needs no vocabulary of its own. The block is centered
         // on the midpoint, which keeps a one-line text where it has always been.
-        const size = fontSizeFor('edge', edge.appearance, fontSize, edge.line);
+        const size = fontSizeFor('edge', edge.textAttrs, fontSize, edge.line);
         const textHeight = measurer.lineHeight(size);
-        const { width, lines } = measurer.measure(edge.text, size);
+        const lines = edge.lines;
+        const width = widestLine(lines, measurer, size);
         const height = lines.length * textHeight;
         const top = midY - height / 2;
         // The text knocks a hole in whatever it lands on rather than sitting in a
@@ -2228,8 +2522,11 @@ function drawEdge(edge, ends, corridor, theme, measurer, fontSize) {
         parts.push(sized(textBlock(lines, midX - width / 2, top, width, textHeight, size, {
             // A colored edge carries its meaning into its text; an uncolored
             // one leaves the words to read as ordinary text.
-            color: textOf(edge.appearance, lineOf(edge.appearance, theme.text)),
+            color: textColorOf(edge.textAttrs, theme, lineOf(edge.appearance, theme.text)),
             align: 'middle',
+            side: 'center',
+            blockWidth: width,
+            ink: (run, own) => runInk(run, own, markup, theme),
         }), size, fontSize));
     }
     // The stroke straddles the path, so half of it lies outside the geometry.
@@ -2310,7 +2607,10 @@ function sidePoint(box, toward) {
     return { x: center.x + dx * scale, y: center.y + dy * scale };
 }
 // --- where an edge meets a box -------------------------------------------------
-const SIDES = ['top', 'bottom', 'left', 'right'];
+// The four sides an edge may attach to. Deliberately not `ATTACH_SIDES` from
+// `ast.ts`, which carries `center` as well because an alignment can share a
+// center line and an attachment cannot sit on one.
+const ATTACH_SIDES = ['top', 'bottom', 'left', 'right'];
 /**
  * Work out where every edge meets every box.
  *
@@ -2651,7 +2951,7 @@ function laneStep(lanes, drift, measurer, fontSize) {
     const withText = lanes.filter((edge) => edge.text !== undefined);
     if (withText.length < 2)
         return 0;
-    const need = (axis) => Math.max(...withText.map((edge) => textExtent(edge.text, edge.appearance, axis, measurer, fontSize, edge.line)));
+    const need = (axis) => Math.max(...withText.map((edge) => textExtent(edge.lines, edge.textAttrs, axis, measurer, fontSize, edge.line)));
     const along = (axis, reach) => reach === 0 ? Infinity : need(axis) / Math.abs(reach);
     return Math.min(along('x', drift.x), along('y', drift.y));
 }
@@ -2915,9 +3215,9 @@ function aimFreeEnds(edges, ends, corridors) {
  * horizontally, and what has to fit between two lanes of it is a text's depth.
  */
 function laneExtent(edge, axis, measurer, fontSize) {
-    if (edge.text === undefined)
+    if (edge.lines === undefined)
         return 0;
-    return textExtent(edge.text, edge.appearance, axis, measurer, fontSize, edge.line);
+    return textExtent(edge.lines, edge.textAttrs, axis, measurer, fontSize, edge.line);
 }
 function corridorPoint(plan, at) {
     return plan.axis === 'y' ? { x: at, y: plan.lane } : { x: plan.lane, y: at };
@@ -2966,8 +3266,8 @@ function sideAttr(edge, key) {
     const value = edge.attrs[key];
     if (value === undefined)
         return undefined;
-    if (!SIDES.includes(value)) {
-        throw new SourceError(`"${key}: ${value}" is not a side — use ${SIDES.join(', ')}`, edge.line);
+    if (!ATTACH_SIDES.includes(value)) {
+        throw new SourceError(`"${key}: ${value}" is not a side — use ${ATTACH_SIDES.join(', ')}`, edge.line);
     }
     return value;
 }
@@ -3007,20 +3307,85 @@ function sized(block, size, fontSize) {
         return block;
     return `  <g font-size="${size}px">\n${block}\n  </g>`;
 }
+/**
+ * Draw a block of text into the room it was given.
+ *
+ * Two independent questions, which is why there are two words for them. `side`
+ * is where the block sits across that room, from the horizontal half of the
+ * text's `at`. `align` is how the block's own lines range against each other,
+ * which matters whenever they are of unequal length and is a different thing
+ * from where the block is.
+ *
+ * Where the block is as wide as the room — which is every text whose box is
+ * sized from it, so nearly all of them — the two coincide and `side` changes
+ * nothing.
+ */
 function textBlock(lines, x, top, width, lineHeight, fontSize, style) {
-    const anchorX = style.align === 'middle' ? x + width / 2 : style.align === 'end' ? x + width : x;
+    const blockLeft = style.side === 'left'
+        ? x
+        : style.side === 'right'
+            ? x + width - style.blockWidth
+            : x + (width - style.blockWidth) / 2;
+    const anchorX = style.align === 'middle'
+        ? blockLeft + style.blockWidth / 2
+        : style.align === 'end'
+            ? blockLeft + style.blockWidth
+            : blockLeft;
     return lines
         .map((line, index) => {
-        if (line.length === 0)
+        if (plain(line).length === 0)
             return '';
         const baseline = top + index * lineHeight + lineHeight / 2 + fontSize * 0.35;
-        // A text's first line is its name; anything after it is a qualifier, and
-        // `subtext:` is how a box says that qualifier should read as secondary.
-        const color = index === 0 ? style.color : style.subColor ?? style.color;
-        return `  <text x="${round(anchorX)}" y="${round(baseline)}" fill="${color}" text-anchor="${style.align}">${escapeXml(line)}</text>`;
+        // One `<text>` per line, with a `<tspan>` per run inside it, so the runs
+        // flow from the line's own anchor and a mark never moves a character.
+        // A line drawn in one color says so on the `<text>` and emits no spans at
+        // all, which is what keeps a whole quiet line identical to what the
+        // `subtext:` it replaced produced.
+        const colors = line.map((run) => style.ink(run, style.color));
+        const uniform = colors.every((color) => color === colors[0]);
+        const body = uniform
+            ? escapeXml(plain(line))
+            : line
+                .map((run, run_index) => colors[run_index] === style.color
+                ? escapeXml(run.text)
+                : `<tspan fill="${colors[run_index]}">${escapeXml(run.text)}</tspan>`)
+                .join('');
+        return `  <text x="${round(anchorX)}" y="${round(baseline)}" fill="${uniform ? colors[0] ?? style.color : style.color}" text-anchor="${style.align}">${body}</text>`;
     })
         .filter((element) => element.length > 0)
         .join('\n');
+}
+/** Where a leaf's text or badge starts vertically, given which end it sits at. */
+function leafTop(end, y, height, own) {
+    if (end === 'top')
+        return y + PAD;
+    if (end === 'bottom')
+        return y + height - PAD - own;
+    return y + (height - own) / 2;
+}
+/**
+ * The color a marked-up run is drawn in. The mark names a *style*, never a
+ * color, so the word borrows a meaning the file already has rather than
+ * restating a value that goes stale the day the thing it means is recolored.
+ * The resolver has already refused a mark naming a style that does not exist or
+ * that says nothing about text.
+ */
+function runInk(run, own, markup, theme) {
+    if (run.style === undefined)
+        return own;
+    return namedColor(markup[run.style], theme);
+}
+/**
+ * A text's own color. `muted` is the one reserved word: it defers to the theme,
+ * so a quiet line stays readable when the theme changes. Anything else is a
+ * color, the same as `fill:` and `border:` take.
+ */
+function textColorOf(textAttrs, theme, fallback) {
+    const value = textAttrs['color'];
+    return value === undefined ? fallback : namedColor(value, theme);
+}
+function namedColor(value, theme) {
+    return value === 'muted' ? theme.mutedText : value;
 }
 /**
  * A color is written as the viewer will receive it — `#14532d`, or any CSS
@@ -3036,23 +3401,6 @@ function borderOf(appearance, fallback) {
 }
 function lineOf(appearance, fallback) {
     return appearance['line'] ?? fallback;
-}
-function textOf(appearance, fallback) {
-    return appearance['text'] ?? fallback;
-}
-/**
- * The color for every text line after the first, or undefined when the box
- * said nothing and all its lines should read alike. `muted` is the one reserved
- * word: it defers to the theme, so a text's qualifier stays readable when the
- * theme changes. Anything else is a color, same as `text` and `fill` take.
- */
-function subtextOf(appearance, theme) {
-    const named = appearance['subtext'];
-    if (named === undefined)
-        return undefined;
-    if (named === 'muted')
-        return theme.mutedText;
-    return named;
 }
 function fillOf(appearance, fallback) {
     return appearance['fill'] ?? fallback;
@@ -3203,6 +3551,7 @@ function resolve(doc, options = {}) {
         nodes,
         roots,
         edges,
+        markup: markupColors(nodes, edges, styles),
         diagram: collectDiagram(doc.statements),
         width: Math.ceil(extent.maxX + margin),
         height: Math.ceil(extent.maxY + margin),
@@ -3254,12 +3603,17 @@ function buildTree(statements, styles) {
         // caption a row of cubes a, b, db1, c, db2. `""` then says what writing
         // nothing says, which is only true here — on a box it carries information.
         const text = body.kind === 'icon' && !stmt.statedText ? '' : stmt.text;
+        // A style has no string of its own, so it says what it has to say about a
+        // text through `text: (…)`, which arrives here under dotted keys. What the
+        // node wrote in its own brackets wins, key by key, exactly as its own
+        // attributes win over the style's.
+        const textAttrs = { ...bracketOf('text', appearance), ...stmt.textAttrs };
         const node = {
             name: stmt.name,
             kind,
             body,
             text,
-            lines: linesFor(text, stmt.attrs, stmt.line),
+            lines: linesFor(text, textAttrs, `"${stmt.name}"`, stmt.line),
             children: [],
             x: 0,
             y: 0,
@@ -3268,7 +3622,7 @@ function buildTree(statements, styles) {
             inset: 0,
             deckTexts: [],
             headerHeight: 0,
-            textAttrs: stmt.textAttrs,
+            textAttrs,
             attrs: stmt.attrs,
             appearance,
             placements: stmt.placements,
@@ -3344,7 +3698,8 @@ function checkAttrs(kind, name, attrs, line) {
     const allowed = ATTR_KEYS[kind];
     // In the author's own order, so the error names the first offending word as
     // it is read rather than the first in some list of ours.
-    for (const [key, value] of Object.entries(attrs)) {
+    for (const [written, value] of Object.entries(attrs)) {
+        const key = topKey(written);
         if (allowed.includes(key))
             continue;
         if (!ALL_ATTR_KEYS.includes(key)) {
@@ -3358,7 +3713,7 @@ function checkAttrs(kind, name, attrs, line) {
         // list of parts it does have: `line:` on a box is a different mistake from
         // `border:` on a note, and one hint cannot serve both.
         if (COLOR_KEYS.includes(key)) {
-            const parts = COLOR_PARTS[kind].map((part) => `\`${part}:\``).join(', ');
+            const parts = COLOR_PARTS[kind].map((part) => `\`${part}\``).join(', ');
             throw new SourceError(`"${name}" is ${article(KIND_WORD[kind])} and has ${key}: ${value}. ${capital(article(KIND_WORD[kind]))} is ${KIND_PARTS[kind]}, so it has no ${key} — it takes ${parts}`, line);
         }
         // Anything else names no part, so what the kind is made of explains
@@ -3389,7 +3744,7 @@ function checkStyleUse(kind, name, attrs, styles, line) {
     // A style naming another style is the one way to carry nothing at all: the
     // parser already refuses one with no attributes, and `appearanceOf` does not
     // recurse, so the name would sit there doing nothing.
-    const carried = Object.keys(base).filter((key) => key !== 'style');
+    const carried = [...new Set(Object.keys(base).map(topKey))].filter((key) => key !== 'style');
     if (carried.length === 0) {
         throw new SourceError(`style "${named}" carries nothing but a style name`, line);
     }
@@ -3409,12 +3764,22 @@ function checkStyleKeys(statements) {
         if (stmt.kind !== 'style')
             continue;
         for (const [key, value] of Object.entries(stmt.attrs)) {
-            if (ALL_ATTR_KEYS.includes(key))
+            if (ALL_ATTR_KEYS.includes(topKey(key)))
                 continue;
             throw new SourceError(`style "${stmt.name}" has ${key}: ${value}, which is not an attribute. ` +
                 `The attributes are ${ALL_ATTR_KEYS.join(', ')}`, stmt.line);
         }
     }
+}
+/**
+ * The attribute a key belongs to. A bracketed value arrives under dotted keys —
+ * `text: (color: muted)` is stored as `text.color` — so that a style merges into
+ * a node exactly the way every other attribute does; every check above asks
+ * about the part, which is the half before the dot.
+ */
+function topKey(key) {
+    const dot = key.indexOf('.');
+    return dot === -1 ? key : key.slice(0, dot);
 }
 /** Which kinds understand an attribute, in the order the table declares them. */
 function belongTo(key) {
@@ -3471,11 +3836,15 @@ function buildEdges(statements, byName, styles) {
         const what = `${stmt.from} -> ${stmt.to}`;
         checkAttrs('edge', what, stmt.attrs, stmt.line);
         checkStyleUse('edge', what, stmt.attrs, styles, stmt.line);
+        const textAttrs = { ...bracketOf('text', appearance), ...stmt.textAttrs };
         edges.push({
             from,
             to,
             both: stmt.both,
-            ...(stmt.text !== undefined ? { text: stmt.text } : {}),
+            textAttrs,
+            ...(stmt.text !== undefined
+                ? { text: stmt.text, lines: linesFor(stmt.text, textAttrs, `edge ${what}`, stmt.line) }
+                : {}),
             ...(between ? { between } : {}),
             attrs: stmt.attrs,
             appearance,
@@ -3495,11 +3864,11 @@ function sizeNode(node, edges, measurer, fontSize, local) {
     // Text is measured at the size it will be drawn at — the size lives in
     // `constants.ts` precisely so the resolver reserving the room and the
     // renderer filling it cannot disagree about how much room there is.
-    const textSize = fontSizeFor(node.kind, node.appearance, fontSize, node.line);
+    const textSize = fontSizeFor(node.kind, node.textAttrs, fontSize, node.line);
     const lineHeight = measurer.lineHeight(textSize);
     // A node with empty text takes no room for it. This is what makes an
     // invisible grouping container size to exactly its contents.
-    const hasText = node.lines.some((line) => line.length > 0);
+    const hasText = node.lines.some((line) => plain(line).length > 0);
     const textWidth = hasText ? widestLine(node.lines, measurer, textSize) : 0;
     const textHeight = hasText ? node.lines.length * lineHeight : 0;
     const glyphSide = ICON_LINES * lineHeight;
@@ -3532,16 +3901,13 @@ function sizeNode(node, edges, measurer, fontSize, local) {
     const iconSide = icon === undefined ? 0 : glyphSide;
     const iconRoom = icon === undefined ? 0 : iconSide + (hasText ? ICON_GAP : 0);
     if (node.children.length === 0) {
-        // A band only exists because contents have to sit clear of it, and a leaf
-        // has none, so `at` has no end to name. `align` is a different question and
-        // is allowed: a text of several lines has lines of unequal length in any
-        // box, and ranging them left rather than centering them is a real thing to
-        // want. It was refused here too until 2026-09-09, purely because the two
-        // words arrive in the same brackets.
-        if (node.textAttrs['at'] !== undefined) {
-            throw new SourceError(`"${node.name}" holds nothing and its text carries at: ${node.textAttrs['at']}. ` +
-                `A text sits at one end of a box so its contents can have the other; with no contents there is no band for it to sit at either end of`, node.line);
-        }
+        // `at` is read on a leaf too, and is inert wherever the box is exactly the
+        // size of what it holds — which is most leaves, since a leaf is sized from
+        // its own text. It bites where there is slack: a badge is two lines tall, so
+        // a one-line text beside one has a line of room to sit at either end of.
+        // Inert-but-legal stays silent here, the same treatment `align` gets on a
+        // leaf with one line.
+        textStyleFor(node.textAttrs, node.line, 'middle', 'center');
         node.width = textWidth + iconRoom + PAD * 2;
         node.height = Math.max(textHeight, iconSide) + PAD * 2;
     }
@@ -3554,7 +3920,18 @@ function sizeNode(node, edges, measurer, fontSize, local) {
         node.headerHeight = hasText || icon !== undefined ? band + HEADER_GAP : 0;
         node.width = Math.max(textWidth + iconRoom, content.width) + PAD * 2;
         node.height = node.headerHeight + content.height + PAD * 2;
-        const above = textStyleFor(node.textAttrs, node.line).at === 'top' ? node.headerHeight : 0;
+        const style = textStyleFor(node.textAttrs, node.line);
+        if (style.end === 'center') {
+            // A container's band is at one end precisely so its contents can have the
+            // other, so the three positions that name neither end have nothing to
+            // mean here. Refused rather than rounded to an end, for the reason every
+            // other word in the language is: a value that quietly becomes a different
+            // value looks like the tool being broken.
+            throw new SourceError(`"${node.name}" holds things and its text is at: ${style.at}. A container's text sits at ` +
+                'the top or the bottom so its contents can have the other end, so name a position on ' +
+                'one of those edges', node.line);
+        }
+        const above = style.end === 'top' ? node.headerHeight : 0;
         for (const child of node.children) {
             const offset = local.get(child);
             offset.x += PAD;
@@ -3751,7 +4128,7 @@ function corridorsIn(edges, locate, measurer, fontSize) {
         // at either end. The arrowhead is charged on both sides for the same reason:
         // it covers `ARROW_LENGTH` of the line it arrives on, and reserving that at
         // one end only would move the midpoint rather than lengthen the run.
-        const extent = (axis) => textExtent(edge.text, edge.appearance, axis, measurer, fontSize, edge.line) +
+        const extent = (axis) => textExtent(edge.lines, edge.textAttrs, axis, measurer, fontSize, edge.line) +
             (TEXT_CLEARANCE + ARROW_LENGTH) * 2;
         corridors.push({ edge, from, to, need: { x: extent('x'), y: extent('y') } });
     }
@@ -4320,50 +4697,70 @@ function namedGap(node, named, line) {
     return gap;
 }
 // --- shared helpers ----------------------------------------------------------
-function widestLine(lines, measurer, fontSize) {
-    return lines.reduce((widest, line) => {
-        const { width } = measurer.measure(line, fontSize);
-        return Math.max(widest, width);
-    }, 0);
+/** The keys a bracketed attribute contributed, with its prefix taken off. */
+function bracketOf(key, attrs) {
+    const found = {};
+    for (const [written, value] of Object.entries(attrs)) {
+        if (written.startsWith(`${key}.`))
+            found[written.slice(key.length + 1)] = value;
+    }
+    return found;
 }
 /**
- * Split a text into the lines that get drawn. `/` always breaks a line. A
- * `width` attribute additionally folds each of those at word boundaries, which
- * is what stops a long note running across the whole diagram.
+ * Every style the markup in this file names, resolved to the color it lends.
  *
- * The width is a character count rather than a distance. It says how much text
+ * A style is the only thing markup may name — never a color — so that a marked
+ * word borrows a meaning the file already has instead of restating a value that
+ * goes stale the day the thing it means is recolored. Both ways that can fail
+ * are refused by name: a style nobody declared, and one that says nothing about
+ * text and so would lend nothing.
+ */
+function markupColors(nodes, edges, styles) {
+    const colors = {};
+    const used = [
+        ...nodes.map((node) => ({ lines: node.lines, what: `"${node.name}"`, line: node.line })),
+        ...edges.flatMap((edge) => edge.lines ? [{ lines: edge.lines, what: `edge ${edge.from.name} -> ${edge.to.name}`, line: edge.line }] : []),
+    ];
+    for (const { lines, what, line } of used) {
+        for (const name of markupStyles(lines)) {
+            const style = styles.get(name);
+            if (style === undefined) {
+                throw new SourceError(`${what}: its text marks [${name}], and there is no style called "${name}"`, line);
+            }
+            const color = style['text.color'];
+            if (color === undefined) {
+                throw new SourceError(`${what}: its text marks [${name}], and style "${name}" says nothing about text — ` +
+                    `write \`style ${name}  text: (color: …)\``, line);
+            }
+            colors[name] = color;
+        }
+    }
+    return colors;
+}
+/**
+ * Split a text into the lines that get drawn. ` / ` always breaks a line, and
+ * `(wrap: n)` additionally folds each of those at word boundaries, which is
+ * what stops a long note running across the whole diagram.
+ *
+ * The wrap is a character count rather than a distance. It says how much text
  * fits on a line, not where anything sits, so it stays a property of the text
  * and never becomes a coordinate in disguise.
+ *
+ * Markup is read off first, so everything downstream works in runs: a break or
+ * a fold inside a marked-up stretch carries the mark onto both lines, which is
+ * what makes markup general where the `subtext:` slice it replaced could only
+ * ever reach the tail of a text.
  */
-function linesFor(text, attrs, line) {
-    const stated = attrs['wrap'];
+function linesFor(text, textAttrs, subject, line) {
+    const lines = splitRuns(parseMarkup(text, subject, line));
+    const stated = textAttrs['wrap'];
     if (stated === undefined)
-        return splitLines(text);
+        return lines;
     const columns = Number(stated);
     if (!Number.isInteger(columns) || columns < 1) {
         throw new SourceError(`wrap must be a whole number of characters, not "${stated}"`, line);
     }
-    return splitLines(text).flatMap((part) => wrap(part, columns));
-}
-/** Fold one line onto several at word boundaries, never exceeding `columns`. */
-function wrap(text, columns) {
-    const lines = [];
-    let current = '';
-    for (const word of text.split(/\s+/).filter(Boolean)) {
-        if (current.length === 0) {
-            current = word;
-        }
-        else if (current.length + 1 + word.length <= columns) {
-            current += ` ${word}`;
-        }
-        else {
-            lines.push(current);
-            current = word;
-        }
-    }
-    if (current.length > 0)
-        lines.push(current);
-    return lines.length > 0 ? lines : [''];
+    return lines.flatMap((part) => wrapLine(part, columns));
 }
 function bounds(nodes) {
     let minX = Infinity;
@@ -4473,6 +4870,17 @@ const PATTERNS = {
     color: '#[0-9A-Fa-f]{3,8}\\b',
     relation: `(?:${alternation(RELATION_WORDS)})\\b`,
     bracket: '[()]',
+    /**
+     * A markup tag, which appears only inside a string. An editor grammar that
+     * scopes patterns should apply this one inside the string scope; the scanner
+     * below does the same thing by splitting a matched string span.
+     *
+     * The escape is `\[`, and this pattern deliberately does not exclude it —
+     * doing so needs a lookbehind, which several grammar formats lack, and a
+     * wrongly-colored escaped bracket is a much smaller wrong than a highlighter
+     * that cannot be ported.
+     */
+    markup: '\\[\\/?[A-Za-z][A-Za-z0-9_-]*\\]',
     // Matches what `tokenizeLine` treats as one bare token, and the awkwardness is
     // load-bearing rather than accidental. A `(` counts as punctuation only where
     // a token starts, so `rgb(20,20,20)` is one word — hence the first character
@@ -4596,7 +5004,16 @@ function highlightLine(line) {
                 ? 'value'
                 : rule.kind;
             expectingValue = rule.kind === 'attribute';
-            push(kind, at + text.length);
+            // A string is the one span with something inside it: markup naming a
+            // style. The spans still cover the line exactly, which is what a
+            // highlighter drawn behind a textarea needs.
+            if (rule.kind === 'string') {
+                for (const part of splitMarkup(text, at))
+                    push(part.kind, part.end);
+            }
+            else {
+                push(kind, at + text.length);
+            }
             matched = true;
             break;
         }
@@ -4606,6 +5023,26 @@ function highlightLine(line) {
             push('plain', at + 1);
     }
     return spans;
+}
+/**
+ * One string span cut into the plain stretches and the markup tags inside it.
+ * An escaped bracket is left to be colored as a tag when it looks like one,
+ * which is the wrong the pattern's doc comment accepts in exchange for being
+ * portable.
+ */
+function splitMarkup(text, from) {
+    const parts = [];
+    const tag = new RegExp(PATTERNS.markup, 'g');
+    let at = 0;
+    for (let found = tag.exec(text); found !== null; found = tag.exec(text)) {
+        if (found.index > at)
+            parts.push({ kind: 'string', end: from + found.index });
+        parts.push({ kind: 'markup', end: from + found.index + found[0].length });
+        at = found.index + found[0].length;
+    }
+    if (at < text.length || parts.length === 0)
+        parts.push({ kind: 'string', end: from + text.length });
+    return parts;
 }
 /** Every line of a source file, classified. Line endings are not included. */
 function highlight(source) {

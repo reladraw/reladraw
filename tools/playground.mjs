@@ -43,7 +43,7 @@ const OFFERED = [
   'shapes',
   'icons',
   'overlays',
-  'labels',
+  'text',
   'lanes',
   'coincident',
   'corridors',
@@ -53,7 +53,12 @@ const OFFERED = [
 const IMPORT = /^import\s+[\s\S]*?\s+from\s+'([^']+)';$/gm;
 const REEXPORT = /^export\s+(?:\*|\{[\s\S]*?\})\s+from\s+'([^']+)';$/gm;
 const EMPTY_EXPORT = /^export\s*\{\s*\};$/gm;
-const DECLARATION = /^export\s+(?:async\s+)?(function|const|let|var|class)\s+([A-Za-z0-9_$]+)/gm;
+// Every top-level declaration, exported or not. The `export` used to be
+// required here, which left the check blind to exactly the collision it exists
+// to catch: `SIDES` was exported from ast.ts and private in render.ts, the
+// bundle threw `Identifier 'SIDES' has already been declared`, and the hosted
+// playground drew nothing at all.
+const DECLARATION = /^(?:export\s+)?(?:async\s+)?(function|const|let|var|class)\s+([A-Za-z0-9_$]+)/gm;
 
 function read(name) {
   return readFileSync(join(dist, name), 'utf8');

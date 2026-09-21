@@ -32,11 +32,13 @@ import {
   fontSizeFor,
   textExtent,
   textStyleFor,
+  widestLine,
 } from './constants.js';
 import { fix, reachability, tightest, type Constraint, type Contradiction } from './constrain.js';
 import { SourceError } from './errors.js';
 import { type Body, badgeFor, bodyFor } from './icons.js';
-import { monospaceMeasurer, splitLines, type Measurer } from './measure.js';
+import { monospaceMeasurer, type Measurer } from './measure.js';
+import { markupStyles, parseMarkup, plain, splitRuns, wrapLine, type Line } from './text.js';
 import type { Layout, LayoutEdge, LayoutNode, LayoutPassage } from './model.js';
 
 export interface ResolveOptions {
@@ -85,6 +87,7 @@ export function resolve(doc: Document, options: ResolveOptions = {}): Layout {
     nodes,
     roots,
     edges,
+    markup: markupColors(nodes, edges, styles),
     diagram: collectDiagram(doc.statements),
     width: Math.ceil(extent.maxX + margin),
     height: Math.ceil(extent.maxY + margin),
@@ -139,13 +142,18 @@ function buildTree(statements: Stmt[], styles: Map<string, Attrs>) {
     // caption a row of cubes a, b, db1, c, db2. `""` then says what writing
     // nothing says, which is only true here — on a box it carries information.
     const text = body.kind === 'icon' && !stmt.statedText ? '' : stmt.text;
+    // A style has no string of its own, so it says what it has to say about a
+    // text through `text: (…)`, which arrives here under dotted keys. What the
+    // node wrote in its own brackets wins, key by key, exactly as its own
+    // attributes win over the style's.
+    const textAttrs = { ...bracketOf('text', appearance), ...stmt.textAttrs };
 
     const node: LayoutNode = {
       name: stmt.name,
       kind,
       body,
       text,
-      lines: linesFor(text, stmt.attrs, stmt.line),
+      lines: linesFor(text, textAttrs, `"${stmt.name}"`, stmt.line),
       children: [],
       x: 0,
       y: 0,
@@ -154,7 +162,7 @@ function buildTree(statements: Stmt[], styles: Map<string, Attrs>) {
       inset: 0,
       deckTexts: [],
       headerHeight: 0,
-      textAttrs: stmt.textAttrs,
+      textAttrs,
       attrs: stmt.attrs,
       appearance,
       placements: stmt.placements,
@@ -241,7 +249,8 @@ function checkAttrs(kind: Kind, name: string, attrs: Attrs, line: number): void 
   const allowed = ATTR_KEYS[kind];
   // In the author's own order, so the error names the first offending word as
   // it is read rather than the first in some list of ours.
-  for (const [key, value] of Object.entries(attrs)) {
+  for (const [written, value] of Object.entries(attrs)) {
+    const key = topKey(written);
     if (allowed.includes(key)) continue;
 
     if (!ALL_ATTR_KEYS.includes(key)) {
@@ -259,7 +268,7 @@ function checkAttrs(kind: Kind, name: string, attrs: Attrs, line: number): void 
     // list of parts it does have: `line:` on a box is a different mistake from
     // `border:` on a note, and one hint cannot serve both.
     if ((COLOR_KEYS as readonly string[]).includes(key)) {
-      const parts = COLOR_PARTS[kind].map((part) => `\`${part}:\``).join(', ');
+      const parts = COLOR_PARTS[kind].map((part) => `\`${part}\``).join(', ');
       throw new SourceError(
         `"${name}" is ${article(KIND_WORD[kind])} and has ${key}: ${value}. ${capital(article(KIND_WORD[kind]))} is ${KIND_PARTS[kind]}, so it has no ${key} — it takes ${parts}`,
         line,
@@ -303,7 +312,7 @@ function checkStyleUse(
   // A style naming another style is the one way to carry nothing at all: the
   // parser already refuses one with no attributes, and `appearanceOf` does not
   // recurse, so the name would sit there doing nothing.
-  const carried = Object.keys(base).filter((key) => key !== 'style');
+  const carried = [...new Set(Object.keys(base).map(topKey))].filter((key) => key !== 'style');
   if (carried.length === 0) {
     throw new SourceError(`style "${named}" carries nothing but a style name`, line);
   }
@@ -326,7 +335,7 @@ function checkStyleKeys(statements: Stmt[]): void {
   for (const stmt of statements) {
     if (stmt.kind !== 'style') continue;
     for (const [key, value] of Object.entries(stmt.attrs)) {
-      if (ALL_ATTR_KEYS.includes(key)) continue;
+      if (ALL_ATTR_KEYS.includes(topKey(key))) continue;
       throw new SourceError(
         `style "${stmt.name}" has ${key}: ${value}, which is not an attribute. ` +
           `The attributes are ${ALL_ATTR_KEYS.join(', ')}`,
@@ -334,6 +343,17 @@ function checkStyleKeys(statements: Stmt[]): void {
       );
     }
   }
+}
+
+/**
+ * The attribute a key belongs to. A bracketed value arrives under dotted keys —
+ * `text: (color: muted)` is stored as `text.color` — so that a style merges into
+ * a node exactly the way every other attribute does; every check above asks
+ * about the part, which is the half before the dot.
+ */
+function topKey(key: string): string {
+  const dot = key.indexOf('.');
+  return dot === -1 ? key : key.slice(0, dot);
 }
 
 /** Which kinds understand an attribute, in the order the table declares them. */
@@ -391,11 +411,15 @@ function buildEdges(
     const what = `${stmt.from} -> ${stmt.to}`;
     checkAttrs('edge', what, stmt.attrs, stmt.line);
     checkStyleUse('edge', what, stmt.attrs, styles, stmt.line);
+    const textAttrs = { ...bracketOf('text', appearance), ...stmt.textAttrs };
     edges.push({
       from,
       to,
       both: stmt.both,
-      ...(stmt.text !== undefined ? { text: stmt.text } : {}),
+      textAttrs,
+      ...(stmt.text !== undefined
+        ? { text: stmt.text, lines: linesFor(stmt.text, textAttrs, `edge ${what}`, stmt.line) }
+        : {}),
       ...(between ? { between } : {}),
       attrs: stmt.attrs,
       appearance,
@@ -426,11 +450,11 @@ function sizeNode(
   // Text is measured at the size it will be drawn at — the size lives in
   // `constants.ts` precisely so the resolver reserving the room and the
   // renderer filling it cannot disagree about how much room there is.
-  const textSize = fontSizeFor(node.kind, node.appearance, fontSize, node.line);
+  const textSize = fontSizeFor(node.kind, node.textAttrs, fontSize, node.line);
   const lineHeight = measurer.lineHeight(textSize);
   // A node with empty text takes no room for it. This is what makes an
   // invisible grouping container size to exactly its contents.
-  const hasText = node.lines.some((line) => line.length > 0);
+  const hasText = node.lines.some((line) => plain(line).length > 0);
   const textWidth = hasText ? widestLine(node.lines, measurer, textSize) : 0;
   const textHeight = hasText ? node.lines.length * lineHeight : 0;
 
@@ -474,19 +498,13 @@ function sizeNode(
   const iconRoom = icon === undefined ? 0 : iconSide + (hasText ? ICON_GAP : 0);
 
   if (node.children.length === 0) {
-    // A band only exists because contents have to sit clear of it, and a leaf
-    // has none, so `at` has no end to name. `align` is a different question and
-    // is allowed: a text of several lines has lines of unequal length in any
-    // box, and ranging them left rather than centering them is a real thing to
-    // want. It was refused here too until 2026-09-09, purely because the two
-    // words arrive in the same brackets.
-    if (node.textAttrs['at'] !== undefined) {
-      throw new SourceError(
-        `"${node.name}" holds nothing and its text carries at: ${node.textAttrs['at']}. ` +
-          `A text sits at one end of a box so its contents can have the other; with no contents there is no band for it to sit at either end of`,
-        node.line,
-      );
-    }
+    // `at` is read on a leaf too, and is inert wherever the box is exactly the
+    // size of what it holds — which is most leaves, since a leaf is sized from
+    // its own text. It bites where there is slack: a badge is two lines tall, so
+    // a one-line text beside one has a line of room to sit at either end of.
+    // Inert-but-legal stays silent here, the same treatment `align` gets on a
+    // leaf with one line.
+    textStyleFor(node.textAttrs, node.line, 'middle', 'center');
     node.width = textWidth + iconRoom + PAD * 2;
     node.height = Math.max(textHeight, iconSide) + PAD * 2;
   } else {
@@ -499,7 +517,21 @@ function sizeNode(
     node.width = Math.max(textWidth + iconRoom, content.width) + PAD * 2;
     node.height = node.headerHeight + content.height + PAD * 2;
 
-    const above = textStyleFor(node.textAttrs, node.line).at === 'top' ? node.headerHeight : 0;
+    const style = textStyleFor(node.textAttrs, node.line);
+    if (style.end === 'center') {
+      // A container's band is at one end precisely so its contents can have the
+      // other, so the three positions that name neither end have nothing to
+      // mean here. Refused rather than rounded to an end, for the reason every
+      // other word in the language is: a value that quietly becomes a different
+      // value looks like the tool being broken.
+      throw new SourceError(
+        `"${node.name}" holds things and its text is at: ${style.at}. A container's text sits at ` +
+          'the top or the bottom so its contents can have the other end, so name a position on ' +
+          'one of those edges',
+        node.line,
+      );
+    }
+    const above = style.end === 'top' ? node.headerHeight : 0;
     for (const child of node.children) {
       const offset = local.get(child)!;
       offset.x += PAD;
@@ -791,7 +823,7 @@ function corridorsIn(
     // it covers `ARROW_LENGTH` of the line it arrives on, and reserving that at
     // one end only would move the midpoint rather than lengthen the run.
     const extent = (axis: Axis): number =>
-      textExtent(edge.text!, edge.appearance, axis, measurer, fontSize, edge.line) +
+      textExtent(edge.lines!, edge.textAttrs, axis, measurer, fontSize, edge.line) +
       (TEXT_CLEARANCE + ARROW_LENGTH) * 2;
     corridors.push({ edge, from, to, need: { x: extent('x'), y: extent('y') } });
   }
@@ -1471,50 +1503,83 @@ function namedGap(node: LayoutNode, named: string | undefined, line: number): nu
 
 // --- shared helpers ----------------------------------------------------------
 
-function widestLine(lines: string[], measurer: Measurer, fontSize: number): number {
-  return lines.reduce((widest, line) => {
-    const { width } = measurer.measure(line, fontSize);
-    return Math.max(widest, width);
-  }, 0);
+/** The keys a bracketed attribute contributed, with its prefix taken off. */
+function bracketOf(key: string, attrs: Attrs): Attrs {
+  const found: Attrs = {};
+  for (const [written, value] of Object.entries(attrs)) {
+    if (written.startsWith(`${key}.`)) found[written.slice(key.length + 1)] = value;
+  }
+  return found;
 }
 
 /**
- * Split a text into the lines that get drawn. `/` always breaks a line. A
- * `width` attribute additionally folds each of those at word boundaries, which
- * is what stops a long note running across the whole diagram.
+ * Every style the markup in this file names, resolved to the color it lends.
  *
- * The width is a character count rather than a distance. It says how much text
+ * A style is the only thing markup may name — never a color — so that a marked
+ * word borrows a meaning the file already has instead of restating a value that
+ * goes stale the day the thing it means is recolored. Both ways that can fail
+ * are refused by name: a style nobody declared, and one that says nothing about
+ * text and so would lend nothing.
+ */
+function markupColors(
+  nodes: LayoutNode[],
+  edges: LayoutEdge[],
+  styles: Map<string, Attrs>,
+): Record<string, string> {
+  const colors: Record<string, string> = {};
+  const used: Array<{ lines: Line[]; what: string; line: number }> = [
+    ...nodes.map((node) => ({ lines: node.lines, what: `"${node.name}"`, line: node.line })),
+    ...edges.flatMap((edge) =>
+      edge.lines ? [{ lines: edge.lines, what: `edge ${edge.from.name} -> ${edge.to.name}`, line: edge.line }] : [],
+    ),
+  ];
+  for (const { lines, what, line } of used) {
+    for (const name of markupStyles(lines)) {
+      const style = styles.get(name);
+      if (style === undefined) {
+        throw new SourceError(
+          `${what}: its text marks [${name}], and there is no style called "${name}"`,
+          line,
+        );
+      }
+      const color = style['text.color'];
+      if (color === undefined) {
+        throw new SourceError(
+          `${what}: its text marks [${name}], and style "${name}" says nothing about text — ` +
+            `write \`style ${name}  text: (color: …)\``,
+          line,
+        );
+      }
+      colors[name] = color;
+    }
+  }
+  return colors;
+}
+
+/**
+ * Split a text into the lines that get drawn. ` / ` always breaks a line, and
+ * `(wrap: n)` additionally folds each of those at word boundaries, which is
+ * what stops a long note running across the whole diagram.
+ *
+ * The wrap is a character count rather than a distance. It says how much text
  * fits on a line, not where anything sits, so it stays a property of the text
  * and never becomes a coordinate in disguise.
+ *
+ * Markup is read off first, so everything downstream works in runs: a break or
+ * a fold inside a marked-up stretch carries the mark onto both lines, which is
+ * what makes markup general where the `subtext:` slice it replaced could only
+ * ever reach the tail of a text.
  */
-function linesFor(text: string, attrs: Attrs, line: number): string[] {
-  const stated = attrs['wrap'];
-  if (stated === undefined) return splitLines(text);
+function linesFor(text: string, textAttrs: Attrs, subject: string, line: number): Line[] {
+  const lines = splitRuns(parseMarkup(text, subject, line));
+  const stated = textAttrs['wrap'];
+  if (stated === undefined) return lines;
 
   const columns = Number(stated);
   if (!Number.isInteger(columns) || columns < 1) {
     throw new SourceError(`wrap must be a whole number of characters, not "${stated}"`, line);
   }
-  return splitLines(text).flatMap((part) => wrap(part, columns));
-}
-
-/** Fold one line onto several at word boundaries, never exceeding `columns`. */
-function wrap(text: string, columns: number): string[] {
-  const lines: string[] = [];
-  let current = '';
-
-  for (const word of text.split(/\s+/).filter(Boolean)) {
-    if (current.length === 0) {
-      current = word;
-    } else if (current.length + 1 + word.length <= columns) {
-      current += ` ${word}`;
-    } else {
-      lines.push(current);
-      current = word;
-    }
-  }
-  if (current.length > 0) lines.push(current);
-  return lines.length > 0 ? lines : [''];
+  return lines.flatMap((part) => wrapLine(part, columns));
 }
 
 function bounds(nodes: LayoutNode[]) {

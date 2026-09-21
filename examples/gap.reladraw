@@ -5,19 +5,20 @@
 diagram background: #111111
 
 style tool  fill: #191728  border: #4f5367
-style here  fill: #142814  border: #486544  subtext: muted
+style here  fill: #142814  border: #486544
+style dim   text: (color: muted)
 
-node auto "Auto-layout / placement is / an output" (at: top, align: center)  subtext: muted  align: widths
+node auto "Auto-layout / [dim]placement is / an output[/dim]" (at: top-center, align: center)  align: widths
 node auto.mermaid  "Mermaid.js"  style: tool
 node auto.graphviz "Graphviz"    below auto.mermaid (gap: tight)   left level with auto.mermaid  style: tool
 node auto.d2       "D2"          below auto.graphviz (gap: tight)  left level with auto.mermaid  style: tool
 
-node manual "Absolute / placement is / pixels" (at: top, align: center)  right of auto  level with auto  subtext: muted  align: widths
+node manual "Absolute / [dim]placement is / pixels[/dim]" (at: top-center, align: center)  right of auto  level with auto  align: widths
 node manual.drawio     "draw.io"     style: tool
 node manual.excalidraw "Excalidraw"  below manual.drawio (gap: tight)      left level with manual.drawio  style: tool
 node manual.figma      "Figma"       below manual.excalidraw (gap: tight)  left level with manual.drawio  style: tool
 
-node here "reladraw / placement is / stated"  right of auto  left of manual  level with auto  style: here
+node here "reladraw / [dim]placement is / stated[/dim]"  right of auto  left of manual  level with auto  style: here
 
 edge auto -> here    from: right  to: left
 edge here -> manual  from: right  to: left

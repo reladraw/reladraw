@@ -148,7 +148,7 @@ function parseTail(
   while (i < tokens.length) {
     const token = tokens[i]!;
     if (isAttrKey(token)) {
-      i = readAttr(tokens, i, attrs, line);
+      i = readAttr(tokens, i, attrs, line, subject);
       continue;
     }
     const taken = other?.(tokens, i);
@@ -164,10 +164,49 @@ function parseTail(
   return { attrs, placements };
 }
 
+/**
+ * The attribute keys whose value is a bracket rather than a word, and what may
+ * be written inside it. Only `text:` today: a style has no string for a text's
+ * bracket to hang off, so the bracket hangs off the key instead.
+ */
+const BRACKET_KEYS: Record<string, readonly string[]> = { text: TEXT_KEYS };
+
+/**
+ * The top-level keys that moved into the text's bracket in 0.3.0, and the
+ * substitution each one gets. They are properties of a node's *text* and never
+ * of the node, and leaving them at the top level is what let `size:` sit beside
+ * `fill:` as though the two were the same sort of statement.
+ */
+const MOVED_INTO_BRACKET = ['size', 'wrap', 'align'] as const;
+
 /** Read one `key: value` pair, and refuse the words that used to be keys. */
-function readAttr(tokens: Token[], at: number, attrs: Attrs, line: number): number {
+function readAttr(
+  tokens: Token[],
+  at: number,
+  attrs: Attrs,
+  line: number,
+  subject: string,
+): number {
   const keyToken = tokens[at]!;
   const key = keyToken.text.slice(0, -1);
+  const bracketKeys = BRACKET_KEYS[key];
+  if (bracketKeys !== undefined && follows(tokens, at + 1, '(')) {
+    // `text: (color: muted)` — the whole bracket belongs to one part, and it is
+    // stored under dotted keys so that a style merges into a node exactly the
+    // way every other attribute does.
+    const read = readBracket(tokens, at + 1, bracketKeys, {
+      subject,
+      what: `\`${key}:\``,
+      kind: 'a text',
+      example: 'color: muted',
+      line,
+    });
+    if (Object.keys(read.values).length === 0) {
+      throw new SourceError(`${subject}: \`${key}:\` opens empty brackets`, line);
+    }
+    for (const [inner, value] of Object.entries(read.values)) attrs[`${key}.${inner}`] = value;
+    return read.next;
+  }
   const valueToken = tokens[at + 1];
   if (!valueToken || isAttrKey(valueToken) || valueToken.text === ')') {
     throw new SourceError(`attribute "${key}" has no value`, line);
@@ -179,18 +218,46 @@ function readAttr(tokens: Token[], at: number, attrs: Attrs, line: number): numb
     // Refused by name rather than ignored: an older file must be told what
     // to write, not silently drawn without its colors.
     throw new SourceError(
-      '`stroke:` has been replaced by the part it colors — `border:` on a node, `text:` on a node with no body or an icon body, `line:` on an edge. A style shared between nodes and edges writes both, as in `border: #d2904e  line: #d2904e`',
+      '`stroke:` has been replaced by the part it colors — `border:` on a node, `text: (color: …)` on the text of anything, `line:` on an edge. A style shared between nodes and edges writes both, as in `border: #d2904e  line: #d2904e`',
       line,
     );
   }
   if (key === 'width') {
-    // Renamed 2026-09-09. It folds a text every n *characters* and never
-    // said how wide anything is, so `width: 200` meaning units was accepted,
-    // wrapped at 200 characters, and did nothing visible — the silent drop
-    // this vocabulary is otherwise free of. Refused by name for the reason
-    // `stroke:` is: an older file must be told, not quietly drawn unwrapped.
+    // Renamed 2026-09-09, and moved into the text's bracket in 0.3.0.
     throw new SourceError(
-      '`width:` is now `wrap:`, because it folds the text every n characters and says nothing about how wide anything is',
+      '`width:` is now `wrap:` and belongs to the text — it folds the text every n characters and says nothing about how wide anything is, so write it as `"…" (wrap: 30)`',
+      line,
+    );
+  }
+  if (key === 'subtext') {
+    // Removed in 0.3.0. It colored "every line after the first", which is a
+    // positional slice: the rule lived in a style elsewhere in the file and was
+    // applied by counting, so a reader of the text could not see it. Markup
+    // says what is quiet where it is quiet, and reaches a word in the middle of
+    // a line, which the slice never could.
+    throw new SourceError(
+      '`subtext:` has been replaced by markup in the text — write `style dim  text: (color: muted)` ' +
+        'and mark the quiet words as `"Dropbox / [dim]synced[/dim]"`',
+      line,
+    );
+  }
+  if (key === 'text') {
+    // `text:` is the text's bracket now, so a bare word after it is either the
+    // old color key or an attempt to set the words themselves. The quotes tell
+    // the two apart, and they want different remedies.
+    throw new SourceError(
+      valueToken.quoted
+        ? `\`text:\` is how a style says something about text, not how anything sets it — write the words in quotes after the name, as in \`node name ${quoteOf(valueToken.text)}\``
+        : `\`text:\` takes the text's properties in brackets — write \`text: (color: ${valueToken.text})\` in a style, and \`(color: ${valueToken.text})\` in the brackets after a node's or an edge's own text`,
+      line,
+    );
+  }
+  // `align: widths` is the contents key and still belongs to the node; every
+  // other `align` is the text ranging its lines, which moved into the bracket.
+  if ((MOVED_INTO_BRACKET as readonly string[]).includes(key) && !(key === 'align' && valueToken.text === 'widths')) {
+    throw new SourceError(
+      `\`${key}:\` belongs to the text rather than to the node — write it in the brackets after ` +
+        `the text, as in \`"…" (${key}: ${valueToken.text})\`, or as \`text: (${key}: ${valueToken.text})\` in a style`,
       line,
     );
   }
@@ -198,27 +265,12 @@ function readAttr(tokens: Token[], at: number, attrs: Attrs, line: number): numb
     // A quoted value is the author saying "this is text", and every one of
     // these keys takes a color. Without this the string is passed through as
     // a color, turns out not to be one, and nothing is drawn and nothing is
-    // said. Name the likely intent rather than only the rule: the qualifier
-    // under a name is a second text line, not a `subtext` value.
+    // said.
     if (valueToken.text.startsWith('#')) {
       // A hex color that was merely quoted. The author wrote a color and the
       // remedy is punctuation, so say that rather than that it is not one.
       throw new SourceError(
         `a color is written without quotes — "${key}: ${valueToken.text}"`,
-        line,
-      );
-    }
-    // `text:` is the color of a text, not the text itself, and that is a
-    // mistake worth naming rather than only refusing — the word invites it.
-    if (key === 'text') {
-      throw new SourceError(
-        `\`text:\` colors a node's text rather than setting it — write the words in quotes after the name, as in \`node name ${quoteOf(valueToken.text)}\``,
-        line,
-      );
-    }
-    if (key === 'subtext') {
-      throw new SourceError(
-        `\`subtext:\` colors a node's later text lines rather than setting them — write them into the text, as in \`"Name / ${valueToken.text}"\`, and \`subtext: muted\` to make them quieter`,
         line,
       );
     }
@@ -243,9 +295,29 @@ function attrsOnly(tokens: Token[], start: number, line: number, subject: string
         line,
       );
     }
-    i = readAttr(tokens, i, attrs, line);
+    i = readAttr(tokens, i, attrs, line, subject);
   }
   return attrs;
+}
+
+/** Everything a text takes, less the one word that needs a box to sit in. */
+const EDGE_TEXT_KEYS = TEXT_KEYS.filter((key) => key !== 'at');
+
+/**
+ * `text:` is how a *style* says something about the text of whatever wears it,
+ * because a style has no string of its own. A node and an edge do, so they say
+ * it in the brackets after that string, and there is one spelling per place.
+ */
+function refuseTextKey(attrs: Attrs, subject: string, where: string, line: number): void {
+  for (const key of Object.keys(attrs)) {
+    if (!key.startsWith('text.')) continue;
+    const inner = key.slice('text.'.length);
+    throw new SourceError(
+      `${subject}: \`text: (…)\` is how a style says it, having no text of its own. This has one, ` +
+        `so write \`(${inner}: ${attrs[key]})\` in the brackets ${where}`,
+      line,
+    );
+  }
 }
 
 /**
@@ -290,6 +362,7 @@ function parseNode(head: Token[], line: number): NodeStmt {
     line,
   });
   const tail = parseTail(head, bracket.next, line, subject);
+  refuseTextKey(tail.attrs, subject, 'after the name', line);
   return {
     kind: 'node',
     name,
@@ -329,6 +402,17 @@ function parseEdge(head: Token[], line: number): EdgeStmt {
   if (textToken) at += 1;
 
   const subject = `edge ${left} ${arrow.text} ${rightToken.text}`;
+  // An edge's text takes the same bracket a node's does, less `at:`: a node's
+  // text sits somewhere in a box and an edge's rides at the middle of its line,
+  // so there is no position to name until a diagram asks for one.
+  const bracket = readBracket(head, at, EDGE_TEXT_KEYS, {
+    subject,
+    what: 'the text',
+    kind: "an edge's text",
+    example: 'color: muted',
+    line,
+  });
+  at = bracket.next;
   let between: Passage | undefined;
 
   // An edge is not placed, so its tail holds attributes and the one clause that
@@ -368,8 +452,11 @@ function parseEdge(head: Token[], line: number): EdgeStmt {
     );
   }
 
+  refuseTextKey(tail.attrs, subject, 'after the arrow', line);
+
   return {
     kind: 'edge',
+    textAttrs: bracket.values,
     from: back ? rightToken.text : left,
     to: back ? left : rightToken.text,
     both: arrow.text === '<->',

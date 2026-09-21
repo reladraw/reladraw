@@ -11,13 +11,15 @@ import {
   fontSizeFor,
   textExtent,
   textStyleFor,
+  widestLine,
 } from './constants.js';
-import type { Axis } from './ast.js';
+import type { Attrs, Axis } from './ast.js';
 import { describeAxis } from './ast.js';
 import { SourceError } from './errors.js';
 import { ICON_STROKE, badgeFor, type Icon, type IconTone, type Outline } from './icons.js';
 import { monospaceMeasurer, type Measurer } from './measure.js';
 import type { Layout, LayoutEdge, LayoutNode } from './model.js';
+import { plain, type Line, type Run } from './text.js';
 
 export interface RenderOptions {
   measurer?: Measurer;
@@ -87,7 +89,7 @@ export function render(layout: Layout, options: RenderOptions = {}): string {
 
   const body: string[] = [];
   for (const root of layout.roots) {
-    body.push(drawNode(root, theme, measurer, fontSize));
+    body.push(drawNode(root, theme, measurer, fontSize, layout.markup));
   }
   // Everything the boxes cover. Edges are added to it as they are drawn.
   let ink: Extent = { minX: 0, minY: 0, maxX: layout.width, maxY: layout.height };
@@ -99,7 +101,7 @@ export function render(layout: Layout, options: RenderOptions = {}): string {
   const corridors = planCorridors(layout.edges, ends, measurer, fontSize);
   aimFreeEnds(layout.edges, ends, corridors);
   for (const edge of layout.edges) {
-    const drawn = drawEdge(edge, ends.get(edge)!, corridors.get(edge), theme, measurer, fontSize);
+    const drawn = drawEdge(edge, ends.get(edge)!, corridors.get(edge), theme, measurer, fontSize, layout.markup);
     body.push(drawn.svg);
     ink = union(ink, grow(drawn.ink, layout.margin));
   }
@@ -136,38 +138,49 @@ function drawNode(
   theme: Theme,
   measurer: Measurer,
   fontSize: number,
+  markup: Record<string, string>,
 ): string {
   // A note is set smaller than a box text by default, and `size:` overrides
   // that on anything. Only this node's own text takes the size — children are
   // drawn by their own call and carry whatever they say themselves.
-  const size = fontSizeFor(node.kind, node.appearance, fontSize, node.line);
+  const size = fontSizeFor(node.kind, node.textAttrs, fontSize, node.line);
   const textHeight = measurer.lineHeight(size);
+  const blockWidth = widestLine(node.lines, measurer, size);
+  const ink = (run: Run, own: string) => runInk(run, own, markup, theme);
 
   if (node.body.kind === 'none') {
+    const style = textStyleFor(node.textAttrs, node.line, 'start', 'center');
     return sized(
       textBlock(node.lines, node.x, node.y, node.width, textHeight, size, {
-        color: textOf(node.appearance, theme.text),
-        align: 'start',
+        color: textColorOf(node.textAttrs, theme, theme.text),
+        align: style.align,
+        side: style.side,
+        blockWidth,
+        ink,
       }),
       size,
       fontSize,
     );
   }
 
-  const textStyle = textStyleFor(node.textAttrs, node.line);
   const glyphSide = ICON_LINES * textHeight;
 
   if (node.body.kind === 'icon') {
     // No outline, no fill, no padding — the node is the picture. The text, if
-    // there is one, sits under it and centered.
+    // there is one, sits under it. `at`'s vertical half has nothing to say
+    // here — the caption is under the picture and nowhere else — so only its
+    // horizontal half is read.
+    const style = textStyleFor(node.textAttrs, node.line, 'middle', 'center');
     const drawn = [drawIcon(node.body.icon, node.x + (node.width - glyphSide) / 2, node.y, glyphSide, theme)];
-    if (node.lines.some((line) => line.length > 0)) {
+    if (node.lines.some((line) => plain(line).length > 0)) {
       drawn.push(
         sized(
           textBlock(node.lines, node.x, node.y + glyphSide + ICON_GAP, node.width, textHeight, size, {
-            color: textOf(node.appearance, theme.text),
-            subColor: subtextOf(node.appearance, theme),
-            align: 'middle',
+            color: textColorOf(node.textAttrs, theme, theme.text),
+            align: style.align,
+            side: style.side,
+            blockWidth,
+            ink,
           }),
           size,
           fontSize,
@@ -185,8 +198,7 @@ function drawNode(
   const fill = fillOf(node.appearance, container ? theme.containerFill : theme.boxFill);
   // A box is the one kind with two inkable parts, which is why its text needs
   // a word of its own — `border:` cannot stand in for it.
-  const text = textOf(node.appearance, theme.text);
-  const subColor = subtextOf(node.appearance, theme);
+  const text = textColorOf(node.textAttrs, theme, theme.text);
 
   // Deck copies sit behind the front face, furthest back drawn first.
   for (let depth = node.deckTexts.length; depth >= 1; depth -= 1) {
@@ -199,9 +211,12 @@ function drawNode(
     if (copy !== undefined) {
       parts.push(
         sized(
-          textBlock([copy], x + PAD, y + PAD, face.width - PAD * 2, textHeight, size, {
+          textBlock([[{ text: copy }]], x + PAD, y + PAD, face.width - PAD * 2, textHeight, size, {
             color: text,
             align: 'start',
+            side: 'left',
+            blockWidth: face.width - PAD * 2,
+            ink,
           }),
           size,
           fontSize,
@@ -221,22 +236,32 @@ function drawNode(
   // left, which is the room the resolver already reserved for exactly this.
   const icon = badgeFor(node.appearance, node.line);
   const iconSide = icon === undefined ? 0 : glyphSide;
-  const hasText = node.lines.some((line) => line.length > 0);
+  const hasText = node.lines.some((line) => plain(line).length > 0);
   const iconRoom = icon === undefined ? 0 : iconSide + (hasText ? ICON_GAP : 0);
+  // A leaf's text defaults to the middle of its box, a container's to the top
+  // left of the band; both then read `at` for where it really goes.
+  const textStyle = textStyleFor(
+    node.textAttrs,
+    node.line,
+    container ? 'start' : 'middle',
+    container ? 'top-left' : 'center',
+  );
+  const textDepth = node.lines.length * textHeight;
 
   if (!container) {
-    // A leaf centers its text in the box, both ways — in the room beside the
-    // icon rather than the whole box, so the two sit side by side. Centered
-    // across is only the default: a text of several lines may say `align`, and
-    // there is genuine slack between lines of unequal length to range them in.
-    const leafAlign = textStyleFor(node.textAttrs, node.line, 'middle').align;
-    const top = face.y + (face.height - node.lines.length * textHeight) / 2;
+    // A leaf's text sits in the room beside the badge rather than in the whole
+    // box, so the two sit side by side. Wherever the box is exactly the size of
+    // what it holds there is no slack and `at` changes nothing; a badge is two
+    // lines tall, so a shorter text beside one has room to move.
+    const top = leafTop(textStyle.end, face.y, face.height, textDepth);
     parts.push(
       sized(
         textBlock(node.lines, face.x, top, face.width - iconRoom, textHeight, size, {
           color: text,
-          subColor,
-          align: leafAlign,
+          align: textStyle.align,
+          side: textStyle.side,
+          blockWidth,
+          ink,
         }),
         size,
         fontSize,
@@ -244,23 +269,24 @@ function drawNode(
     );
   } else {
     // The text and the icon share a band at one end of the box, and the
-    // resolver has already given the contents the other end. A heading is
-    // ranged left at the top; a caption is centered at the bottom.
-    const band = Math.max(node.lines.length * textHeight, iconSide);
-    const bandTop = textStyle.at === 'top' ? face.y + PAD : face.y + face.height - PAD - band;
+    // resolver has already given the contents the other end.
+    const band = Math.max(textDepth, iconSide);
+    const bandTop = textStyle.end === 'top' ? face.y + PAD : face.y + face.height - PAD - band;
     parts.push(
       sized(
         textBlock(node.lines, face.x + PAD, bandTop, face.width - PAD * 2 - iconRoom, textHeight, size, {
           color: text,
-          subColor,
           align: textStyle.align,
+          side: textStyle.side,
+          blockWidth,
+          ink,
         }),
         size,
         fontSize,
       ),
     );
     for (const child of node.children) {
-      parts.push(drawNode(child, theme, measurer, fontSize));
+      parts.push(drawNode(child, theme, measurer, fontSize, markup));
     }
   }
 
@@ -271,10 +297,10 @@ function drawNode(
     // keeps an icon reading as part of the title block and not as a sticker.
     const left = face.x + face.width - PAD - iconSide;
     const top = container
-      ? textStyle.at === 'top'
+      ? textStyle.end === 'top'
         ? face.y + PAD
         : face.y + face.height - PAD - iconSide
-      : face.y + (face.height - iconSide) / 2;
+      : leafTop(textStyle.end, face.y, face.height, iconSide);
     parts.push(drawIcon(icon, left, top, iconSide, theme));
   }
 
@@ -363,6 +389,7 @@ function drawEdge(
   theme: Theme,
   measurer: Measurer,
   fontSize: number,
+  markup: Record<string, string>,
 ): { svg: string; ink: Extent } {
   const { start, end } = ends;
   const color = lineOf(edge.appearance, theme.edge);
@@ -443,9 +470,10 @@ function drawEdge(
     // An edge text breaks on ` / ` exactly as a box text does, so a two-line
     // caption on an arrow needs no vocabulary of its own. The block is centered
     // on the midpoint, which keeps a one-line text where it has always been.
-    const size = fontSizeFor('edge', edge.appearance, fontSize, edge.line);
+    const size = fontSizeFor('edge', edge.textAttrs, fontSize, edge.line);
     const textHeight = measurer.lineHeight(size);
-    const { width, lines } = measurer.measure(edge.text, size);
+    const lines = edge.lines!;
+    const width = widestLine(lines, measurer, size);
     const height = lines.length * textHeight;
     const top = midY - height / 2;
     // The text knocks a hole in whatever it lands on rather than sitting in a
@@ -465,8 +493,11 @@ function drawEdge(
         textBlock(lines, midX - width / 2, top, width, textHeight, size, {
           // A colored edge carries its meaning into its text; an uncolored
           // one leaves the words to read as ordinary text.
-          color: textOf(edge.appearance, lineOf(edge.appearance, theme.text)),
+          color: textColorOf(edge.textAttrs, theme, lineOf(edge.appearance, theme.text)),
           align: 'middle',
+          side: 'center',
+          blockWidth: width,
+          ink: (run, own) => runInk(run, own, markup, theme),
         }),
         size,
         fontSize,
@@ -558,8 +589,11 @@ function sidePoint(box: Box, toward: { x: number; y: number }): { x: number; y: 
 
 // --- where an edge meets a box -------------------------------------------------
 
-const SIDES = ['top', 'bottom', 'left', 'right'] as const;
-type Side = (typeof SIDES)[number];
+// The four sides an edge may attach to. Deliberately not `ATTACH_SIDES` from
+// `ast.ts`, which carries `center` as well because an alignment can share a
+// center line and an attachment cannot sit on one.
+const ATTACH_SIDES = ['top', 'bottom', 'left', 'right'] as const;
+type AttachSide = (typeof ATTACH_SIDES)[number];
 
 /** A point on a box's border, with the outward direction the line takes there. */
 interface Anchor {
@@ -569,7 +603,7 @@ interface Anchor {
   tx: number;
   ty: number;
   /** The side the author named, or undefined when the renderer chose the point. */
-  side?: Side;
+  side?: AttachSide;
 }
 
 interface EdgeEnds {
@@ -587,7 +621,7 @@ interface EdgeEnds {
 interface Claim {
   edge: LayoutEdge;
   which: 'start' | 'end';
-  side: Side;
+  side: AttachSide;
   /** Where the far end of this edge sits, which is what orders claims along the side. */
   toward: { x: number; y: number };
   /**
@@ -631,7 +665,7 @@ interface Bundle {
 
 interface BundleEnd {
   node: LayoutNode;
-  side: Side;
+  side: AttachSide;
 }
 
 /**
@@ -653,8 +687,8 @@ function planEndpoints(
   measurer: Measurer,
   fontSize: number,
 ): Map<LayoutEdge, EdgeEnds> {
-  const claims = new Map<LayoutNode, Map<Side, Claim[]>>();
-  const achieved = new Map<LayoutNode, Map<Side, number>>();
+  const claims = new Map<LayoutNode, Map<AttachSide, Claim[]>>();
+  const achieved = new Map<LayoutNode, Map<AttachSide, number>>();
   const named = new Map<LayoutEdge, { start?: Anchor; end?: Anchor }>();
   const bundles = planBundles(edges, measurer, fontSize);
   const spreads = planSpreads(edges, measurer, fontSize);
@@ -984,7 +1018,7 @@ function planSpreads(
  */
 function bowBundles(
   bundles: Map<LayoutEdge, Bundle>,
-  achieved: Map<LayoutNode, Map<Side, number>>,
+  achieved: Map<LayoutNode, Map<AttachSide, number>>,
 ): Map<LayoutEdge, { x: number; y: number }> {
   const bows = new Map<LayoutEdge, { x: number; y: number }>();
   const stepOn = (end: BundleEnd): number => achieved.get(end.node)?.get(end.side) ?? 0;
@@ -1034,7 +1068,7 @@ function laneStep(
   const need = (axis: Axis): number =>
     Math.max(
       ...withText.map((edge) =>
-        textExtent(edge.text!, edge.appearance, axis, measurer, fontSize, edge.line),
+        textExtent(edge.lines!, edge.textAttrs, axis, measurer, fontSize, edge.line),
       ),
     );
 
@@ -1048,7 +1082,7 @@ function rankIn(
   bundle: Bundle | undefined,
   edge: LayoutEdge,
   node: LayoutNode,
-  side: Side,
+  side: AttachSide,
 ): number | undefined {
   if (!bundle) return undefined;
   const lane = bundle.lanes.indexOf(edge);
@@ -1059,7 +1093,7 @@ function rankIn(
 }
 
 /** The unit vector along a side, pointing the way that coordinate increases. */
-function tangentOf(side: Side): { x: number; y: number } {
+function tangentOf(side: AttachSide): { x: number; y: number } {
   return side === 'top' || side === 'bottom' ? { x: 1, y: 0 } : { x: 0, y: 1 };
 }
 
@@ -1076,9 +1110,9 @@ function cross(a: { x: number; y: number }, b: { x: number; y: number }): number
 }
 
 function claim(
-  claims: Map<LayoutNode, Map<Side, Claim[]>>,
+  claims: Map<LayoutNode, Map<AttachSide, Claim[]>>,
   node: LayoutNode,
-  side: Side,
+  side: AttachSide,
   entry: Claim,
 ): void {
   let bySide = claims.get(node);
@@ -1092,7 +1126,7 @@ function claim(
 }
 
 /** The point `at` along one side of a box, with the outward normal for that side. */
-function anchorOn(face: Box, side: Side, at: number): Anchor {
+function anchorOn(face: Box, side: AttachSide, at: number): Anchor {
   switch (side) {
     case 'top':
       return { x: at, y: face.y, tx: 0, ty: -1, side };
@@ -1406,8 +1440,8 @@ function laneExtent(
   measurer: Measurer,
   fontSize: number,
 ): number {
-  if (edge.text === undefined) return 0;
-  return textExtent(edge.text, edge.appearance, axis, measurer, fontSize, edge.line);
+  if (edge.lines === undefined) return 0;
+  return textExtent(edge.lines, edge.textAttrs, axis, measurer, fontSize, edge.line);
 }
 
 function corridorPoint(plan: Corridor, at: number): Point {
@@ -1468,16 +1502,16 @@ function corridorReach(from: Point, to: Point, axis: Axis): number {
   return Math.min(140, Math.max(8, Math.min(distance * 0.4, run / 2)));
 }
 
-function sideAttr(edge: LayoutEdge, key: 'from' | 'to'): Side | undefined {
+function sideAttr(edge: LayoutEdge, key: 'from' | 'to'): AttachSide | undefined {
   const value = edge.attrs[key];
   if (value === undefined) return undefined;
-  if (!(SIDES as readonly string[]).includes(value)) {
+  if (!(ATTACH_SIDES as readonly string[]).includes(value)) {
     throw new SourceError(
-      `"${key}: ${value}" is not a side — use ${SIDES.join(', ')}`,
+      `"${key}: ${value}" is not a side — use ${ATTACH_SIDES.join(', ')}`,
       edge.line,
     );
   }
-  return value as Side;
+  return value as AttachSide;
 }
 
 function arrowMarker(color: string): string {
@@ -1529,28 +1563,108 @@ function sized(block: string, size: number, fontSize: number): string {
   return `  <g font-size="${size}px">\n${block}\n  </g>`;
 }
 
+/**
+ * Draw a block of text into the room it was given.
+ *
+ * Two independent questions, which is why there are two words for them. `side`
+ * is where the block sits across that room, from the horizontal half of the
+ * text's `at`. `align` is how the block's own lines range against each other,
+ * which matters whenever they are of unequal length and is a different thing
+ * from where the block is.
+ *
+ * Where the block is as wide as the room — which is every text whose box is
+ * sized from it, so nearly all of them — the two coincide and `side` changes
+ * nothing.
+ */
 function textBlock(
-  lines: string[],
+  lines: Line[],
   x: number,
   top: number,
   width: number,
   lineHeight: number,
   fontSize: number,
-  style: { color: string; subColor?: string | undefined; align: 'start' | 'middle' | 'end' },
+  style: {
+    color: string;
+    align: 'start' | 'middle' | 'end';
+    side: 'left' | 'center' | 'right';
+    blockWidth: number;
+    ink: (run: Run, own: string) => string;
+  },
 ): string {
+  const blockLeft =
+    style.side === 'left'
+      ? x
+      : style.side === 'right'
+        ? x + width - style.blockWidth
+        : x + (width - style.blockWidth) / 2;
   const anchorX =
-    style.align === 'middle' ? x + width / 2 : style.align === 'end' ? x + width : x;
+    style.align === 'middle'
+      ? blockLeft + style.blockWidth / 2
+      : style.align === 'end'
+        ? blockLeft + style.blockWidth
+        : blockLeft;
   return lines
     .map((line, index) => {
-      if (line.length === 0) return '';
+      if (plain(line).length === 0) return '';
       const baseline = top + index * lineHeight + lineHeight / 2 + fontSize * 0.35;
-      // A text's first line is its name; anything after it is a qualifier, and
-      // `subtext:` is how a box says that qualifier should read as secondary.
-      const color = index === 0 ? style.color : style.subColor ?? style.color;
-      return `  <text x="${round(anchorX)}" y="${round(baseline)}" fill="${color}" text-anchor="${style.align}">${escapeXml(line)}</text>`;
+      // One `<text>` per line, with a `<tspan>` per run inside it, so the runs
+      // flow from the line's own anchor and a mark never moves a character.
+      // A line drawn in one color says so on the `<text>` and emits no spans at
+      // all, which is what keeps a whole quiet line identical to what the
+      // `subtext:` it replaced produced.
+      const colors = line.map((run) => style.ink(run, style.color));
+      const uniform = colors.every((color) => color === colors[0]);
+      const body = uniform
+        ? escapeXml(plain(line))
+        : line
+            .map((run, run_index) =>
+              colors[run_index] === style.color
+                ? escapeXml(run.text)
+                : `<tspan fill="${colors[run_index]}">${escapeXml(run.text)}</tspan>`,
+            )
+            .join('');
+      return `  <text x="${round(anchorX)}" y="${round(baseline)}" fill="${uniform ? colors[0] ?? style.color : style.color}" text-anchor="${style.align}">${body}</text>`;
     })
     .filter((element) => element.length > 0)
     .join('\n');
+}
+
+/** Where a leaf's text or badge starts vertically, given which end it sits at. */
+function leafTop(end: 'top' | 'center' | 'bottom', y: number, height: number, own: number): number {
+  if (end === 'top') return y + PAD;
+  if (end === 'bottom') return y + height - PAD - own;
+  return y + (height - own) / 2;
+}
+
+/**
+ * The color a marked-up run is drawn in. The mark names a *style*, never a
+ * color, so the word borrows a meaning the file already has rather than
+ * restating a value that goes stale the day the thing it means is recolored.
+ * The resolver has already refused a mark naming a style that does not exist or
+ * that says nothing about text.
+ */
+function runInk(
+  run: Run,
+  own: string,
+  markup: Record<string, string>,
+  theme: Theme,
+): string {
+  if (run.style === undefined) return own;
+  return namedColor(markup[run.style]!, theme);
+}
+
+/**
+ * A text's own color. `muted` is the one reserved word: it defers to the theme,
+ * so a quiet line stays readable when the theme changes. Anything else is a
+ * color, the same as `fill:` and `border:` take.
+ */
+function textColorOf(textAttrs: Attrs, theme: Theme, fallback: string): string {
+  const value = textAttrs['color'];
+  return value === undefined ? fallback : namedColor(value, theme);
+}
+
+function namedColor(value: string, theme: Theme): string {
+  return value === 'muted' ? theme.mutedText : value;
 }
 
 /**
@@ -1568,23 +1682,6 @@ function borderOf(appearance: Record<string, string>, fallback: string): string 
 
 function lineOf(appearance: Record<string, string>, fallback: string): string {
   return appearance['line'] ?? fallback;
-}
-
-function textOf(appearance: Record<string, string>, fallback: string): string {
-  return appearance['text'] ?? fallback;
-}
-
-/**
- * The color for every text line after the first, or undefined when the box
- * said nothing and all its lines should read alike. `muted` is the one reserved
- * word: it defers to the theme, so a text's qualifier stays readable when the
- * theme changes. Anything else is a color, same as `text` and `fill` take.
- */
-function subtextOf(appearance: Record<string, string>, theme: Theme): string | undefined {
-  const named = appearance['subtext'];
-  if (named === undefined) return undefined;
-  if (named === 'muted') return theme.mutedText;
-  return named;
 }
 
 function fillOf(appearance: Record<string, string>, fallback: string): string {

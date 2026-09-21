@@ -265,6 +265,11 @@
       .t-bracket {
         color: var(--syn-comment);
       }
+      /* A mark inside a text. Drawn in the bracket color for the same reason
+         brackets are: it is punctuation around the words, not the words. */
+      .t-markup {
+        color: var(--syn-comment);
+      }
 
       /* The cheatsheet. Closed it is one line; open it takes height off the
          editor rather than off the diagram, because it is answering a question
@@ -471,11 +476,7 @@
               <code>style: <i>name</i></code>
               <code>fill: #191728</code>
               <code>border: none</code>
-              <code>text: #d9d9d9</code>
               <code>line: #d2904e</code> <i>(an edge)</i>
-              <code>subtext: muted</code><br />
-              <code>size: small|normal|large</code>
-              <code>wrap: 24</code> <i>(characters, folds the text)</i>
               <code>align: widths</code>
               <code>overlap: allow</code>
             </dd>
@@ -490,10 +491,19 @@
               <code>package</code> <code>cubes</code> <code>cube</code> <code>database</code>.
             </dd>
 
-            <dt>Labels</dt>
+            <dt>Text</dt>
             <dd>
-              <code>"Docker" (at: bottom, align: center)</code> on a container's text.
-              <code>" / "</code> in any text is a line break; <code>\/</code> is a literal slash.
+              Everything a text says about itself goes in brackets after it:
+              <code>"Docker" (at: bottom-center, align: center)</code>
+              <code>(color: muted)</code>
+              <code>(size: small|normal|large)</code>
+              <code>(wrap: 24)</code> <i>(characters, folds the text)</i>.
+              <code>at:</code> takes the nine positions above. In a style, which has no
+              text of its own, the bracket hangs off the key:
+              <code>text: (color: muted)</code>.<br />
+              <code>" / "</code> in any text is a line break; <code>\/</code> is a literal slash.<br />
+              <code>"name / <b>[dim]</b>quieter<b>[/dim]</b>"</code> draws those words in the
+              text color of <code>style dim</code>; <code>\[</code> is a literal bracket.
             </dd>
 
             <dt>Links</dt>

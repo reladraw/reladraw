@@ -52,12 +52,12 @@ Nothing says how far apart `hub` and `side` are. Delete `wedge` and they close b
 
 One statement per line. No blocks, no continuations, no significant indentation. `//` starts a comment and may trail a statement.
 
-A statement is a positional head — the keyword, a name, then a text — followed by attributes and placements **in any order**. A token ending in a colon opens an attribute and nothing else does, so `node n "text" wrap: 30 below worker` and `node n "text" below worker wrap: 30` are the same statement.
+A statement is a positional head — the keyword, a name, then a text — followed by attributes and placements **in any order**. A token ending in a colon opens an attribute and nothing else does, so `node n "text" gap: wide below worker` and `node n "text" below worker gap: wide` are the same statement.
 
 ### Nodes
 
 ```
-node <name> ["<text>"] [<placement> ...] [attributes]
+node <name> ["<text>" [(<text properties>)]] [<placement> | <attribute>] ...
 ```
 
 Leave the text out and the node takes its own name as its text (`node parser` draws a node reading "parser"). Write `""` for a deliberately blank node. Inside text, ` / ` — a slash with a space on each side — is a line break; a slash without spaces is an ordinary character, so `TCP/IP` and URLs survive.
@@ -72,7 +72,28 @@ node server.worker "Worker"
 
 A container with `""` and `fill: none  border: none` draws nothing and takes no room of its own, which is how you make a group that can be placed against as one shape.
 
-Node attributes: `style`, `fill`, `border` and `text` (each a color), `subtext` (**a color, not text** — it colors every text line after the first, so a node carries its qualifier as a second line of its own text and `subtext` only makes that line quieter; `muted` is the usual value), `size` (`small | normal | large`), `shape`, `icon`, `badge`, `wrap` (fold the text every n characters), `gap`, `overlap: allow`, and `align: widths` on a container.
+Node attributes: `style`, `fill` and `border` (each a color), `shape`, `icon`, `badge`, `gap`, `overlap: allow`, and `align: widths` on a container.
+
+### The text and its brackets
+
+Everything a text says about *itself* goes in brackets after it, never among the node's attributes: `color`, `size` (`small | normal | large`), `wrap` (fold every n characters), `align` (`left | center | right`, how the lines range against each other) and `at` (where the block sits, named from the nine positions — `top-left`, `bottom-center`, `center` and the rest).
+
+```
+node docker "Docker" (at: bottom-center, align: center)  below deploy
+node aside  "a longer remark that folds" (size: small, wrap: 30)  shape: none
+edge a -> b "rclone" (color: muted)
+```
+
+An edge's text takes the same keys less `at`. A **style** has no text of its own, so it hangs the bracket off a key: `style aside  text: (size: small, color: muted)`.
+
+A stretch of a text can borrow a style's text color, which is how a node carries a quieter qualifier:
+
+```
+style dim  text: (color: muted)
+node grinder "Grinder / [dim]medium-fine[/dim]"
+```
+
+The mark names a style and never a color; the closer repeats the name; `\[` is a literal bracket. There is no `subtext` attribute — it was removed, and an older file carrying it gets an error naming the mark to write instead.
 
 ### The body
 
@@ -82,7 +103,7 @@ Every node has one body and two keys can name it. `shape: rectangle | document |
 
 ```
 node dump  "nightly dump"  shape: document
-node aside "a remark"      shape: none  wrap: 30
+node aside "a remark" (wrap: 30)  shape: none
 node unit  icon: cube
 node drive "External HD"   badge: disk
 ```
@@ -96,12 +117,6 @@ A style contributes a part only to the kinds that have it, so a style shared bet
 There is no `stroke` attribute. It was removed because it named no part; if you have seen it in an older file, it is `border` on a node, `text` on one with no body or a picture body, and `line` on an edge.
 
 **Every attribute is checked by name, so do not invent one.** A word the tool does not know is an error, and so is a real word on a kind that has no use for it — `fill:` on a node with no body, `gap:` or `overlap:` on an edge, `align:` on a node that can have no children. The error says either what the kind takes or where the word does belong. A key handed over by a style is exempt, which is what lets one style dress both nodes and edges.
-
-A qualifier under a name is written with the line break, not with `subtext`:
-
-```
-node grinder "Grinder / medium-fine"  subtext: muted
-```
 
 ### Placement
 
@@ -145,10 +160,10 @@ An edge with text widens the corridor between its own two ends by what the text 
 ### Annotations
 
 ```
-node <name> "<text>"  shape: none  <placement> ...  wrap: 30
+node <name> "<text>" (wrap: 30)  shape: none  <placement> ...
 ```
 
-There is no `note` statement — an annotation is a node with no body, anchored to a node so it travels with it. **Always give one a `wrap:`** — without one a sentence is drawn as one very long line across whatever is beside it.
+There is no `note` statement — an annotation is a node with no body, anchored to a node so it travels with it. **Always give one a `(wrap: n)`** — without one a sentence is drawn as one very long line across whatever is beside it.
 
 ### On a box
 
@@ -184,7 +199,7 @@ edge browser -> api  "HTTP"    from: right  to: left
 edge api -> db       "SQL"     from: right  to: left
 edge worker -> db    "writes"  from: right  to: bottom
 
-node aside "The worker shares the database / but takes no HTTP traffic."  shape: none  below worker (gap: tight)  wrap: 30
+node aside "The worker shares the database / but takes no HTTP traffic." (wrap: 30)  shape: none  below worker (gap: tight)
 ```
 
 ## What will bite you

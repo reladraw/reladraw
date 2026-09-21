@@ -219,15 +219,22 @@ export function describeAxis(axis: Axis): string {
 export type Attrs = Record<string, string>;
 
 /**
- * What a text's brackets may say: `"Docker" (at: bottom, align: center)`.
+ * What a text's brackets may say: `"Docker" (at: bottom-center, color: muted)`.
  *
  * They are bracketed onto the text rather than written among the node's
  * attributes for the same reason a gap is bracketed onto its placement — they
  * modify that one thing, and the brackets make the scope visible instead of
- * positional. `at` and `align` are independent: neither implies the other, and a
- * text at the bottom is an ordinary text that happens to be at the bottom.
+ * positional. What is left at the top level is then about the node itself:
+ * `shape`, `icon`, `fill`, `border`, `gap`, `overlap`, `style`.
+ *
+ * In a style, which has no string for a bracket to hang off, the bracket hangs
+ * off the key instead: `style synced  text: (color: muted)`.
+ *
+ * `at` and `align` are independent and neither implies the other. `at` is where
+ * the block of text sits in the node — one of the nine named positions — and
+ * `align` is how its lines range against each other once it is there.
  */
-export const TEXT_KEYS = ['at', 'align'] as const;
+export const TEXT_KEYS = ['color', 'size', 'wrap', 'align', 'at'] as const;
 
 export interface NodeStmt {
   kind: 'node';
@@ -254,6 +261,8 @@ export interface EdgeStmt {
   /** `<->` rather than `->`. */
   both: boolean;
   text?: string;
+  /** The text's bracketed modifiers, as written. Usually empty. */
+  textAttrs: Attrs;
   /** `between desktop1 and laptop1` — the gap the line passes through. */
   between?: Passage;
   attrs: Attrs;
@@ -296,9 +305,7 @@ export const DIAGRAM_KEYS = ['background'] as const;
 export const COLOR_KEYS = [
   'fill',
   'border',
-  'text',
   'line',
-  'subtext',
   'background',
 ] as const;
 
@@ -312,16 +319,19 @@ export const COLOR_KEYS = [
  * for the same reason: an attribute that silently does nothing looks like the
  * tool being broken.
  *
+ * Each entry is written the way the author would write it, since the text's is
+ * a bracket rather than a bare key, and this list is only ever quoted back.
+ *
  * A style spanning kinds writes one key per kind — `border: #d2904e  line:
  * #d2904e` — since a style contributes a part only to the kinds that have it.
  * That is what replaced `stroke:`, which named no part and so could never be
  * wrong, and which is why a node's text had no word of its own until now.
  */
 export const COLOR_PARTS: Record<Kind, readonly string[]> = {
-  shape: ['fill', 'border', 'text', 'subtext'],
-  icon: ['text', 'subtext'],
-  none: ['text'],
-  edge: ['line', 'text'],
+  shape: ['fill:', 'border:', 'text: (color: …)'],
+  icon: ['text: (color: …)'],
+  none: ['text: (color: …)'],
+  edge: ['line:', 'text: (color: …)'],
 };
 
 /**
@@ -359,23 +369,10 @@ export type Kind = 'shape' | 'icon' | 'none' | 'edge';
  *   an edge is not placed — it joins two things that are.
  */
 export const ATTR_KEYS: Record<Kind, readonly string[]> = {
-  shape: [
-    'style',
-    'size',
-    'gap',
-    'overlap',
-    'align',
-    'wrap',
-    'badge',
-    'shape',
-    'fill',
-    'border',
-    'text',
-    'subtext',
-  ],
-  icon: ['style', 'size', 'gap', 'overlap', 'wrap', 'badge', 'icon', 'text', 'subtext'],
-  none: ['style', 'size', 'gap', 'overlap', 'wrap', 'badge', 'shape', 'text'],
-  edge: ['style', 'size', 'from', 'to', 'line', 'text'],
+  shape: ['style', 'gap', 'overlap', 'align', 'badge', 'shape', 'fill', 'border', 'text'],
+  icon: ['style', 'gap', 'overlap', 'badge', 'icon', 'text'],
+  none: ['style', 'gap', 'overlap', 'badge', 'shape', 'text'],
+  edge: ['style', 'from', 'to', 'line', 'text'],
 };
 
 /**

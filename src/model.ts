@@ -1,4 +1,5 @@
 import type { Attrs, Axis, Kind, Placement } from './ast.js';
+import type { Line } from './text.js';
 import type { Body } from './icons.js';
 
 /** A `between` clause with its targets resolved. Mirrors `Passage` in `ast.ts`. */
@@ -20,8 +21,8 @@ export interface LayoutNode {
   body: Body;
   /** The text as written, before line splitting. */
   text: string;
-  /** The text split into the lines that will be drawn. */
-  lines: string[];
+  /** The text split into the lines that will be drawn, each as its runs. */
+  lines: Line[];
   parent?: LayoutNode;
   children: LayoutNode[];
 
@@ -44,7 +45,10 @@ export interface LayoutNode {
    */
   headerHeight: number;
 
-  /** The text's bracketed modifiers, as written. Usually empty. */
+  /**
+   * What the text's brackets said, with anything a style's `text: (…)`
+   * contributed underneath it. Usually empty.
+   */
   textAttrs: Attrs;
 
   attrs: Attrs;
@@ -61,6 +65,10 @@ export interface LayoutEdge {
   to: LayoutNode;
   both: boolean;
   text?: string;
+  /** The text split into the lines that will be drawn, each as its runs. */
+  lines?: Line[];
+  /** The text's bracketed modifiers, with a style's `text: (…)` underneath. */
+  textAttrs: Attrs;
   /**
    * The gap a `between` clause named, with its two nodes resolved. Nothing in
    * the resolver uses this — a corridor is measured off the solved layout
@@ -78,6 +86,12 @@ export interface Layout {
   /** Top-level nodes only, in declaration order. */
   roots: LayoutNode[];
   edges: LayoutEdge[];
+  /**
+   * Every style the file's markup names, resolved to the color it lends. The
+   * renderer needs it because a marked run borrows its color from a style
+   * rather than stating one, and styles are otherwise merged away by here.
+   */
+  markup: Record<string, string>;
   /**
    * What the `diagram` statement said, as written. Nothing here affects
    * geometry; it rides along so the renderer sees the whole compiled document

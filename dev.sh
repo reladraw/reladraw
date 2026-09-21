@@ -216,7 +216,9 @@ case "$cmd" in
     ;;
   try)
     src="${1:?source text required}"
-    tmp="$(mktemp -t reladraw-try).reladraw"
+    # The template must carry its own X's: GNU mktemp refuses one without them,
+    # so `try` had never run on Linux at all.
+    tmp="$(mktemp -t reladraw-try.XXXXXX).reladraw"
     printf '%s\n' "$src" > "$tmp"
     node dist/cli.js "$tmp" -o "${tmp%.reladraw}.svg" && echo "parsed, no complaint"
     rm -f "$tmp" "${tmp%.reladraw}.svg"
