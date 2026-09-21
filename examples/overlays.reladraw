@@ -37,7 +37,7 @@ node p9 "bottom-right"   on board at bottom-right   style: mark
 // could say that, and the primitive says it in one line.
 node bob "Bob the builder"  below board  gap: normal
 node bob.card ""  style: spacer
-node bob_link "bob.example.com"  on bob at bottom-center  style: link
+node bob_link "bob.example.com"  on bob at bottom-center  style: link  url: "https://bob.example.com"
 
 // The inset is a named gap on the placement, and `none` puts the node hard
 // against the edge. It is deliberately not the node's own `gap:`, which says
