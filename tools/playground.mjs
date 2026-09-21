@@ -40,6 +40,7 @@ const OFFERED = [
   'gaps',
   'snug',
   'separation',
+  'contents',
   'shapes',
   'icons',
   'overlays',

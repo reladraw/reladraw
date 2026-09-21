@@ -133,13 +133,73 @@ export function render(layout: Layout, options: RenderOptions = {}): string {
 
 // --- nodes -------------------------------------------------------------------
 
+/**
+ * `<a href>` around whatever a node or an edge draws, when it named a
+ * destination.
+ *
+ * SVG has this natively, so a standalone SVG stays standalone and a rasteriser
+ * drops it, leaving a PNG unharmed. Plain `href` and not `xlink:href`: the
+ * SVG 1.1 spelling would need an `xmlns:xlink` on every drawing whether or not
+ * anything in it links anywhere, and every current browser takes the SVG 2 one.
+ *
+ * `target="_blank"` always, because the playground inlines the SVG into its own
+ * page and a click inside it would otherwise navigate the playground away;
+ * `rel="noopener"` goes with it as it does anywhere else.
+ *
+ * **An `<a>` is never nested inside another.** Nesting is the obvious way to let
+ * a container carry a destination while a child carries its own, and it does not
+ * work: Chrome draws nothing at all inside the inner one, so the child simply
+ * disappears from the picture. Every node's anchor therefore wraps only what
+ * that node draws — outline, text, badge — and its children are emitted beside
+ * it, each wrapping itself. The reading comes out the same anyway, because the
+ * container's filled outline lies under the children and catches every click
+ * that does not land on one of them.
+ *
+ * A container's badge is drawn *after* its children — it rides in the title band
+ * and a decked node's stack can reach under it — so a linked container emits two
+ * anchors with one destination rather than reordering the ink to save one.
+ *
+ * A destination therefore reaches down the tree instead of enclosing it: a child
+ * that names none of its own is drawn inside an anchor carrying its container's,
+ * and one that names its own overrules it. That is the reading nesting would
+ * have given — the container catches every click its children do not — reached
+ * by repeating the destination rather than by wrapping.
+ */
+function linked(svg: string, url: string | undefined): string {
+  if (url === undefined || svg.length === 0) return svg;
+  // An `&` between query parameters is ordinary in a url and illegal raw in an
+  // attribute, so the value is escaped as markup rather than merely quoted.
+  return `  <a href=${quote(escapeXml(url))} target="_blank" rel="noopener">\n${svg}\n  </a>`;
+}
+
 function drawNode(
   node: LayoutNode,
   theme: Theme,
   measurer: Measurer,
   fontSize: number,
   markup: Record<string, string>,
+  inherited?: string,
 ): string {
+  const url = node.attrs['url'] ?? inherited;
+  const { own, kids, tail } = nodeSvg(node, theme, measurer, fontSize, markup, url);
+  return [linked(own.join('\n'), url), ...kids, linked(tail.join('\n'), url)]
+    .filter((part) => part.length > 0)
+    .join('\n');
+}
+
+/**
+ * What a node draws, in three pieces: its own ink, its children's, and the
+ * ink that goes over the children. They are kept apart so the node's `<a>` can
+ * wrap what is the node's without swallowing what is a child's.
+ */
+function nodeSvg(
+  node: LayoutNode,
+  theme: Theme,
+  measurer: Measurer,
+  fontSize: number,
+  markup: Record<string, string>,
+  url: string | undefined,
+): { own: string[]; kids: string[]; tail: string[] } {
   // A note is set smaller than a box text by default, and `size:` overrides
   // that on anything. Only this node's own text takes the size — children are
   // drawn by their own call and carry whatever they say themselves.
@@ -150,7 +210,7 @@ function drawNode(
 
   if (node.body.kind === 'none') {
     const style = textStyleFor(node.textAttrs, node.line, 'start', 'center');
-    return sized(
+    return { kids: [], tail: [], own: [sized(
       textBlock(node.lines, node.x, node.y, node.width, textHeight, size, {
         color: textColorOf(node.textAttrs, theme, theme.text),
         align: style.align,
@@ -160,7 +220,7 @@ function drawNode(
       }),
       size,
       fontSize,
-    );
+    )] };
   }
 
   const glyphSide = ICON_LINES * textHeight;
@@ -187,11 +247,13 @@ function drawNode(
         ),
       );
     }
-    return drawn.join('\n');
+    return { own: drawn, kids: [], tail: [] };
   }
 
   const outline = node.body.outline;
   const parts: string[] = [];
+  const kids: string[] = [];
+  const tail: string[] = [];
   const face = faceOf(node);
   const container = node.children.length > 0;
   const border = borderOf(node.appearance, container ? theme.containerStroke : theme.boxStroke);
@@ -286,7 +348,7 @@ function drawNode(
       ),
     );
     for (const child of node.children) {
-      parts.push(drawNode(child, theme, measurer, fontSize, markup));
+      kids.push(drawNode(child, theme, measurer, fontSize, markup, url));
     }
   }
 
@@ -301,10 +363,10 @@ function drawNode(
         ? face.y + PAD
         : face.y + face.height - PAD - iconSide
       : leafTop(textStyle.end, face.y, face.height, iconSide);
-    parts.push(drawIcon(icon, left, top, iconSide, theme));
+    (container ? tail : parts).push(drawIcon(icon, left, top, iconSide, theme));
   }
 
-  return parts.join('\n');
+  return { own: parts, kids, tail };
 }
 
 /**
@@ -506,7 +568,7 @@ function drawEdge(
   }
 
   // The stroke straddles the path, so half of it lies outside the geometry.
-  return { svg: parts.join('\n'), ink: grow(ink, LINE_WIDTH / 2) };
+  return { svg: linked(parts.join('\n'), edge.attrs['url']), ink: grow(ink, LINE_WIDTH / 2) };
 }
 
 function union(a: Extent, b: Extent): Extent {

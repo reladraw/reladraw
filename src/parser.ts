@@ -21,6 +21,7 @@ import {
   SIDES,
   PASSAGE_AXES,
   TEXT_KEYS,
+  CONTENTS_KEYS,
   PLACEMENT_KEYS,
   isDirection,
   isPosition,
@@ -166,10 +167,20 @@ function parseTail(
 
 /**
  * The attribute keys whose value is a bracket rather than a word, and what may
- * be written inside it. Only `text:` today: a style has no string for a text's
- * bracket to hang off, so the bracket hangs off the key instead.
+ * be written inside it. `text:` is a style's way of saying what a node says in
+ * the brackets after its own string; `contents:` names a part whose two
+ * properties are independent and sit one level below the node.
  */
-const BRACKET_KEYS: Record<string, readonly string[]> = { text: TEXT_KEYS };
+const BRACKET_KEYS: Record<string, readonly string[]> = {
+  text: TEXT_KEYS,
+  contents: CONTENTS_KEYS,
+};
+
+/** How each bracketed key's error quotes itself back, and what it is about. */
+const BRACKET_ABOUT: Record<string, { kind: string; example: string }> = {
+  text: { kind: 'a text', example: 'color: muted' },
+  contents: { kind: 'a `contents:` bracket', example: 'widths: match' },
+};
 
 /**
  * The top-level keys that moved into the text's bracket in 0.3.0, and the
@@ -197,8 +208,8 @@ function readAttr(
     const read = readBracket(tokens, at + 1, bracketKeys, {
       subject,
       what: `\`${key}:\``,
-      kind: 'a text',
-      example: 'color: muted',
+      kind: BRACKET_ABOUT[key]!.kind,
+      example: BRACKET_ABOUT[key]!.example,
       line,
     });
     if (Object.keys(read.values).length === 0) {
@@ -206,6 +217,33 @@ function readAttr(
     }
     for (const [inner, value] of Object.entries(read.values)) attrs[`${key}.${inner}`] = value;
     return read.next;
+  }
+  if (key === 'url') {
+    // `url: https://example.com` loses everything from the `//` onwards, because
+    // `//` opens a comment — so the value is either missing entirely or is the
+    // bare scheme, which reads as another attribute key. Neither report says
+    // what is wrong, and the remedy is punctuation rather than a missing word.
+    const value = tokens[at + 1];
+    if (!value || !value.quoted) {
+      throw new SourceError(
+        `${subject}: a url is written in quotes — \`url: "https://example.com"\`. Without them ` +
+          'everything from the `//` onwards is read as a comment',
+        line,
+      );
+    }
+    attrs[key] = value.text;
+    return at + 2;
+  }
+  if (bracketKeys !== undefined && key !== 'text') {
+    // `contents: match` names the part and then says one of its two properties
+    // without saying which. The brackets are what make the level shift visible,
+    // so there is no unbracketed spelling to fall back to.
+    const given = tokens[at + 1];
+    throw new SourceError(
+      `${subject}: \`${key}:\` takes its properties in brackets — write \`${key}: (${BRACKET_ABOUT[key]!.example})\`` +
+        (given && !isAttrKey(given) ? `, not \`${key}: ${given.text}\`` : ''),
+      line,
+    );
   }
   const valueToken = tokens[at + 1];
   if (!valueToken || isAttrKey(valueToken) || valueToken.text === ')') {
@@ -252,9 +290,18 @@ function readAttr(
       line,
     );
   }
-  // `align: widths` is the contents key and still belongs to the node; every
-  // other `align` is the text ranging its lines, which moved into the bracket.
-  if ((MOVED_INTO_BRACKET as readonly string[]).includes(key) && !(key === 'align' && valueToken.text === 'widths')) {
+  if (key === 'align' && valueToken.text === 'widths') {
+    // Removed in 0.3.0. It was a size operation wearing an alignment's name,
+    // and its value set had one member — a flag in a property's clothes. Its
+    // job is `contents: (widths: match)`, and with it gone `align` means one
+    // thing everywhere.
+    throw new SourceError(
+      '`align: widths` is now `contents: (widths: match)` — it is a size, not an alignment, and ' +
+        'the same brackets take `align: center` for where the contents sit when the title is wider',
+      line,
+    );
+  }
+  if ((MOVED_INTO_BRACKET as readonly string[]).includes(key)) {
     throw new SourceError(
       `\`${key}:\` belongs to the text rather than to the node — write it in the brackets after ` +
         `the text, as in \`"…" (${key}: ${valueToken.text})\`, or as \`text: (${key}: ${valueToken.text})\` in a style`,
@@ -498,6 +545,16 @@ function parseStyle(head: Token[], line: number): StyleStmt {
   const attrs = attrsOnly(head, 2, line, `style "${name}"`);
   if (Object.keys(attrs).length === 0) {
     throw new SourceError(`style "${name}" sets nothing`, line);
+  }
+  if (attrs['url'] !== undefined) {
+    // A destination is content, not appearance. A style is a bundle worn by
+    // many things, so a `url:` in one would point every node wearing it at the
+    // same place — which is never what anybody means, and would be silent.
+    throw new SourceError(
+      `style "${name}" has a url. A destination is part of what a node says rather than how it ` +
+        'looks, so it is written on the node or the edge itself',
+      line,
+    );
   }
   return { kind: 'style', name, attrs, line };
 }

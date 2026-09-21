@@ -1,4 +1,4 @@
-# Syntax reference — v0
+# Syntax reference — 0.3.0
 
 What the language accepts. The parser, resolver and SVG renderer implement all of it; the sections at the end record what is defective, unchecked or undecided.
 
@@ -80,7 +80,27 @@ Here the server clears the whole cluster. Placed `left of cluster.hub` instead, 
 
 A container's text can say where in the node it goes — see "The text and its brackets" below.
 
-`align: widths` on a container widens every direct child to match the widest of them, so a stack of nodes with texts of different lengths draws as a column with one edge rather than a ragged one. It is the only value the key accepts; anything else is an error. Widths are the only thing it touches — it never moves a child.
+### How the contents sit
+
+A container is as wide as the wider of its title and its contents. When the title wins there is slack, and every child sits at the smallest position its constraints allow — so all of it ends up on the right and the column reads as ragged inside a node whose own text may well be centered. `contents:` is what says otherwise:
+
+```
+node svc "Ingestion and enrichment pipeline"  contents: (widths: match, align: center)
+```
+
+`widths:` sizes the children and `align:` positions the block of them. They are independent, and the bracket is what keeps the levels apart: `contents:` is a property of the node, `widths:` a property of the contents.
+
+| written | means |
+|---|---|
+| nothing | natural widths, ranged left |
+| `contents: (widths: match)` | every child as wide as the widest, ranged left |
+| `contents: (widths: fill)` | every child spans the whole content band; `align` then has no slack to work in |
+| `contents: (align: center)` | natural widths, the block of them centered |
+| `contents: (widths: match, align: center)` | the tidy centered column |
+
+`align:` takes `left`, `center` and `right` here, the same three words it takes in a text's brackets. Widths are the only thing `widths:` touches and position the only thing `align:` touches; neither reaches a child's own contents.
+
+**Changed 2026-09-20.** This replaced `align: widths`, which is now an error naming its substitution. That key was a size operation wearing an alignment's name, and its value set had one member — a flag in a property's clothes. With it gone, `align` means one thing everywhere in the language: how a block's lines or children range against each other.
 
 ### The text and its brackets
 
@@ -515,7 +535,7 @@ Every attribute, and what takes one. The kinds here are what a node's **body** i
 | `style` | ✓ | ✓ | ✓ | ✓ | the named bundle to take appearance from |
 | `gap` | ✓ | ✓ | ✓ | | the default distance to whatever it is placed against |
 | `overlap` | ✓ | ✓ | ✓ | | `allow`, to opt out of non-overlap |
-| `align` | ✓ | | | | `widths`, to widen every child to the widest of them |
+| `contents` | ✓ | | | | how the children are sized and where the block of them sits, in brackets |
 | `badge` | ✓ | ✓ | ✓ | | the picture that takes the column beside the text |
 | `shape` | ✓ | | ✓ | | the outline the node is drawn with, `none` included |
 | `icon` | | ✓ | | | the picture the node is drawn as |
@@ -524,6 +544,7 @@ Every attribute, and what takes one. The kinds here are what a node's **body** i
 | `border` | ✓ | | | | color |
 | `text` | ✓ | ✓ | ✓ | ✓ | the text's properties, in brackets — a style's form of what a node or an edge writes after its own words |
 | `line` | | | | ✓ | color |
+| `url` | ✓ | ✓ | ✓ | ✓ | a destination to open when the thing is clicked |
 
 The `diagram` statement has a vocabulary of its own — `background`, and so far nothing else — which is checked the same way. Writing `background:` on a node is an error that points at `fill:`.
 
@@ -533,9 +554,28 @@ The `diagram` statement has a vocabulary of its own — `background`, and so far
 "one" is a node and has from: left. `from:` belongs to an edge — a node takes style, gap, ...
 ```
 
-Some of the gaps in the table are worth saying out loud, because none of them looks like a mistake while you are writing it. A picture and a bodiless node take no `fill:` or `border:` — there is no outline for either to reach. Neither takes `align:` either, which widens a node's children, and neither may have any. `shape:` and `icon:` each appear only on the kind they make, and writing both is an error naming both. An edge takes no `gap:` or `overlap:` — those say where a node sits, and an edge is not placed, it joins two things that are.
+Some of the gaps in the table are worth saying out loud, because none of them looks like a mistake while you are writing it. A picture and a bodiless node take no `fill:` or `border:` — there is no outline for either to reach. Neither takes `contents:` either, which says how a node's children sit, and neither may have any. `shape:` and `icon:` each appear only on the kind they make, and writing both is an error naming both. An edge takes no `gap:` or `overlap:` — those say where a node sits, and an edge is not placed, it joins two things that are.
 
 **Changed 2026-09-09.** Until then a node or edge attribute the tool did not recognize was parsed, stored and never read: `wibble: red` on a node drew nothing and said nothing. This was the last place in the language where a key could silently do nothing, and the rule everywhere else — an unknown `diagram` key, an unknown placement modifier, a color naming a part the kind has not got — has always been that a key which silently does nothing looks like the tool being broken rather than like a typo. A file that rendered with a stray word in it will now stop with an error naming it.
+
+## Destinations
+
+```
+node docs "Documentation"  url: "https://example.com/docs"
+edge docs -> store "read first"  url: "https://example.com/order"
+```
+
+`url:` makes the thing clickable in a viewer that follows links — a browser showing the SVG, or a page it is embedded in. The whole thing is the target: a node's box and everything drawn in it, an edge's text. A rasteriser ignores it, so a PNG is unaffected.
+
+**The value is quoted.** Without the quotes everything from the `//` onwards is a comment, so `url: https://example.com` would set the destination to `https:`. The error for the unquoted form says so rather than reporting a missing value.
+
+**Nothing about a destination is visible.** A clickable node looks like any other. Color was considered and dropped: an edge with no text and a node that is nothing but a picture have nothing to color, so it would be a decoration that sometimes applies — and a destination is *content*, while color is appearance, and nothing else in the language lets one reach the other. An author who wants a destination to look like one writes the color themselves.
+
+**A style may not carry one**, for the same reason: a style is a bundle worn by many things, and one `url:` in it would point every one of them at the same place.
+
+**A container's destination reaches its children.** A child that names none of its own is clickable with its container's, and one that names its own overrules it inside its own box — so a container catches every click its children do not.
+
+**An edge with no text is refused one.** The line is a pixel and a half wide, which is a target nobody can hit; a destination that technically works and practically does not is the silent defect this language refuses everywhere else.
 
 ## Styles
 
@@ -685,6 +725,27 @@ That one was found by testing the lexer, not by rendering — and it could not h
 
 ~~An edge text ignored the line break.~~ Fixed. ` / ` split a node's text and was never applied to an edge's, so the marker came out as a literal slash on an arrow and the benchmark's two-line captions had to be flattened to one. The measurer had always returned the split lines; the renderer was handing it the raw string and drawing that instead. The block now centers on the point the text already occupied, so a one-line text sits exactly where it did.
 
+## Changelog
+
+Pre-1.0, so the minor number is where a breaking change goes. Every removal below is refused by name with the replacement quoted, rather than dropped in silence — an older file stops with an error saying what to write instead.
+
+**0.3.0** — the vocabulary, reworked in one breaking version so there is one migration rather than five.
+
+- `box` is `node` and `link` is `edge`. The string on either is its *text*; "label" is not a word the language has.
+- A node's **body** is `shape: rectangle | document | none` or `icon: <name>`, and writing both is an error naming both. `note` is gone — a note is `node … shape: none`. `shape: instance` is gone — the icon is `cube`, and a node drawn as one is `icon: cube`.
+- A node drawn as a picture and given no text of its own shows none. A node with a body still falls back to its name.
+- The decoration icon is `badge:`, which freed `icon:` for the body.
+- `on X at <position>` places a node on another's box at one of nine named positions, overlapping it by construction.
+- Everything a text says about itself is in the brackets after it — `color`, `size`, `wrap`, `align`, `at`. The top-level `size:`, `wrap:`, `align:` and the text color `text:` are gone; a style says them as `text: (…)`. `at:` grew from two positions to the nine.
+- `subtext:` is gone, replaced by inline markup `[style]word[/style]`, which names a style and reaches a word anywhere in a text. `\[` escapes a literal bracket.
+- `align: widths` is `contents: (widths: match)`, and the same brackets take `align:` for where the block of contents sits.
+- `url:` is new: a destination on a node or an edge.
+- Attributes and placements may be written in any order after the text.
+
+**0.2.0** — `stroke:` split into the part it colors (`border:`, `line:`, and the text's own color); `width:` became `wrap:`; every attribute is refused by name on a kind that has no use for it, where an unknown one used to be parsed and dropped.
+
+**0.1.0** — first published version.
+
 ## Undecided
 
 Open questions the benchmark raised, recorded so a later session does not rediscover them.
@@ -694,4 +755,4 @@ Open questions the benchmark raised, recorded so a later session does not redisc
 - The 2×2 arrangement around a hub is four independent statements, so a fifth machine has no slot to reflow into. There are only eight directions.
 - ~~Two annotations anchored to the same side of one node will collide.~~ Answered by putting both in an invisible container and placing the container, so they stack instead of stacking on top of each other. Writing it the colliding way is now an error rather than a bad picture, since nothing in the file orders the two. Whether the container idiom is good enough or wants dedicated syntax is open.
 - Nothing yet expresses one node spanning several rows of a parallel column, which the OSI reference render needs.
-- **How contents sit inside a container that is wider than they are.** A container is as wide as the wider of its title and its contents, and when the title wins, the children sit against the left of the slack — because every member goes at the smallest position its constraints allow, and nothing pushes them right. The column then reads as ragged inside a node whose own text may well be centered. `align: widths` already means "how the contents sit", so the key is the obvious home for a second, independent word; what is not settled is whether centering is one word there, whether it should be sayable per axis, and whether it is the same question as the bracketed node sitting against one side of its slack under "Known to be wrong" — which smells like it is. Automatic centering is ruled out either way: it would move every existing diagram whose container title is wider than its contents.
+- ~~How contents sit inside a container that is wider than they are.~~ Answered by `contents: (widths: …, align: …)` — see "How the contents sit". Automatic centering stays ruled out: it would move every existing diagram whose container title is wider than its contents. Whether this is the same question as the bracketed node sitting against one side of its slack, under "Known to be wrong", is still open — they share the phrase and not the mechanism, since one distributes to a group at size time and the other is a single member in a constraint system.

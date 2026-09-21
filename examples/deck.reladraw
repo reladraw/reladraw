@@ -6,7 +6,7 @@ diagram  background: #111111
 style plain  fill: #191728  border: #4f5367
 
 // The usual case: a container with rows, and two more like it behind.
-node drive          "Drive 1"  badge: disk  align: widths
+node drive          "Drive 1"  badge: disk  contents: (widths: match)
 node drive.backup   "shared folder / backup"  style: plain
 node drive.archive  "archive"                 style: plain
 

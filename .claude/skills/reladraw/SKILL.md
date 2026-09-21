@@ -72,7 +72,9 @@ node server.worker "Worker"
 
 A container with `""` and `fill: none  border: none` draws nothing and takes no room of its own, which is how you make a group that can be placed against as one shape.
 
-Node attributes: `style`, `fill` and `border` (each a color), `shape`, `icon`, `badge`, `gap`, `overlap: allow`, and `align: widths` on a container.
+Node attributes: `style`, `fill` and `border` (each a color), `shape`, `icon`, `badge`, `gap`, `overlap: allow`, `url` (a quoted destination), and `contents:` on a container.
+
+`contents: (widths: match, align: center)` says how a container's children sit when its title is wider than they are. `widths:` takes `natural`, `match` (all as wide as the widest) or `fill` (all as wide as the band); `align:` takes `left`, `center` or `right`.
 
 ### The text and its brackets
 
@@ -116,7 +118,7 @@ A style contributes a part only to the kinds that have it, so a style shared bet
 
 There is no `stroke` attribute. It was removed because it named no part; if you have seen it in an older file, it is `border` on a node, `text` on one with no body or a picture body, and `line` on an edge.
 
-**Every attribute is checked by name, so do not invent one.** A word the tool does not know is an error, and so is a real word on a kind that has no use for it — `fill:` on a node with no body, `gap:` or `overlap:` on an edge, `align:` on a node that can have no children. The error says either what the kind takes or where the word does belong. A key handed over by a style is exempt, which is what lets one style dress both nodes and edges.
+**Every attribute is checked by name, so do not invent one.** A word the tool does not know is an error, and so is a real word on a kind that has no use for it — `fill:` on a node with no body, `gap:` or `overlap:` on an edge, `contents:` on a node that can have no children. The error says either what the kind takes or where the word does belong. A key handed over by a style is exempt, which is what lets one style dress both nodes and edges.
 
 ### Placement
 

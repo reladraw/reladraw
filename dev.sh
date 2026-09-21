@@ -81,6 +81,11 @@ Commands:
                                  holds the sources fixed to isolate the code, so
                                  it cannot see an edit to an example file; this
                                  is the other half.
+  clicks <file.svg> <x> <y> ... What a browser would follow at each point, or
+                                 "nothing". A `url:` is the one thing in the
+                                 output a picture cannot show, and the obvious
+                                 way to nest one link inside another is dropped
+                                 silently by Chrome, so it is checked here.
   nodes <file>                  Print the solved geometry of every node
   overlaps <file>               List node pairs that share space (exit 1 if any)
   tokens <file>                 Print how the syntax scanner classifies each
@@ -344,6 +349,31 @@ case "$cmd" in
       screenshot "file://$PWD/docs/index.html${3:+#$3}" "$out" "${2:-1600x1000}" "0d0d10"
       echo "$out"
     fi
+    ;;
+  clicks)
+    # What a browser would actually follow, at each point named. A destination
+    # is the one thing in the output that cannot be seen in a picture, and the
+    # obvious way to write it — an <a> inside another <a> — is dropped silently
+    # by Chrome, which is why this is a command and not a thing to reason about.
+    svg="${1:?input .svg path required}"
+    shift
+    points="$*"
+    "$(chrome_bin)" --headless --disable-gpu --no-sandbox \
+      --virtual-time-budget=2000 --dump-dom \
+      "data:text/html,<body style='margin:0'>$(python3 - "$svg" <<'PY'
+import sys, urllib.parse
+print(urllib.parse.quote(open(sys.argv[1]).read()), end='')
+PY
+)<script>
+      const pts = '$points'.split(' ').filter(Boolean);
+      const out = [];
+      for (let i = 0; i < pts.length; i += 2) {
+        const el = document.elementFromPoint(+pts[i], +pts[i + 1]);
+        const a = el && el.closest('a');
+        out.push(pts[i] + ',' + pts[i + 1] + ' -> ' + (a ? a.getAttribute('href') : 'nothing'));
+      }
+      document.title = out.join(' | ');
+    </script>" 2>/dev/null | grep -oE '<title>[^<]*' | cut -c8-
     ;;
   nodes)
     node tools/geometry.mjs nodes "${1:?input .reladraw path required}"

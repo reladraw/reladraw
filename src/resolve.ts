@@ -14,6 +14,8 @@ import {
   ATTR_KEYS,
   COLOR_KEYS,
   COLOR_PARTS,
+  CONTENT_ALIGNMENTS,
+  CONTENT_WIDTHS,
   describePlacement,
 } from './ast.js';
 import {
@@ -253,11 +255,16 @@ function checkAttrs(kind: Kind, name: string, attrs: Attrs, line: number): void 
     const key = topKey(written);
     if (allowed.includes(key)) continue;
 
+    // Quoted back the way it was written. A bracketed value arrives one dotted
+    // key at a time, and `contents: match` is not a line anybody could look for.
+    const wrote =
+      written === key ? `${key}: ${value}` : `${key}: (${written.slice(key.length + 1)}: ${value})`;
+
     if (!ALL_ATTR_KEYS.includes(key)) {
       // Nothing anywhere in the language answers to this word, so the only
       // remedy is the vocabulary itself.
       throw new SourceError(
-        `"${name}" has ${key}: ${value}, which is not an attribute. ${capital(article(KIND_WORD[kind]))} takes ${allowed.join(', ')}`,
+        `"${name}" has ${wrote}, which is not an attribute. ${capital(article(KIND_WORD[kind]))} takes ${allowed.join(', ')}`,
         line,
       );
     }
@@ -270,7 +277,7 @@ function checkAttrs(kind: Kind, name: string, attrs: Attrs, line: number): void 
     if ((COLOR_KEYS as readonly string[]).includes(key)) {
       const parts = COLOR_PARTS[kind].map((part) => `\`${part}\``).join(', ');
       throw new SourceError(
-        `"${name}" is ${article(KIND_WORD[kind])} and has ${key}: ${value}. ${capital(article(KIND_WORD[kind]))} is ${KIND_PARTS[kind]}, so it has no ${key} — it takes ${parts}`,
+        `"${name}" is ${article(KIND_WORD[kind])} and has ${wrote}. ${capital(article(KIND_WORD[kind]))} is ${KIND_PARTS[kind]}, so it has no ${key} — it takes ${parts}`,
         line,
       );
     }
@@ -280,7 +287,7 @@ function checkAttrs(kind: Kind, name: string, attrs: Attrs, line: number): void 
     // also the more useful thing to be told: the author has usually written a
     // real statement about the wrong half of the diagram.
     throw new SourceError(
-      `"${name}" is ${article(KIND_WORD[kind])} and has ${key}: ${value}. \`${key}:\` belongs to ` +
+      `"${name}" is ${article(KIND_WORD[kind])} and has ${wrote}. \`${key}:\` belongs to ` +
         `${listKinds(belongTo(key))} — ${article(KIND_WORD[kind])} takes ${allowed.join(', ')}`,
       line,
     );
@@ -411,6 +418,17 @@ function buildEdges(
     const what = `${stmt.from} -> ${stmt.to}`;
     checkAttrs('edge', what, stmt.attrs, stmt.line);
     checkStyleUse('edge', what, stmt.attrs, styles, stmt.line);
+    if (stmt.attrs['url'] !== undefined && stmt.text === undefined) {
+      // Wrapping the line works, and `LINE_WIDTH` is 1.5 — a destination that
+      // technically has a target and practically has none. That is the silent
+      // defect shape the language refuses everywhere else, so it is refused
+      // here rather than shipped and explained.
+      throw new SourceError(
+        `edge ${what} has a url and no text. A destination needs something to click, and a line ` +
+          'is too thin to be it — give the edge a text, or put the url on one of the nodes',
+        stmt.line,
+      );
+    }
     const textAttrs = { ...bracketOf('text', appearance), ...stmt.textAttrs };
     edges.push({
       from,
@@ -497,6 +515,11 @@ function sizeNode(
   const iconSide = icon === undefined ? 0 : glyphSide;
   const iconRoom = icon === undefined ? 0 : iconSide + (hasText ? ICON_GAP : 0);
 
+  // Read before the split, so a misspelt word is refused on a childless node
+  // too. The *absence* of children makes the setting inert, which stays silent;
+  // a value the language does not have is wrong wherever it is written.
+  const contents = contentsStyleFor(node);
+
   if (node.children.length === 0) {
     // `at` is read on a leaf too, and is inert wherever the box is exactly the
     // size of what it holds — which is most leaves, since a leaf is sized from
@@ -508,8 +531,17 @@ function sizeNode(
     node.width = textWidth + iconRoom + PAD * 2;
     node.height = Math.max(textHeight, iconSide) + PAD * 2;
   } else {
-    applyAlign(node);
-    const content = layoutChildren(node, edges, measurer, fontSize, local);
+    if (contents.widths === 'match') matchWidths(node);
+    let content = layoutChildren(node, edges, measurer, fontSize, local);
+    if (contents.widths === 'fill') {
+      // The band is the wider of the title and the contents, so filling it
+      // needs the contents measured first. Where they already set the width
+      // this is `match` exactly; where the title wins it is the answer `match`
+      // could not give.
+      const band = Math.max(textWidth + iconRoom, content.width);
+      for (const child of node.children) child.width = band;
+      content = layoutChildren(node, edges, measurer, fontSize, local);
+    }
     const band = Math.max(textHeight, iconSide);
     // `headerHeight` is the band the text and icon take, whichever end of the
     // box that band is at. Only the contents' offset depends on the side.
@@ -532,9 +564,14 @@ function sizeNode(
       );
     }
     const above = style.end === 'top' ? node.headerHeight : 0;
+    // Where the title is wider than the contents, the slack is all on the right
+    // — every member sits at the smallest position its constraints allow and
+    // nothing pushes it along. `align` is what says where the block goes in it.
+    const slack = node.width - PAD * 2 - content.width;
+    const shift = contents.align === 'left' ? 0 : contents.align === 'center' ? slack / 2 : slack;
     for (const child of node.children) {
       const offset = local.get(child)!;
-      offset.x += PAD;
+      offset.x += PAD + shift;
       offset.y += PAD + above;
     }
   }
@@ -554,16 +591,41 @@ function sizeNode(
 }
 
 /**
- * `align: widths` widens every direct child to the widest one's natural
- * width, before layoutChildren sizes and positions anything from those
- * widths. A container's own children are already sized by this point.
+ * What `contents: (…)` said, with its two words checked. Read from the merged
+ * appearance rather than from what the node wrote, so a style may carry it —
+ * `align: widths` read only the node's own attributes, which made a style
+ * carrying it do nothing at all and say nothing about it.
  */
-function applyAlign(node: LayoutNode): void {
-  const value = node.attrs['align'];
-  if (value === undefined) return;
-  if (value !== 'widths') {
-    throw new SourceError(`"${node.name}" has align: ${value}, which is not one of widths`, node.line);
+interface ContentsStyle {
+  widths: 'natural' | 'match' | 'fill';
+  align: 'left' | 'center' | 'right';
+}
+
+function contentsStyleFor(node: LayoutNode): ContentsStyle {
+  const written = bracketOf('contents', node.appearance);
+  const widths = written['widths'] ?? 'natural';
+  const align = written['align'] ?? 'left';
+  if (!(CONTENT_WIDTHS as readonly string[]).includes(widths)) {
+    throw new SourceError(
+      `"${node.name}" has contents: (widths: ${widths}), which is not one of ${CONTENT_WIDTHS.join(', ')}`,
+      node.line,
+    );
   }
+  if (!(CONTENT_ALIGNMENTS as readonly string[]).includes(align)) {
+    throw new SourceError(
+      `"${node.name}" has contents: (align: ${align}), which is not one of ${CONTENT_ALIGNMENTS.join(', ')}`,
+      node.line,
+    );
+  }
+  return { widths, align } as ContentsStyle;
+}
+
+/**
+ * `widths: match` widens every direct child to the widest one's natural width,
+ * before layoutChildren sizes and positions anything from those widths. A
+ * container's own children are already sized by this point.
+ */
+function matchWidths(node: LayoutNode): void {
   const maxWidth = Math.max(...node.children.map((child) => child.width));
   for (const child of node.children) child.width = maxWidth;
 }

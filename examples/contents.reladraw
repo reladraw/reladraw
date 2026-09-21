@@ -1,0 +1,52 @@
+// How a container's contents sit inside it, when the container is wider than
+// they are. A container is as wide as the wider of its title and its contents,
+// so a long title leaves slack — and every member sits at the smallest position
+// its constraints allow, which puts all of that slack on the right.
+//
+// `contents: (widths: …, align: …)`. The two are independent: equal widths
+// ranged left is a real arrangement, and so is natural widths centered.
+
+diagram background: #111111
+
+style plain  fill: #191728  border: #4f5367
+
+// Nothing said. Natural widths, and the column sits against the left.
+node ragged "Ingestion and enrichment pipeline" (at: top-center, align: center)
+node ragged.one   "parse"  style: plain
+node ragged.two   "resolve and lay out"  style: plain
+node ragged.three "draw"  style: plain
+
+// One edge down each side of the column, still against the left of the slack.
+node block "Ingestion and enrichment pipeline" (at: top-center, align: center)  right of ragged  contents: (widths: match)
+node block.one   "parse"  style: plain
+node block.two   "resolve and lay out"  style: plain
+node block.three "draw"  style: plain
+
+// The same column, moved into the middle of the room the title asked for.
+node middle "Ingestion and enrichment pipeline" (at: top-center, align: center)  right of block  contents: (widths: match, align: center)
+node middle.one   "parse"  style: plain
+node middle.two   "resolve and lay out"  style: plain
+node middle.three "draw"  style: plain
+
+// `fill` takes the whole band, so there is no slack left for `align` to say
+// anything about. Under a title this long that is what `match` could not do.
+node full "Ingestion and enrichment pipeline" (at: top-center, align: center)  right of middle  contents: (widths: fill)
+node full.one   "parse"  style: plain
+node full.two   "resolve and lay out"  style: plain
+node full.three "draw"  style: plain
+
+// Natural widths, centered: the column keeps its ragged edges and the block of
+// them sits in the middle. The cell of the cross product that needs both words.
+node loose "Ingestion and enrichment pipeline" (at: top-center, align: center)  below ragged  contents: (align: center)
+node loose.one   "parse"  style: plain
+node loose.two   "resolve and lay out"  style: plain
+node loose.three "draw"  style: plain
+
+// A style may carry it, which `align: widths` never could — it read only what
+// the node itself wrote, so a style carrying it did nothing and said nothing.
+style boxed  contents: (widths: match, align: center)
+
+node carried "Ingestion and enrichment pipeline" (at: top-center, align: center)  right of loose  style: boxed
+node carried.one   "parse"  style: plain
+node carried.two   "resolve and lay out"  style: plain
+node carried.three "draw"  style: plain

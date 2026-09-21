@@ -49,7 +49,7 @@ node dumps_note "Written by nightly cron job." (wrap: 30)  below dumps  gap: tig
 
 // --- The server -------------------------------------------------------------
 
-node server         "Home Server"  left of cluster  badge: desktop  align: widths
+node server         "Home Server"  left of cluster  badge: desktop  contents: (widths: match)
 node server.mirror  "shared folder / mirror"  style: backup
 node server.deploy  "deploy dir"  below server.mirror  gap: normal
 
@@ -79,7 +79,7 @@ edge cluster.desktop1.files -> server.deploy  "deploy script"                 fr
 
 // --- The backup drive -------------------------------------------------------
 
-node drive          "External HD"  left of server  top level with server  badge: disk  align: widths
+node drive          "External HD"  left of server  top level with server  badge: disk  contents: (widths: match)
 node drive.mirror   "shared folder / backup"  style: backup
 node drive.archive  "archive"
 

@@ -1,0 +1,28 @@
+// `url:` makes a node or an edge clickable. The whole thing is the target — the
+// box and everything drawn in it, or an edge's text — and nothing about it
+// looks any different, because a destination is content rather than appearance
+// and nothing else in the language lets content reach the ink.
+//
+// The value is quoted. Without the quotes everything from the `//` onwards is a
+// comment, which is why the error for the bare form talks about punctuation.
+
+diagram background: #111111
+
+style plain  fill: #191728  border: #4f5367
+
+node docs "Documentation"  style: plain  url: "https://example.com/docs"
+
+// A container's destination reaches its children: `intro` has none of its own
+// and follows the container, while `deep` overrules it inside its own box.
+node site "Handbook"  right of docs (gap: wide)  url: "https://example.com/"
+node site.intro  "Introduction"  style: plain
+node site.deep   "Deep dive"  style: plain  url: "https://example.com/deep"
+
+// A picture and a bodiless node take one too. There is no kind that cannot.
+node store  icon: database  below docs (gap: wide)  url: "https://example.com/store"
+node aside  "and this line is a link as well"  shape: none  right of store  level with store  url: "https://example.com/aside"
+
+// An edge's text is what carries the destination. An edge with no text is
+// refused one: the line is a pixel and a half wide, which is a target nobody
+// can hit, and shipping that would be the silent defect this language refuses.
+edge docs -> store "read first"  from: bottom  to: top  url: "https://example.com/order"

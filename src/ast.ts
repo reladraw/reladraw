@@ -159,6 +159,42 @@ export type Placement = OffsetPlacement | AlignPlacement | OnPlacement;
  */
 export const PLACEMENT_KEYS = ['gap'] as const;
 
+/**
+ * `contents: (widths: match, align: center)` — how a container's children sit
+ * inside it. A container has a fill, a border, a title and its contents, and
+ * this is the one key that points at the last of them.
+ *
+ * Two properties, independent, which is why they are bracketed modifiers of one
+ * key rather than two keys side by side. The cross product has a live cell in
+ * every corner — *equal widths, ranged left, under a long title* is the case
+ * that proves it — so one token could never carry both. And they sit at
+ * different levels: `contents:` is a property of the node, `widths:` a property
+ * of the contents, which written as peers would read as two facts about the box
+ * when they are one about the box and one about its children.
+ *
+ * It replaced `align: widths`, which was a size operation wearing an
+ * alignment's name and had a one-element value set — a flag in a property's
+ * clothes. With it gone, `align` means one thing everywhere: how a text's lines
+ * range against each other.
+ */
+export const CONTENTS_KEYS = ['widths', 'align'] as const;
+
+/**
+ * What `widths:` may say. `natural` is the default and is today's behavior.
+ * `match` is what `align: widths` did — every child as wide as the widest.
+ * `fill` is the whole content band, which is `match` wherever the contents set
+ * the container's width and the better answer wherever the title wins.
+ */
+export const CONTENT_WIDTHS = ['natural', 'match', 'fill'] as const;
+
+/**
+ * Where the block of contents sits when it is narrower than the band. `right`
+ * is accepted although no diagram has yet wanted it: refusing it would give
+ * `align:` a different value set depending on which bracket it is in, which is
+ * the divergence this scheme exists to remove.
+ */
+export const CONTENT_ALIGNMENTS = ['left', 'center', 'right'] as const;
+
 /** How a placement reads back in the author's own words, for error messages. */
 export function describePlacement(placement: Placement): string {
   const targets = listTargets(placement.targets);
@@ -360,8 +396,8 @@ export type Kind = 'shape' | 'icon' | 'none' | 'edge';
  *
  * - A node drawn as a picture, or with no body at all, takes no `fill:` or
  *   `border:`. There is no outline for either to reach.
- * - Neither of those takes `align:` either, which widens a node's children, and
- *   neither may have any.
+ * - Neither of those takes `contents:` either, which says how a node's children
+ *   sit, and neither may have any.
  * - `shape:` and `icon:` each name the body, so each appears only on the kind it
  *   makes. `shape:` is on `none` as well, because `shape: none` is how that kind
  *   is written in the first place.
@@ -369,10 +405,10 @@ export type Kind = 'shape' | 'icon' | 'none' | 'edge';
  *   an edge is not placed — it joins two things that are.
  */
 export const ATTR_KEYS: Record<Kind, readonly string[]> = {
-  shape: ['style', 'gap', 'overlap', 'align', 'badge', 'shape', 'fill', 'border', 'text'],
-  icon: ['style', 'gap', 'overlap', 'badge', 'icon', 'text'],
-  none: ['style', 'gap', 'overlap', 'badge', 'shape', 'text'],
-  edge: ['style', 'from', 'to', 'line', 'text'],
+  shape: ['style', 'gap', 'overlap', 'contents', 'badge', 'shape', 'fill', 'border', 'text', 'url'],
+  icon: ['style', 'gap', 'overlap', 'badge', 'icon', 'text', 'url'],
+  none: ['style', 'gap', 'overlap', 'badge', 'shape', 'text', 'url'],
+  edge: ['style', 'from', 'to', 'line', 'text', 'url'],
 };
 
 /**
