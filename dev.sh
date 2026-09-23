@@ -222,6 +222,17 @@ im() {
 cmd="${1:-}"
 shift || true
 
+
+# Render a file to an SVG, saying nothing unless it fails — then everything the
+# CLI said, since that is the error. Exits with the CLI's status.
+render_quietly() {
+  local said
+  if ! said="$(node dist/cli.js "$1" -o "$2" 2>&1)"; then
+    echo "$said" >&2
+    exit 1
+  fi
+}
+
 case "$cmd" in
   install)
     npm install
@@ -260,7 +271,10 @@ case "$cmd" in
     in="${1:?input .reladraw path required}"
     out="${2:-$(tmp_path look png)}"
     svg="$(tmp_path look svg)"
-    node dist/cli.js "$in" -o "$svg" >/dev/null 2>&1
+    # The CLI reports the path it wrote on stderr, which is noise here — but a
+    # refused file's error goes there too and has to reach the terminal, so
+    # the output is kept and shown only when the render fails.
+    render_quietly "$in" "$svg"
     screenshot "$svg" "$out" "$(svg_size "$svg")" ffffff
     rm -f "$svg"
     echo "$out"
@@ -275,7 +289,7 @@ case "$cmd" in
       name="${pair%%:*}"
       out="${pair#*:}"
       svg="$(tmp_path readme svg)"
-      node dist/cli.js "examples/$name.reladraw" -o "$svg" >/dev/null 2>&1
+      render_quietly "examples/$name.reladraw" "$svg"
       screenshot "$svg" "$out" "$(svg_size "$svg")" ffffff
       rm -f "$svg"
       echo "$out"
