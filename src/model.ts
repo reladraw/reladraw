@@ -72,13 +72,6 @@ export interface LayoutNode {
   banded: boolean;
 
   /**
-   * Where the badge is drawn, as an offset from the node's outer top-left.
-   * Absent where there is no badge. Worked out by the resolver for the reason
-   * `textBox` is: the resolver reserved the room, so it says where it is.
-   */
-  badgeBox?: { x: number; y: number; width: number; height: number };
-
-  /**
    * The rectangle this node's own text occupies, as an offset from the node's
    * outer top-left. The *ink* box, not the room it ranges in: for a container
    * that is the title itself, not the width of the band.

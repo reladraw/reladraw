@@ -273,10 +273,3 @@ export function iconNamed(named: string, line: number): Icon {
   }
   return icon;
 }
-
-/** The badge a node wears, or nothing. A small picture stamped beside its text. */
-export function badgeFor(appearance: Record<string, string>, line: number): Icon | undefined {
-  const named = appearance['badge'];
-  if (named === undefined) return undefined;
-  return iconNamed(named, line);
-}

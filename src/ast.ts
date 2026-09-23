@@ -496,8 +496,8 @@ export type Kind = 'shape' | 'icon' | 'none' | 'edge';
  */
 export const ATTR_KEYS: Record<Kind, readonly string[]> = {
   shape: ['style', 'gap', 'overlap', 'contents', 'badge', 'shape', 'fill', 'border', 'text', 'url'],
-  icon: ['style', 'gap', 'overlap', 'badge', 'icon', 'text', 'url'],
-  none: ['style', 'gap', 'overlap', 'badge', 'shape', 'text', 'url'],
+  icon: ['style', 'gap', 'overlap', 'icon', 'text', 'url'],
+  none: ['style', 'gap', 'overlap', 'shape', 'text', 'url'],
   edge: ['style', 'from', 'to', 'line', 'text', 'url'],
 };
 

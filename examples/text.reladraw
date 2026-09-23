@@ -47,10 +47,14 @@ node shelf "Shelf" (at: bottom-right, align: right)  below roomy (gap: wide)  st
 node shelf.one "first"   style: plain
 node shelf.two "second"  below shelf.one (gap: tight)  style: plain
 
-// A leaf is usually the size of its own text, so `at` is inert on one. A badge
-// is two lines tall, which gives a shorter text beside it room to move.
-node tall "Top" (at: top-left)     right of shelf (gap: wide)  badge: disk  style: plain
-node deep "Bottom" (at: bottom-left)  below tall (gap: tight)  badge: disk  style: plain
+// A box is usually the size of its own text, so `at` is inert on one. An icon
+// against the box's right side is two lines tall, which gives a shorter text
+// beside it room to move. A badge would not: it is placed against the text, so
+// it goes where the text goes.
+node tall "Top" (at: top-left)     right of shelf (gap: wide)  style: plain
+node tall.disk  icon: disk  inside tall right
+node deep "Bottom" (at: bottom-left)  below tall (gap: tight)  style: plain
+node deep.disk  icon: disk  inside deep right
 
 // `size` and `wrap` are properties of the text too. The wrap is a count of
 // characters, not a distance: it says how much fits on a line and nothing

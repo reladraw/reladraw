@@ -602,7 +602,7 @@ Every attribute, and what takes one. The kinds here are what a node's **body** i
 | `gap` | ✓ | ✓ | ✓ | | the default distance to whatever it is placed against |
 | `overlap` | ✓ | ✓ | ✓ | | `allow`, to opt out of non-overlap |
 | `contents` | ✓ | | | | how the children are sized and where the block of them sits, in brackets |
-| `badge` | ✓ | ✓ | ✓ | | the picture that takes the column beside the text |
+| `badge` | ✓ | | | | the picture beside the text |
 | `shape` | ✓ | | ✓ | | the outline the node is drawn with, `none` included |
 | `icon` | | ✓ | | | the picture the node is drawn as |
 | `from` `to` | | | | ✓ | which side the line leaves and arrives on |

@@ -15,7 +15,7 @@ import {
 import type { Attrs, Axis } from './ast.js';
 import { describeAxis } from './ast.js';
 import { SourceError } from './errors.js';
-import { ICON_STROKE, badgeFor, type Icon, type IconTone, type Outline } from './icons.js';
+import { ICON_STROKE, type Icon, type IconTone, type Outline } from './icons.js';
 import { monospaceMeasurer, type Measurer } from './measure.js';
 import type { Layout, LayoutEdge, LayoutNode } from './model.js';
 import { plain, type Line, type Run } from './text.js';
@@ -149,14 +149,10 @@ export function render(layout: Layout, options: RenderOptions = {}): string {
  * a container carry a destination while a child carries its own, and it does not
  * work: Chrome draws nothing at all inside the inner one, so the child simply
  * disappears from the picture. Every node's anchor therefore wraps only what
- * that node draws — outline, text, badge — and its children are emitted beside
+ * that node draws — outline and text — and its children are emitted beside
  * it, each wrapping itself. The reading comes out the same anyway, because the
  * container's filled outline lies under the children and catches every click
  * that does not land on one of them.
- *
- * A container's badge is drawn *after* its children — it rides in the title band
- * and a decked node's stack can reach under it — so a linked container emits two
- * anchors with one destination rather than reordering the ink to save one.
  *
  * A destination therefore reaches down the tree instead of enclosing it: a child
  * that names none of its own is drawn inside an anchor carrying its container's,
@@ -180,16 +176,16 @@ function drawNode(
   inherited?: string,
 ): string {
   const url = node.attrs['url'] ?? inherited;
-  const { own, kids, tail } = nodeSvg(node, theme, measurer, fontSize, markup, url);
-  return [linked(own.join('\n'), url), ...kids, linked(tail.join('\n'), url)]
+  const { own, kids } = nodeSvg(node, theme, measurer, fontSize, markup, url);
+  return [linked(own.join('\n'), url), ...kids]
     .filter((part) => part.length > 0)
     .join('\n');
 }
 
 /**
- * What a node draws, in three pieces: its own ink, its children's, and the
- * ink that goes over the children. They are kept apart so the node's `<a>` can
- * wrap what is the node's without swallowing what is a child's.
+ * What a node draws, in two pieces: its own ink and its children's. They are
+ * kept apart so the node's `<a>` can wrap what is the node's without
+ * swallowing what is a child's.
  */
 function nodeSvg(
   node: LayoutNode,
@@ -198,7 +194,7 @@ function nodeSvg(
   fontSize: number,
   markup: Record<string, string>,
   url: string | undefined,
-): { own: string[]; kids: string[]; tail: string[] } {
+): { own: string[]; kids: string[] } {
   // A note is set smaller than a box text by default, and `size:` overrides
   // that on anything. Only this node's own text takes the size — children are
   // drawn by their own call and carry whatever they say themselves.
@@ -209,7 +205,7 @@ function nodeSvg(
 
   if (node.body.kind === 'none') {
     const style = textStyleFor(node.textAttrs, node.line, 'start', 'center');
-    return { kids: [], tail: [], own: [sized(
+    return { kids: [], own: [sized(
       textBlock(node.lines, node.x, node.y, textHeight, size, node.textBox, {
         color: textColorOf(node.textAttrs, theme, theme.text),
         align: style.align,
@@ -242,13 +238,12 @@ function nodeSvg(
         ),
       );
     }
-    return { own: drawn, kids: [], tail: [] };
+    return { own: drawn, kids: [] };
   }
 
   const outline = node.body.outline;
   const parts: string[] = [];
   const kids: string[] = [];
-  const tail: string[] = [];
   const face = faceOf(node);
   // A container *looks* like one because things stack beside its text, not
   // because it has children: a node whose only child sits beside its text is
@@ -314,15 +309,7 @@ function nodeSvg(
     kids.push(drawNode(child, theme, measurer, fontSize, markup, url));
   }
 
-  const icon = badgeFor(node.appearance, node.line);
-  if (icon !== undefined && node.badgeBox) {
-    // Drawn where the resolver reserved room for it. A badge in a band goes
-    // over the children, since a decked node's stack can reach under it.
-    const badge = drawIcon(icon, node.x + node.badgeBox.x, node.y + node.badgeBox.y, node.badgeBox.width, theme);
-    (node.children.length > 0 ? tail : parts).push(badge);
-  }
-
-  return { own: parts, kids, tail };
+  return { own: parts, kids };
 }
 
 /**

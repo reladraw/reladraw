@@ -43,7 +43,7 @@ import {
 } from './constants.js';
 import { fix, reachability, tightest, type Constraint, type Contradiction } from './constrain.js';
 import { SourceError } from './errors.js';
-import { type Body, badgeFor, bodyFor } from './icons.js';
+import { type Body, bodyFor } from './icons.js';
 import { monospaceMeasurer, type Measurer } from './measure.js';
 import { markupStyles, parseMarkup, plain, splitRuns, wrapLine, type Line } from './text.js';
 import type { Layout, LayoutEdge, LayoutNode, LayoutPassage, Reach } from './model.js';
@@ -131,11 +131,21 @@ function buildTree(statements: Stmt[], styles: Map<string, Attrs>) {
   const nodes: LayoutNode[] = [];
   const byName = new Map<string, LayoutNode>();
   const roots: LayoutNode[] = [];
+  /** Each badge child's name, and the node whose `badge:` it was written out from. */
+  const badges = new Map<string, string>();
 
   for (const stmt of statements) {
     if (stmt.kind !== 'node') continue;
 
     if (byName.has(stmt.name)) {
+      const owner = badges.get(stmt.name);
+      if (owner !== undefined) {
+        throw new SourceError(
+          `"${stmt.name}" is the child that "${owner}"'s badge: is written out as. Drop badge: from ` +
+            `"${owner}" and write the icon here yourself, or give this node another name`,
+          stmt.line,
+        );
+      }
       throw new SourceError(`"${stmt.name}" is declared twice`, stmt.line);
     }
 
@@ -201,9 +211,63 @@ function buildTree(statements: Stmt[], styles: Map<string, Attrs>) {
 
     nodes.push(node);
     byName.set(stmt.name, node);
+
+    // `badge: X` is a shorthand, and this is its expansion:
+    //   node <self>.badge  icon: X  right of <self> text (gap: 10)
+    // set at the parent's text size, so the picture is two of the parent's
+    // lines tall. Read from the merged appearance, so a style carrying a badge
+    // gives one to every box wearing it. Only a box has a text to be beside;
+    // the other kinds refuse the word in `checkAttrs`, and a style's is unused.
+    const named = appearance['badge'];
+    if (named !== undefined && body.kind === 'shape') {
+      const badge = badgeChild(node, named);
+      badges.set(badge.name, node.name);
+      node.children.push(badge);
+      nodes.push(badge);
+      byName.set(badge.name, badge);
+    }
   }
 
   return { nodes, byName, roots };
+}
+
+/** The child `badge:` writes out, as `buildTree` describes. */
+function badgeChild(parent: LayoutNode, named: string): LayoutNode {
+  const icon = { icon: named };
+  const size = parent.textAttrs['size'];
+  return {
+    name: `${parent.name}.badge`,
+    kind: 'icon',
+    body: bodyFor(icon, icon, parent.line),
+    text: '',
+    lines: linesFor('', {}, `"${parent.name}.badge"`, parent.line),
+    children: [],
+    parent,
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+    inset: 0,
+    deckTexts: [],
+    headerHeight: 0,
+    reach: { left: 0, top: 0, right: 0, bottom: 0 },
+    banded: false,
+    textBox: { x: 0, y: 0, width: 0, height: 0 },
+    textSide: 'center',
+    textAttrs: size === undefined ? {} : { size },
+    attrs: icon,
+    appearance: icon,
+    placements: [
+      {
+        kind: 'offset',
+        direction: 'right',
+        targets: [{ name: parent.name, part: 'text' }],
+        gap: String(ICON_GAP),
+        line: parent.line,
+      },
+    ],
+    line: parent.line,
+  };
 }
 
 /**
@@ -539,14 +603,6 @@ function sizeNode(
     return;
   }
 
-  // A badge takes a column of its own on the right of whatever the box holds,
-  // so the text never runs underneath it and the box grows to fit both. That
-  // is why a badge is not a renderer-only concern: it is content taking room,
-  // like a text, and not appearance like `fill:`.
-  const icon = badgeFor(node.appearance, node.line);
-  const iconSide = icon === undefined ? 0 : glyphSide;
-  const iconRoom = icon === undefined ? 0 : iconSide + (hasText ? ICON_GAP : 0);
-
   // Read before the split, so a misspelt word is refused on a childless node
   // too. The *absence* of children makes the setting inert, which stays silent;
   // a value the language does not have is wrong wherever it is written.
@@ -554,39 +610,29 @@ function sizeNode(
 
   if (node.children.length === 0) {
     // `at` is read on a leaf too, and is inert wherever the box is exactly the
-    // size of what it holds — which is most leaves, since a leaf is sized from
-    // its own text. It bites where there is slack: a badge is two lines tall, so
-    // a one-line text beside one has a line of room to sit at either end of.
-    // Inert-but-legal stays silent here, the same treatment `align` gets on a
-    // leaf with one line.
+    // size of what it holds — which is every leaf, since a leaf is sized from
+    // its own text. It bites once the box is sized by something else: a
+    // `widths:` that widens it, or a child placed beside the text. Inert-but-
+    // legal stays silent here, the same treatment `align` gets on a leaf with
+    // one line.
     const style = textStyleFor(node.textAttrs, node.line, 'middle', 'center');
-    node.width = textWidth + iconRoom + PAD * 2;
-    node.height = Math.max(textHeight, iconSide) + PAD * 2;
-    // A leaf's text sits in the room beside the badge rather than in the whole
-    // box, which is what puts the two side by side.
+    node.width = textWidth + PAD * 2;
+    node.height = textHeight + PAD * 2;
     node.textBox = textBoxIn(
       {
         x: PAD,
         y: leafTop(style.end, 0, node.height, textHeight),
-        width: node.width - PAD * 2 - iconRoom,
+        width: node.width - PAD * 2,
         height: textHeight,
       },
       (node.textSide = style.side),
       textWidth,
       textHeight,
     );
-    if (icon !== undefined) {
-      node.badgeBox = {
-        x: node.width - PAD - iconSide,
-        y: leafTop(style.end, 0, node.height, iconSide),
-        width: iconSide,
-        height: iconSide,
-      };
-    }
   } else if (framedChildren(node).size > 0) {
     // Something is placed against this node's own frame or text, so where its
     // text sits and how big it is come out of one solve with its children.
-    const own: OwnText = { textWidth, textHeight, iconSide, hasIcon: icon !== undefined, contents };
+    const own: OwnText = { textWidth, textHeight, contents };
     const lay = (width: number): void => {
       layoutFramed(node, own, edges, measurer, fontSize, local, width - node.deckTexts.length * DECK_STEP);
       applyDeck(node, local);
@@ -602,27 +648,26 @@ function sizeNode(
       // needs the contents measured first. Where they already set the width
       // this is `match` exactly; where the title wins it is the answer `match`
       // could not give.
-      const band = Math.max(textWidth + iconRoom, content.width);
+      const band = Math.max(textWidth, content.width);
       for (const child of node.children) widenTo(child, band);
       content = layoutChildren(node.children, edges, measurer, fontSize, local);
     }
-    const band = Math.max(textHeight, iconSide);
-    // `headerHeight` is the band the text and icon take, whichever end of the
-    // box that band is at. Only the contents' offset depends on the side.
-    node.headerHeight = hasText || icon !== undefined ? band + HEADER_GAP : 0;
-    node.width = Math.max(textWidth + iconRoom, content.width) + PAD * 2;
+    // `headerHeight` is the band the text takes, whichever end of the box that
+    // band is at. Only the contents' offset depends on the side.
+    node.headerHeight = hasText ? textHeight + HEADER_GAP : 0;
+    node.width = Math.max(textWidth, content.width) + PAD * 2;
     node.height = node.headerHeight + content.height + PAD * 2;
 
     const style = textStyleFor(node.textAttrs, node.line);
     if (style.end === 'center') throw bandInMiddle(node, style.at);
     const above = style.end === 'top' ? node.headerHeight : 0;
-    // The text and the badge share a band at one end of the box, and the
-    // contents have the other.
+    // The text has a band at one end of the box, and the contents have the
+    // other.
     node.textBox = textBoxIn(
       {
         x: PAD,
-        y: style.end === 'top' ? PAD : node.height - PAD - band,
-        width: node.width - PAD * 2 - iconRoom,
+        y: style.end === 'top' ? PAD : node.height - PAD - textHeight,
+        width: node.width - PAD * 2,
         height: textHeight,
       },
       (node.textSide = style.side),
@@ -640,15 +685,6 @@ function sizeNode(
       offset.y += PAD + above;
     }
     node.banded = true;
-    if (icon !== undefined) {
-      // The badge rides in the band, flush with the box's right edge.
-      node.badgeBox = {
-        x: node.width - PAD - iconSide,
-        y: style.end === 'top' ? PAD : node.height - PAD - iconSide,
-        width: iconSide,
-        height: iconSide,
-      };
-    }
   }
 
   applyDeck(node, local);
@@ -667,10 +703,6 @@ function applyDeck(node: LayoutNode, local: Local): void {
     node.height += node.inset;
     node.textBox.x += node.inset;
     node.textBox.y += node.inset;
-    if (node.badgeBox) {
-      node.badgeBox.x += node.inset;
-      node.badgeBox.y += node.inset;
-    }
     for (const child of node.children) {
       const offset = local.get(child)!;
       offset.x += node.inset;
@@ -763,8 +795,6 @@ function widenTo(node: LayoutNode, width: number): void {
   node.width = width;
   if (node.textSide === 'center') node.textBox.x += grew / 2;
   else if (node.textSide === 'right') node.textBox.x += grew;
-  // The badge is flush with the right edge, so it moves by the whole difference.
-  if (node.badgeBox) node.badgeBox.x += grew;
 }
 
 /**
@@ -857,12 +887,10 @@ function extentOf(children: LayoutNode[], local: Local): { width: number; height
   return { width: maxX - minX, height: maxY - minY };
 }
 
-/** What a node's own text and badge take, measured once by `sizeNode`. */
+/** What a node's own text takes, measured once by `sizeNode`. */
 interface OwnText {
   textWidth: number;
   textHeight: number;
-  iconSide: number;
-  hasIcon: boolean;
   contents: ContentsStyle;
 }
 
@@ -1032,7 +1060,7 @@ function layoutFramed(
   local: Local,
   minWidth: number,
 ): void {
-  const { textWidth, textHeight, iconSide, hasIcon, contents } = own;
+  const { textWidth, textHeight, contents } = own;
   const hasText = textWidth > 0;
   const framed = framedChildren(node);
   const stacked = node.children.filter((child) => !framed.has(child));
@@ -1042,15 +1070,28 @@ function layoutFramed(
     ? textStyleFor(node.textAttrs, node.line)
     : textStyleFor(node.textAttrs, node.line, 'middle', 'center');
   if (banded && style.end === 'center') throw bandInMiddle(node, style.at);
-  const iconRoom = hasIcon ? iconSide + (hasText ? ICON_GAP : 0) : 0;
-  const band = Math.max(textHeight, iconSide);
+  // The children placed against this node's text. With it they make the
+  // text's row: the contents stack past all of them, and they range and
+  // center with the text as one group.
+  const againstText = (placement: Placement) =>
+    placement.targets.some((target) => target.name === node.name && target.part === 'text');
+  const withText = placed.filter((child) => child.placements.some(againstText));
 
   let block = { width: 0, height: 0 };
   if (banded) {
     if (contents.widths === 'match') matchWidths(stacked);
     block = layoutChildren(stacked, edges, measurer, fontSize, local);
     if (contents.widths === 'fill') {
-      const across = Math.max(textWidth + iconRoom, block.width);
+      // The row is the text and whatever stands beside it, each at its gap.
+      let row = textWidth;
+      for (const child of withText) {
+        const beside = child.placements.find(
+          (placement): placement is OffsetPlacement =>
+            placement.kind === 'offset' && /left|right/.test(placement.direction) && againstText(placement),
+        );
+        if (beside) row += child.width + (hasText ? gapFor(child, beside, node) : 0);
+      }
+      const across = Math.max(row, block.width);
       for (const child of stacked) widenTo(child, across);
       block = layoutChildren(stacked, edges, measurer, fontSize, local);
     }
@@ -1059,8 +1100,10 @@ function layoutFramed(
   const members: LayoutNode[] = [...placed];
   const add = (member: LayoutNode): number => members.push(member) - 1;
   const K = banded ? add(stand(node, 'contents', block.width, block.height)) : -1;
-  const T = hasText ? add(stand(node, 'text', textWidth, textHeight)) : -1;
-  const B = hasIcon ? add(stand(node, 'badge', iconSide, iconSide)) : -1;
+  // An empty text is still somewhere, so a thing placed against it has a
+  // place to be: it is a point where the text would have been, and it takes
+  // no room — including the gap beside it, which `Target.empty` drops.
+  const T = hasText || withText.length > 0 ? add(stand(node, 'text', textWidth, textHeight)) : -1;
   const TL = add(stand(node, 'frame', 0, 0));
   const BR = add(stand(node, 'frame', 0, 0));
 
@@ -1074,25 +1117,18 @@ function layoutFramed(
     if (!free.has('bottom')) y.push({ from: index, to: BR, weight: height + reach.bottom + PAD });
   };
   placed.forEach((child, index) => hold(index, freeSides(child, node)));
-  for (const index of [K, T, B]) if (index >= 0) hold(index, new Set());
+  for (const index of [K, T]) if (index >= 0) hold(index, new Set());
   if (minWidth > 0) x.push({ from: TL, to: BR, weight: minWidth });
 
+  // The text's row, as members: the text and everything placed against it.
+  const row = [...(T >= 0 ? [T] : []), ...withText.map((child) => placed.indexOf(child))];
   if (banded) {
-    // The text and the badge share a band at one end, the contents the other.
-    if (style.end === 'top') {
-      for (const above of [T, B]) if (above >= 0) y.push({ from: above, to: K, weight: band + HEADER_GAP });
-    } else {
-      if (T >= 0) y.push({ from: K, to: T, weight: block.height + HEADER_GAP });
-      if (B >= 0) y.push({ from: K, to: B, weight: block.height + HEADER_GAP + band - iconSide });
+    // The text's row is at one end, the contents the other.
+    for (const index of row) {
+      const { height, reach } = members[index]!;
+      if (style.end === 'top') y.push({ from: index, to: K, weight: height + reach.bottom + HEADER_GAP });
+      else y.push({ from: K, to: index, weight: block.height + HEADER_GAP + reach.top });
     }
-    if (T >= 0 && B >= 0) x.push({ from: T, to: B, weight: textWidth + ICON_GAP });
-    if (B >= 0) x.push(...fix(B, BR, iconSide + PAD));
-  } else if (T >= 0 && B >= 0) {
-    // With no band the badge sits beside the text, as it does on a leaf.
-    x.push(...fix(T, B, textWidth + ICON_GAP));
-    const drop =
-      style.end === 'top' ? 0 : style.end === 'bottom' ? textHeight - iconSide : (textHeight - iconSide) / 2;
-    y.push(...fix(T, B, drop));
   }
 
   const siblings = new Map(node.children.map((child) => [child.name, child]));
@@ -1101,14 +1137,18 @@ function layoutFramed(
     placement.targets.flatMap(({ name, part }): Target[] => {
       if (name === node.name) {
         if (part !== 'text') return frameTargets(node, part, TL, BR);
-        if (T < 0) {
-          throw new SourceError(
-            `"${owner.name}" is placed against "${name} text", and "${name}" has no text`,
-            placement.line,
-          );
-        }
         const text = { x: 0, y: 0 };
-        return [{ name: `${name} text`, node, index: T, offset: text, width: textWidth, height: textHeight }];
+        return [
+          {
+            name: `${name} text`,
+            node,
+            index: T,
+            offset: text,
+            width: textWidth,
+            height: textHeight,
+            ...(hasText ? {} : { empty: true }),
+          },
+        ];
       }
       const sibling = siblings.get(name);
       if (!sibling) {
@@ -1165,34 +1205,27 @@ function layoutFramed(
     if (to - at(index)[axis] <= 1e-9) return;
     pins[axis].push(...fix(TL, index, to - at(TL)[axis]));
   };
+  // The text and the things placed against it range and center as a group,
+  // which is the fan rule's sentence again: several things against one target
+  // are balanced on it together.
+  const extent = (axis: Axis) => {
+    let start = Infinity;
+    let end = -Infinity;
+    for (const index of row) {
+      const size = axis === 'x' ? members[index]!.width : members[index]!.height;
+      start = Math.min(start, at(index)[axis]);
+      end = Math.max(end, at(index)[axis] + size);
+    }
+    return { start, end };
+  };
   if (banded) {
     if (T >= 0 && style.side !== 'left') {
-      const room = inner('x');
-      pin('x', T, alignedAt(style.side, { start: room.start, size: room.size - iconRoom }, textWidth));
+      const { start, end } = extent('x');
+      pin('x', T, at(T).x + (alignedAt(style.side, inner('x'), end - start) - start));
     }
     if (contents.align !== 'left') pin('x', K, alignedAt(contents.align, inner('x'), block.width));
-  } else if (T >= 0 || B >= 0) {
-    // The text and the things placed against it center as a group, which is
-    // the fan rule's sentence again: several things against one target are
-    // balanced on it together.
-    const lead = T >= 0 ? T : B;
-    const against = placed.filter((child) =>
-      child.placements.some((placement) =>
-        placement.targets.some((target) => target.name === node.name && target.part === 'text'),
-      ),
-    );
-    const group = [lead, ...(T >= 0 && B >= 0 ? [B] : []), ...against.map((child) => indexOf.get(child)!)];
+  } else if (T >= 0) {
     const sides: Record<Axis, Side> = { x: style.side, y: style.end };
-    const extent = (axis: Axis) => {
-      let start = Infinity;
-      let end = -Infinity;
-      for (const index of group) {
-        const size = axis === 'x' ? members[index]!.width : members[index]!.height;
-        start = Math.min(start, at(index)[axis]);
-        end = Math.max(end, at(index)[axis] + size);
-      }
-      return { start, end };
-    };
     // The text and its group range in the room their own row (across) or
     // column (down) leaves them — between whatever sits beside, above or below
     // them — not in the whole box. Ranged against the whole width, a
@@ -1208,7 +1241,7 @@ function layoutFramed(
       let start = whole.start;
       let end = whole.start + whole.size;
       members.forEach((member, index) => {
-        if (group.includes(index) || index === TL || index === BR) return;
+        if (row.includes(index) || index === TL || index === BR) return;
         const c0 = at(index)[cross];
         if (c0 + size(member, cross) <= beside.start || c0 >= beside.end) return;
         const a0 = at(index)[axis];
@@ -1221,7 +1254,7 @@ function layoutFramed(
       if (sides[axis] === 'left' || sides[axis] === 'top') continue;
       const { start, end } = extent(axis);
       const want = alignedAt(sides[axis], room(axis), end - start);
-      pin(axis, lead, at(lead)[axis] + (want - start));
+      pin(axis, T, at(T)[axis] + (want - start));
     }
   }
   if (pins.x.length > 0 || pins.y.length > 0) solved = solve(pins);
@@ -1232,7 +1265,7 @@ function layoutFramed(
   node.width = corner.x - origin.x;
   node.height = corner.y - origin.y;
   node.banded = banded;
-  node.headerHeight = banded && (hasText || hasIcon) ? band + HEADER_GAP : 0;
+  node.headerHeight = banded && hasText ? textHeight + HEADER_GAP : 0;
   node.textSide = style.side;
   const relative = (index: number, width: number, height: number) => ({
     x: at(index).x - origin.x,
@@ -1241,7 +1274,6 @@ function layoutFramed(
     height,
   });
   node.textBox = T >= 0 ? relative(T, textWidth, textHeight) : { x: 0, y: 0, width: 0, height: 0 };
-  if (B >= 0) node.badgeBox = relative(B, iconSide, iconSide);
   const reach = { left: 0, top: 0, right: 0, bottom: 0 };
   for (const child of placed) {
     const position = solved.get(child)!;
@@ -1380,6 +1412,11 @@ interface Target {
   frame?: boolean;
   /** What a whole-node target has placed outside itself, kept clear with it. */
   reach?: Reach;
+  /**
+   * An empty text, which takes no room: nothing stands a gap off it, so a
+   * thing placed beside it lands where the text would have been.
+   */
+  empty?: boolean;
   offset: { x: number; y: number };
   width: number;
   height: number;
@@ -1606,7 +1643,7 @@ function positionGroup(
       // default. That is what lets a node wedged between two things sit tight
       // against one of them and wide of the other.
       for (const target of targets) {
-        const gap = gapFor(node, placement, target.node);
+        const gap = target.empty ? 0 : gapFor(node, placement, target.node);
         // Tucked inside the frame of the box that holds it, a child is *at*
         // that edge rather than at least so far from it: the frame is also
         // held open around every child, which is a pull the other way, and
