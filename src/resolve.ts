@@ -1186,10 +1186,43 @@ function layoutFramed(
   });
   const across = (i: number, j: number): Axis | undefined => facing.get(i) ?? facing.get(j);
 
+  // An edge end inside this node, as a member of this solve: a framed child
+  // or something inside one, or something in the contents, reached through
+  // the block at the offset the contents solve gave it. An end outside the
+  // node is none of this solve's business.
+  const endOf = (end: LayoutNode): Target | undefined => {
+    let member = end;
+    const offset = { x: 0, y: 0 };
+    while (member.parent !== node) {
+      const step = local.get(member);
+      if (!step || !member.parent) return undefined;
+      offset.x += step.x;
+      offset.y += step.y;
+      member = member.parent;
+    }
+    const inBlock = !framed.has(member);
+    if (inBlock) {
+      const step = local.get(member)!;
+      offset.x += step.x;
+      offset.y += step.y;
+    }
+    return {
+      name: end.name,
+      node: end,
+      index: inBlock ? K : indexOf.get(member)!,
+      offset,
+      width: end.width,
+      height: end.height,
+    };
+  };
+  // Two ends both in the contents come out as one member and are skipped:
+  // the contents solve already made room for that edge's text.
+  const corridors = corridorsIn(edges, endOf, measurer, fontSize);
+
   const solve = (pins: Record<Axis, Constraint[]>) =>
     // Everything here is inside one box, so a collision separates by the step
     // the contents stack by, not by the gap kept between strangers.
-    positionGroup(members, locate, { x: [...x, ...pins.x], y: [...y, ...pins.y] }, [], across, CHILD_GAP);
+    positionGroup(members, locate, { x: [...x, ...pins.x], y: [...y, ...pins.y] }, corridors, across, CHILD_GAP);
   let solved = solve({ x: [], y: [] });
 
   // Where a text is centered or ranged right, where it goes depends on how
@@ -1711,10 +1744,22 @@ function positionGroup(
   };
 
   solveAll();
-  room(corridors, constraints, solved, solveAll);
+  // A member still waiting to be centered on an axis is not yet where it
+  // will be on that axis, so a pair that looks clear there is judged again
+  // after everything is in place, below.
+  const unsettled = (index: number, axis: Axis) =>
+    pending.some((entry) => entry.me === index && entry.axis === axis);
+  room(corridors, constraints, solved, solveAll, unsettled);
   settle(pending, members, constraints, solved, solveAll);
   snug(members, constraints, solved, solveAll);
   separate(members, constraints, solved, solveAll, overlaid, across, clearance);
+  // A pair the separation pass pulled apart may only now have a corridor
+  // between them, with a text in it, and so may a pair one of which was
+  // waiting to be centered. Widening it can push something into something
+  // else, so that is separated in turn.
+  if (room(corridors, constraints, solved, solveAll)) {
+    separate(members, constraints, solved, solveAll, overlaid, across, clearance);
+  }
   confirm(pending, solved);
 
   return new Map(
@@ -1874,7 +1919,8 @@ function room(
   constraints: Record<Axis, Constraint[]>,
   solved: Record<Axis, number[]>,
   solveAll: () => void,
-): void {
+  unsettled: (index: number, axis: Axis) => boolean = () => false,
+): boolean {
   let added = false;
 
   for (const { from, to, need } of corridors) {
@@ -1889,6 +1935,7 @@ function room(
     const open = AXES.filter((axis) => clear(axis));
     if (open.length !== 1) continue;
     const axis = open[0]!;
+    if (unsettled(from.index, axis) || unsettled(to.index, axis)) continue;
     const { before, after } = clear(axis)!;
 
     constraints[axis].push({
@@ -1904,6 +1951,7 @@ function room(
   }
 
   if (added) solveAll();
+  return added;
 }
 
 /**

@@ -1,0 +1,78 @@
+// A child may be placed against a part of its own parent — a side, a corner,
+// or the parent's text — with the same words used against anything else. The
+// parent grows to hold it. Whether the parent has a title band is not stated
+// anywhere: there is one when something sits below the text, and not when
+// everything sits beside it or against the frame.
+
+diagram  background: #111111
+
+style mark  fill: #fde68a  border: #b89c3c  text: (color: #111111)
+
+// Four children in the four corners, and nothing below the text, so there is
+// no band: the text sits in the middle, as a leaf's does.
+node corners "Deployment"
+node corners.a "north-west"  inside corners top-left
+node corners.b "north-east"  inside corners top-right
+node corners.c "south-west"  inside corners bottom-left
+node corners.d "south-east"  inside corners bottom-right
+
+// Put two of them below the text and the band is back, made by placement.
+node band "Deployment"  right of corners  gap: wide
+node band.a "north-west"  below band text  inside band left
+node band.b "north-east"  below band text  inside band right
+node band.c "south-west"  inside band bottom-left
+node band.d "south-east"  inside band bottom-right
+
+// With a corner free there is room in the text's row, and `at:` ranges the
+// text across it.
+node ranged "Deployment" (at: top-right)  right of band  gap: wide
+node ranged.a "north-west"  inside ranged top-left
+node ranged.c "south-west"  inside ranged bottom-left
+node ranged.d "south-east"  inside ranged bottom-right
+
+// Three children naming the same side are one group: a column in the order
+// written, centered on the side together. The ordinary contents keep their
+// stack beside it.
+node column "Payments service"  below corners  gap: wide
+node column.api "api"
+node column.db "database"
+node column.one "one"      inside column right  style: mark
+node column.two "two"      inside column right  style: mark
+node column.three "three"  inside column right  style: mark
+
+// A child against the top side sits over the title, and the title and the
+// contents make way below it.
+node paused "Queue worker"  right of column  gap: wide
+node paused.jobs "jobs"
+node paused.retry "retries"
+node paused.flag "PAUSED"  inside paused top  style: mark
+
+// A side and a row at once: against the right edge, level with one child.
+node server "Server"  right of paused  gap: wide
+node server.web "web"
+node server.db "database"
+node server.cache "cache"
+node server.hot "hot"  inside server right  level with server.db  style: mark
+
+// Beside the text, the way a badge is. With nothing below the text the two
+// center in the box as one group.
+node fresh "Release notes"  below column  gap: wide
+node fresh.tag "new"  right of fresh text  style: mark
+
+// On a corner rather than inside it: centered on the point, so it straddles
+// the edge.
+node dot "Inbox"  right of fresh  gap: wide
+node dot.count "3"  on dot top-right  style: mark
+
+// Beyond the frame. The note is still part of the router, so the switch
+// placed right of the router keeps clear of the note too.
+node router "Router"  right of dot  gap: wide
+node router.note "note"  outside router right (gap: tight)  style: mark
+node switch "Switch"  right of router
+
+// An edge's text between two children placed against the frame opens the gap
+// it crosses, exactly as it does between two ordinary children.
+node pipe "Pipeline"  below fresh  gap: wide
+node pipe.src "source"    below pipe text  inside pipe left
+node pipe.out "artifact"  below pipe text  inside pipe right
+edge pipe.src -> pipe.out  "build and test"  from: right  to: left
