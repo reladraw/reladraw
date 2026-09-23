@@ -1743,22 +1743,31 @@ function positionGroup(
     }
   };
 
-  solveAll();
-  // A member still waiting to be centered on an axis is not yet where it
-  // will be on that axis, so a pair that looks clear there is judged again
-  // after everything is in place, below.
-  const unsettled = (index: number, axis: Axis) =>
-    pending.some((entry) => entry.me === index && entry.axis === axis);
-  room(corridors, constraints, solved, solveAll, unsettled);
-  settle(pending, members, constraints, solved, solveAll);
-  snug(members, constraints, solved, solveAll);
-  separate(members, constraints, solved, solveAll, overlaid, across, clearance);
-  // A pair the separation pass pulled apart may only now have a corridor
-  // between them, with a text in it, and so may a pair one of which was
-  // waiting to be centered. Widening it can push something into something
-  // else, so that is separated in turn.
-  if (room(corridors, constraints, solved, solveAll)) {
-    separate(members, constraints, solved, solveAll, overlaid, across, clearance);
+  // An edge's text is given room only once everything is where it goes: a
+  // box still waiting to be centered, or still on top of another, is not yet
+  // where it will be, and room judged against it goes in the wrong gap. Room
+  // can move things in turn, so the centering and pulling-in are measured
+  // again from what the file said, and the texts looked at again, until a
+  // look adds nothing. What was placed, separated or widened stays.
+  //
+  // It stops: each text can be given room once across and once down, room
+  // is never taken back, and a look that gives none ends it.
+  const lasting: Record<Axis, Constraint[]> = { x: [...constraints.x], y: [...constraints.y] };
+  const made = new Set<string>();
+  const keep = (step: () => boolean | void): boolean => {
+    const before = { x: constraints.x.length, y: constraints.y.length };
+    const changed = step();
+    for (const axis of AXES) lasting[axis].push(...constraints[axis].slice(before[axis]));
+    return changed === true;
+  };
+  for (;;) {
+    constraints.x = [...lasting.x];
+    constraints.y = [...lasting.y];
+    solveAll();
+    settle(pending, members, constraints, solved, solveAll);
+    snug(members, constraints, solved, solveAll);
+    keep(() => separate(members, constraints, solved, solveAll, overlaid, across, clearance));
+    if (!keep(() => room(corridors, constraints, solved, solveAll, made))) break;
   }
   confirm(pending, solved);
 
@@ -1919,11 +1928,11 @@ function room(
   constraints: Record<Axis, Constraint[]>,
   solved: Record<Axis, number[]>,
   solveAll: () => void,
-  unsettled: (index: number, axis: Axis) => boolean = () => false,
+  made: Set<string>,
 ): boolean {
   let added = false;
 
-  for (const { from, to, need } of corridors) {
+  for (const [index, { from, to, need }] of corridors.entries()) {
     const clear = (axis: Axis): { before: Target; after: Target } | undefined => {
       const at = (end: Target): number => solved[axis][end.index]! + end.offset[axis];
       const size = (end: Target): number => (axis === 'x' ? end.width : end.height);
@@ -1935,7 +1944,10 @@ function room(
     const open = AXES.filter((axis) => clear(axis));
     if (open.length !== 1) continue;
     const axis = open[0]!;
-    if (unsettled(from.index, axis) || unsettled(to.index, axis)) continue;
+    // Given already, and a minimum stays met: asking again would widen
+    // nothing and only keep the caller looking.
+    if (made.has(`${index}:${axis}`)) continue;
+    made.add(`${index}:${axis}`);
     const { before, after } = clear(axis)!;
 
     constraints[axis].push({
