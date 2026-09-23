@@ -10,6 +10,14 @@ export interface LayoutPassage {
 }
 
 /** A node with its geometry solved. Coordinates are absolute, origin top-left. */
+/** A distance past each side of a box. */
+export interface Reach {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
 export interface LayoutNode {
   name: string;
   /** Which set of attributes this node answers to, decided by its body. */
@@ -44,6 +52,15 @@ export interface LayoutNode {
    * the box `text.at` puts them. Zero for leaves.
    */
   headerHeight: number;
+
+  /**
+   * How far this node's children stick out past its own box on each side —
+   * a child placed `outside` it, or one further down that does. Everything
+   * kept clear of this node keeps clear of those too, since they are part of
+   * it; alignments still read the node's own box. Zero on every side for a
+   * node whose children all sit inside it.
+   */
+  reach: Reach;
 
   /**
    * Whether things stack beside this node's text — below it, or above it when

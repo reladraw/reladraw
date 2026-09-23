@@ -702,7 +702,7 @@ function readOn(
   line: number,
   subject: string,
 ): { placement: Placement; next: number } {
-  const read = readTargets(tokens, at + 1, subject, 'on', line);
+  const read = readTargets(tokens, at + 1, subject, 'on', line, true);
   const target = read.targets[0]!;
   if (read.targets.length > 1) {
     throw new SourceError(
@@ -755,7 +755,7 @@ function readTucked(
   subject: string,
   written: 'inside' | 'outside',
 ): { placement: Placement; next: number } {
-  const read = readTargets(tokens, at + 1, subject, written, line);
+  const read = readTargets(tokens, at + 1, subject, written, line, true);
   const target = read.targets[0]!;
   if (read.targets.length > 1) {
     throw new SourceError(
@@ -905,6 +905,8 @@ function isSideWord(word: string): word is Side {
  * Each name may be followed by a *part* of that node, spaced: `right of hub
  * text`, `inside server right`. See `partAfter` for the two words that are
  * parts everywhere else in the language too, and how they are told apart.
+ * `partFirst` is for the placements where a side word after the name can only
+ * be the part; see there.
  */
 function readTargets(
   tokens: Token[],
@@ -912,6 +914,7 @@ function readTargets(
   subject: string,
   placement: string,
   line: number,
+  partFirst = false,
 ): { targets: PlacementTarget[]; next: number } {
   const targets: PlacementTarget[] = [];
   let i = start;
@@ -927,7 +930,7 @@ function readTargets(
 
     // A part can only follow a name the author did not already close with a
     // comma — `a, b` is two targets and the comma says so.
-    const part = listed ? undefined : partAfter(tokens, i);
+    const part = listed ? undefined : partAfter(tokens, i, partFirst);
     if (part) i += 1;
     targets.push(part === undefined ? { name } : { name, part });
 
@@ -952,10 +955,17 @@ function readTargets(
  * - `right of hub top level with mirror` — a side followed by `level` is the
  *   alignment opening the next placement, the same lookahead `readPlacement`
  *   makes for `top level with`.
+ *
+ * The second does not hold after `inside`, `outside` or `on`, so `partFirst`
+ * lifts it there: `inside server right level with server.db` is the right side
+ * and then an alignment. `inside` and `outside` need a part, so a partless
+ * reading is an error anyway; and `on` already fixes both axes, so an edge
+ * alignment after a partless `on hub` would contradict it.
  */
-function partAfter(tokens: Token[], at: number): Part | undefined {
+function partAfter(tokens: Token[], at: number, partFirst = false): Part | undefined {
   const token = tokens[at];
   if (!token || token.quoted || !isPart(token.text)) return undefined;
-  if (follows(tokens, at + 1, 'of') || follows(tokens, at + 1, 'level')) return undefined;
+  if (follows(tokens, at + 1, 'of')) return undefined;
+  if (!partFirst && follows(tokens, at + 1, 'level')) return undefined;
   return token.text;
 }

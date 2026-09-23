@@ -46,7 +46,7 @@ import { SourceError } from './errors.js';
 import { type Body, badgeFor, bodyFor } from './icons.js';
 import { monospaceMeasurer, type Measurer } from './measure.js';
 import { markupStyles, parseMarkup, plain, splitRuns, wrapLine, type Line } from './text.js';
-import type { Layout, LayoutEdge, LayoutNode, LayoutPassage } from './model.js';
+import type { Layout, LayoutEdge, LayoutNode, LayoutPassage, Reach } from './model.js';
 
 export interface ResolveOptions {
   measurer?: Measurer;
@@ -169,6 +169,7 @@ function buildTree(statements: Stmt[], styles: Map<string, Attrs>) {
       inset: 0,
       deckTexts: [],
       headerHeight: 0,
+      reach: { left: 0, top: 0, right: 0, bottom: 0 },
       banded: false,
       textBox: { x: 0, y: 0, width: 0, height: 0 },
       textSide: 'left',
@@ -565,9 +566,9 @@ function sizeNode(
     // box, which is what puts the two side by side.
     node.textBox = textBoxIn(
       {
-        x: 0,
+        x: PAD,
         y: leafTop(style.end, 0, node.height, textHeight),
-        width: node.width - iconRoom,
+        width: node.width - PAD * 2 - iconRoom,
         height: textHeight,
       },
       (node.textSide = style.side),
@@ -836,12 +837,15 @@ function extentOf(children: LayoutNode[], local: Local): { width: number; height
   let maxX = -Infinity;
   let maxY = -Infinity;
 
+  // What a child has placed outside itself is still part of it, so the block
+  // holding the child holds that too.
   for (const child of children) {
     const offset = local.get(child)!;
-    minX = Math.min(minX, offset.x);
-    minY = Math.min(minY, offset.y);
-    maxX = Math.max(maxX, offset.x + child.width);
-    maxY = Math.max(maxY, offset.y + child.height);
+    const { reach } = child;
+    minX = Math.min(minX, offset.x - reach.left);
+    minY = Math.min(minY, offset.y - reach.top);
+    maxX = Math.max(maxX, offset.x + child.width + reach.right);
+    maxY = Math.max(maxY, offset.y + child.height + reach.bottom);
   }
 
   for (const child of children) {
@@ -919,9 +923,10 @@ function freeSides(child: LayoutNode, parent: LayoutNode): Set<PartSide> {
     for (const target of placement.targets) {
       if (target.name !== parent.name || target.part === 'text') continue;
       if (placement.kind === 'offset' && placement.written !== 'inside') {
-        // Beyond the frame on this axis, so it neither holds the frame open
-        // nor is held in by it.
-        for (const side of across(placement.direction)) free.add(side);
+        // Beyond the frame, so it neither holds the frame open nor is held in
+        // by it — on either axis. Held on the other one, a note taller than
+        // its parent's text would stretch the parent to fit a thing outside it.
+        for (const side of PART_SIDES) free.add(side);
         continue;
       }
       const words = (target.part ?? '').split('-');
@@ -980,6 +985,7 @@ function stand(of: LayoutNode, what: string, width: number, height: number): Lay
     attrs: {},
     appearance: {},
     deckTexts: [],
+    reach: NO_REACH,
     x: 0,
     y: 0,
     width,
@@ -1061,11 +1067,11 @@ function layoutFramed(
   const x: Constraint[] = [];
   const y: Constraint[] = [];
   const hold = (index: number, free: Set<PartSide>): void => {
-    const member = members[index]!;
-    if (!free.has('left')) x.push({ from: TL, to: index, weight: PAD });
-    if (!free.has('right')) x.push({ from: index, to: BR, weight: member.width + PAD });
-    if (!free.has('top')) y.push({ from: TL, to: index, weight: PAD });
-    if (!free.has('bottom')) y.push({ from: index, to: BR, weight: member.height + PAD });
+    const { width, height, reach } = members[index]!;
+    if (!free.has('left')) x.push({ from: TL, to: index, weight: PAD + reach.left });
+    if (!free.has('right')) x.push({ from: index, to: BR, weight: width + reach.right + PAD });
+    if (!free.has('top')) y.push({ from: TL, to: index, weight: PAD + reach.top });
+    if (!free.has('bottom')) y.push({ from: index, to: BR, weight: height + reach.bottom + PAD });
   };
   placed.forEach((child, index) => hold(index, freeSides(child, node)));
   for (const index of [K, T, B]) if (index >= 0) hold(index, new Set());
@@ -1141,7 +1147,9 @@ function layoutFramed(
   const across = (i: number, j: number): Axis | undefined => facing.get(i) ?? facing.get(j);
 
   const solve = (pins: Record<Axis, Constraint[]>) =>
-    positionGroup(members, locate, { x: [...x, ...pins.x], y: [...y, ...pins.y] }, [], across);
+    // Everything here is inside one box, so a collision separates by the step
+    // the contents stack by, not by the gap kept between strangers.
+    positionGroup(members, locate, { x: [...x, ...pins.x], y: [...y, ...pins.y] }, [], across, CHILD_GAP);
   let solved = solve({ x: [], y: [] });
 
   // Where a text is centered or ranged right, where it goes depends on how
@@ -1175,8 +1183,7 @@ function layoutFramed(
     );
     const group = [lead, ...(T >= 0 && B >= 0 ? [B] : []), ...against.map((child) => indexOf.get(child)!)];
     const sides: Record<Axis, Side> = { x: style.side, y: style.end };
-    for (const axis of AXES) {
-      if (sides[axis] === 'left' || sides[axis] === 'top') continue;
+    const extent = (axis: Axis) => {
       let start = Infinity;
       let end = -Infinity;
       for (const index of group) {
@@ -1184,7 +1191,36 @@ function layoutFramed(
         start = Math.min(start, at(index)[axis]);
         end = Math.max(end, at(index)[axis] + size);
       }
-      const want = alignedAt(sides[axis], inner(axis), end - start);
+      return { start, end };
+    };
+    // The text and its group range in the room their own row (across) or
+    // column (down) leaves them — between whatever sits beside, above or below
+    // them — not in the whole box. Ranged against the whole width, a
+    // right-ranged title runs into a child in the top-right corner, pushes it
+    // out and grows the box; centered on the whole height, a title with things
+    // placed below it and more in the bottom corners drops into the middle.
+    const room = (axis: Axis): { start: number; size: number } => {
+      const cross: Axis = axis === 'x' ? 'y' : 'x';
+      const whole = inner(axis);
+      const along = extent(axis);
+      const beside = extent(cross);
+      const size = (member: LayoutNode, on: Axis) => (on === 'x' ? member.width : member.height);
+      let start = whole.start;
+      let end = whole.start + whole.size;
+      members.forEach((member, index) => {
+        if (group.includes(index) || index === TL || index === BR) return;
+        const c0 = at(index)[cross];
+        if (c0 + size(member, cross) <= beside.start || c0 >= beside.end) return;
+        const a0 = at(index)[axis];
+        if (a0 + size(member, axis) <= along.start) start = Math.max(start, a0 + size(member, axis) + CHILD_GAP);
+        else if (a0 >= along.end) end = Math.min(end, a0 - CHILD_GAP);
+      });
+      return { start, size: end - start };
+    };
+    for (const axis of AXES) {
+      if (sides[axis] === 'left' || sides[axis] === 'top') continue;
+      const { start, end } = extent(axis);
+      const want = alignedAt(sides[axis], room(axis), end - start);
       pin(axis, lead, at(lead)[axis] + (want - start));
     }
   }
@@ -1206,10 +1242,19 @@ function layoutFramed(
   });
   node.textBox = T >= 0 ? relative(T, textWidth, textHeight) : { x: 0, y: 0, width: 0, height: 0 };
   if (B >= 0) node.badgeBox = relative(B, iconSide, iconSide);
+  const reach = { left: 0, top: 0, right: 0, bottom: 0 };
   for (const child of placed) {
     const position = solved.get(child)!;
-    local.set(child, { x: position.x - origin.x, y: position.y - origin.y });
+    const offset = { x: position.x - origin.x, y: position.y - origin.y };
+    local.set(child, offset);
+    // Whatever sticks out past the frame — a child placed outside it, or
+    // something one of the children placed outside itself.
+    reach.left = Math.max(reach.left, child.reach.left - offset.x);
+    reach.top = Math.max(reach.top, child.reach.top - offset.y);
+    reach.right = Math.max(reach.right, offset.x + child.width + child.reach.right - node.width);
+    reach.bottom = Math.max(reach.bottom, offset.y + child.height + child.reach.bottom - node.height);
   }
+  node.reach = reach;
   if (banded) {
     const shift = relative(K, 0, 0);
     for (const child of stacked) {
@@ -1310,6 +1355,7 @@ interface Box {
 }
 
 const AXES: Axis[] = ['x', 'y'];
+const NO_REACH: Reach = { left: 0, top: 0, right: 0, bottom: 0 };
 const AXIS_WORD: Record<Axis, string> = { x: 'horizontally', y: 'vertically' };
 
 /** Where a placement's target sits: which member owns it, and where inside that member. */
@@ -1332,6 +1378,8 @@ interface Target {
    * place it is told so.
    */
   frame?: boolean;
+  /** What a whole-node target has placed outside itself, kept clear with it. */
+  reach?: Reach;
   offset: { x: number; y: number };
   width: number;
   height: number;
@@ -1463,6 +1511,7 @@ function positionGroup(
   extra: { x: Constraint[]; y: Constraint[] },
   corridors: Corridor[] = [],
   across?: (i: number, j: number) => Axis | undefined,
+  clearance = SEPARATION_GAP,
 ): Map<LayoutNode, { x: number; y: number }> {
   const constraints: Record<Axis, Constraint[]> = { x: [...extra.x], y: [...extra.y] };
   const indexOf = new Map(members.map((member, index) => [member, index]));
@@ -1570,10 +1619,18 @@ function positionGroup(
         };
         const x = memberOn(target, 'x');
         const y = memberOn(target, 'y');
-        if (direction.includes('right')) push('x', x, me, target.offset.x + target.width + gap);
-        if (direction.includes('left')) push('x', me, x, size.x + gap - target.offset.x);
-        if (direction.includes('below')) push('y', y, me, target.offset.y + target.height + gap);
-        if (direction.includes('above')) push('y', me, y, size.y + gap - target.offset.y);
+        // The gap is between what each has placed outside itself, not only
+        // their boxes: a note beside a box is part of it.
+        const theirs = target.reach ?? NO_REACH;
+        const mine = node.reach;
+        if (direction.includes('right')) {
+          push('x', x, me, target.offset.x + target.width + theirs.right + gap + mine.left);
+        }
+        if (direction.includes('left')) push('x', me, x, size.x + mine.right + gap + theirs.left - target.offset.x);
+        if (direction.includes('below')) {
+          push('y', y, me, target.offset.y + target.height + theirs.bottom + gap + mine.top);
+        }
+        if (direction.includes('above')) push('y', me, y, size.y + mine.bottom + gap + theirs.top - target.offset.y);
       }
     }
 
@@ -1620,7 +1677,7 @@ function positionGroup(
   room(corridors, constraints, solved, solveAll);
   settle(pending, members, constraints, solved, solveAll);
   snug(members, constraints, solved, solveAll);
-  separate(members, constraints, solved, solveAll, overlaid, across);
+  separate(members, constraints, solved, solveAll, overlaid, across, clearance);
   confirm(pending, solved);
 
   return new Map(
@@ -1708,7 +1765,9 @@ function spanOf(
  * "top" down, `top-center` is "top" down and centered across.
  */
 function partOf(target: Target, part: Part | undefined, owner: LayoutNode, line: number): Target {
-  if (part === undefined) return target;
+  // The whole node is what it has placed outside itself too; a part of it is
+  // just that part.
+  if (part === undefined) return { ...target, reach: target.node.reach };
   const box = { ...target, offset: { ...target.offset } };
 
   if (part === 'text') {
@@ -1987,6 +2046,7 @@ function separate(
   solveAll: () => void,
   overlaid: Array<[number, number]> = [],
   across?: (i: number, j: number) => Axis | undefined,
+  clearance = SEPARATION_GAP,
 ): void {
   const eligible = members.map(allowsOverlap).map((allowed) => !allowed);
   if (eligible.filter(Boolean).length < 2) return;
@@ -2002,7 +2062,10 @@ function separate(
     let reach: Record<Axis, boolean[][]> | undefined;
     let added = false;
 
-    for (let i = 0; i < members.length; i += 1) {
+    // One separation per round, then solve again: a pair that collided only
+    // because another pair had not yet been moved apart is not a collision,
+    // and separating it anyway leaves an ordering that later moves drag along.
+    scan: for (let i = 0; i < members.length; i += 1) {
       if (!eligible[i]) continue;
       for (let j = i + 1; j < members.length; j += 1) {
         if (!eligible[j]) continue;
@@ -2029,9 +2092,12 @@ function separate(
 
         const { before, after } = orders[axis]!;
         const span = axis === 'x' ? members[before]!.width : members[before]!.height;
-        constraints[axis].push({ from: before, to: after, weight: span + SEPARATION_GAP });
+        const [near, far] = axis === 'x' ? (['left', 'right'] as const) : (['top', 'bottom'] as const);
+        const past = members[before]!.reach[far] + members[after]!.reach[near];
+        constraints[axis].push({ from: before, to: after, weight: span + past + clearance });
         reach = undefined;
         added = true;
+        break scan;
       }
     }
 
@@ -2052,10 +2118,11 @@ function overlapOf(
   j: number,
 ): Record<Axis, number> | undefined {
   const shared = (axis: Axis): number => {
-    const size = (index: number) => (axis === 'x' ? members[index]!.width : members[index]!.height);
-    const startI = solved[axis][i]!;
-    const startJ = solved[axis][j]!;
-    return Math.min(startI + size(i), startJ + size(j)) - Math.max(startI, startJ);
+    const [near, far] = axis === 'x' ? (['left', 'right'] as const) : (['top', 'bottom'] as const);
+    const start = (index: number) => solved[axis][index]! - members[index]!.reach[near];
+    const end = (index: number) =>
+      solved[axis][index]! + (axis === 'x' ? members[index]!.width : members[index]!.height) + members[index]!.reach[far];
+    return Math.min(end(i), end(j)) - Math.max(start(i), start(j));
   };
   const x = shared('x');
   const y = shared('y');
@@ -2137,6 +2204,15 @@ function noRoom(contradiction: Contradiction, axis: Axis, members: LayoutNode[])
  */
 function gapFor(node: LayoutNode, placement: OffsetPlacement, target: LayoutNode): number {
   if (placement.gap !== undefined) return namedGap(node, placement.gap, placement.line);
+  // Against the box that holds it, a child is spaced as that box spaces what it
+  // holds: tucked in by the padding, and deaf to the box's own `gap:`, which
+  // says how that box stands off its neighbours and not how it holds things.
+  const own = target.children.includes(node);
+  if (own && placement.written === 'inside') return PAD;
+  // Beside or below the text of the box holding it, as the contents sit below
+  // a title: a band said by placing things below the text is the band the
+  // contents would have made.
+  if (own && placement.targets.some((each) => each.name === target.name && each.part === 'text')) return CHILD_GAP;
   // An `inside` placement is an inset rather than a standoff, and the two want
   // different defaults: "beside that box" reads as room to breathe, "tucked in
   // that corner" reads as close to it. A node-wide `gap:`, which says how this
@@ -2144,7 +2220,7 @@ function gapFor(node: LayoutNode, placement: OffsetPlacement, target: LayoutNode
   // — so `inside` takes `tight` and stops there unless the placement says.
   if (placement.written === 'inside') return namedGap(node, 'tight', placement.line);
   const mine = node.attrs['gap'];
-  const theirs = target.attrs['gap'];
+  const theirs = own ? undefined : target.attrs['gap'];
   // Only a gap somebody actually wrote down counts. Reading an absent one as the
   // default would make it a floor rather than a fallback, and every `gap: tight`
   // placed against a silent node would quietly widen back to normal.
