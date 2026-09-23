@@ -262,3 +262,19 @@ export function textStyleFor(
     align: align === undefined ? fallbackAlign : TEXT_ALIGNMENTS[align]!,
   };
 }
+
+/**
+ * Where a leaf's text or badge starts vertically, given which end it sits at.
+ * Shared, because the resolver works out the text's box and the renderer draws
+ * it, and the two must not be able to disagree.
+ */
+export function leafTop(
+  end: 'top' | 'center' | 'bottom',
+  y: number,
+  height: number,
+  own: number,
+): number {
+  if (end === 'top') return y + PAD;
+  if (end === 'bottom') return y + height - PAD - own;
+  return y + (height - own) / 2;
+}

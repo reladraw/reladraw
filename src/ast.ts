@@ -41,7 +41,7 @@ export const SIDE_AXIS: Record<Side, Axis> = {
 
 /**
  * The nine points of a box anybody can name without measuring: the four
- * corners, the four side midpoints, and the centre. One closed set, accepted
+ * corners, the four side midpoints, and the center. One closed set, accepted
  * everywhere the language has a position — which is the rule that replaced a
  * scatter of one-position slots, each decided on its own and each a little
  * piece of the same expressiveness loss.
@@ -56,7 +56,7 @@ export const SIDE_AXIS: Record<Side, Axis> = {
  *
  * Every midpoint carries `-center` rather than standing alone as `top` or
  * `left`. Two reasons, and the second is the binding one. A side midpoint reads
- * as "the bottom edge, centred along it", which is what the word says. And
+ * as "the bottom edge, centered along it", which is what the word says. And
  * `top`, `bottom`, `left` and `right` already name a *side* in this language —
  * an edge's `from:` and an alignment's `top level with` — so a bare `bottom`
  * would mean a side in one place and a point in another. `from: bottom` spreads
@@ -81,13 +81,95 @@ export function isPosition(word: string): word is Position {
 }
 
 /**
+ * A part of a node that a placement may name: its text, one of its four sides,
+ * or one of its nine points. Written as a separate word after the node's name
+ * — `hub text`, `server right`, `board top-right`.
+ *
+ * No noun is carried. `board right side` was considered and dropped, because
+ * the language already tells a segment from a point by *spelling*: a bare
+ * `top` names a side everywhere (`from: bottom`, `top level with`) and a
+ * hyphenated `top-right` names a point, which is exactly why every midpoint
+ * carries `-center` rather than standing alone. A noun would mark with a word
+ * a distinction the hyphen already marks.
+ *
+ * The spaced form needs no reservation against a child called `text`: a
+ * sibling is always written dotted (`right of server.mirror`), so `hub text`
+ * spaced can never be `hub.text`. The dotted spelling was rejected because it
+ * interferes with the dot's one meaning.
+ */
+export const PART_SIDES = ['top', 'bottom', 'left', 'right'] as const;
+
+export type PartSide = (typeof PART_SIDES)[number];
+
+export const PARTS = ['text', ...PART_SIDES, ...POSITIONS] as const;
+
+export type Part = (typeof PARTS)[number];
+
+export function isPart(word: string): word is Part {
+  return (PARTS as readonly string[]).includes(word);
+}
+
+/**
+ * Which way "toward the box's center" points from a part. This is the whole of
+ * what `inside` and `outside` mean, which is why neither needs a table of its
+ * own: `inside` is this direction, `outside` is its opposite, and one rule
+ * covers every part.
+ *
+ * `center` and `text` are absent on purpose. Neither is on the boundary, so
+ * there is no direction toward the interior from them, and both are refused by
+ * name where the shorthand is read.
+ */
+export const INWARD: Partial<Record<Part, Direction>> = {
+  top: 'below',
+  bottom: 'above',
+  left: 'right',
+  right: 'left',
+  'top-left': 'below-right',
+  'top-center': 'below',
+  'top-right': 'below-left',
+  'left-center': 'right',
+  'right-center': 'left',
+  'bottom-left': 'above-right',
+  'bottom-center': 'above',
+  'bottom-right': 'above-left',
+};
+
+/** The other way round, for `outside`. */
+export const OPPOSITE: Record<Direction, Direction> = {
+  above: 'below',
+  below: 'above',
+  left: 'right',
+  right: 'left',
+  'above-left': 'below-right',
+  'above-right': 'below-left',
+  'below-left': 'above-right',
+  'below-right': 'above-left',
+};
+
+/** The parts `inside` and `outside` can be read from — everything on the boundary. */
+export const BOUNDARY_PARTS: readonly string[] = Object.keys(INWARD);
+
+/**
+ * One thing a placement is placed against: a node, or a part of a node.
+ *
+ * A part target is the one target that is an *extent* rather than a node, which
+ * is what it buys over naming a sibling — a column of children against a
+ * container's right edge is flush by that edge and commits to no row, and
+ * nothing anchored to a single node can say that.
+ */
+export interface PlacementTarget {
+  name: string;
+  part?: Part;
+}
+
+/**
  * Naming more than one target places the node against the box that just bounds
  * them all — `right of borg and bare` clears both. It is a single target that
  * nobody had to declare, which is why it is a list on one placement rather than
  * several placements: two separate `level with` statements are two demands that
  * fight, while one naming two targets is a single demand about one region.
  */
-export type Targets = string[];
+export type Targets = PlacementTarget[];
 
 /**
  * `right of docker` — the node sits a gap beyond one of the target's sides.
@@ -97,6 +179,14 @@ export type Targets = string[];
 export interface OffsetPlacement {
   kind: 'offset';
   direction: Direction;
+  /**
+   * `inside` or `outside`, where the author wrote one of those instead of a
+   * direction. Both are shorthands whose expansion is *derived* rather than
+   * listed — inside is the direction from the named part toward the box's
+   * center, outside is away from it — so the direction above is the whole of
+   * their meaning and this only remembers the word, to quote back.
+   */
+  written?: 'inside' | 'outside';
   targets: Targets;
   /**
    * The gap this one placement asks for, from `(gap: wide)` written after the
@@ -118,31 +208,23 @@ export interface AlignPlacement {
 }
 
 /**
- * `on hub at top-right` — the node is held on the target's box at one of the
- * nine named positions, inset from that corner or edge, overlapping it by
- * construction.
+ * `on hub top-right` — the node's center sits at the part's center, so a node
+ * on a corner straddles it.
  *
- * The word is `on` rather than `in` because the language already has a word for
- * inside: the dotted name. `server.docs` is a child — padded, widening its
- * container, a member of its constraint system. An overlay is none of those. It
- * is stamped on the box regardless of what the box holds.
+ * This is the one genuine addition beside `inside` and `outside`, and it is a
+ * both-axes center alignment the language did not have: `level with` gives the
+ * vertical and the edge alignments give whichever axis their edge belongs to,
+ * and there is no horizontal center alignment at all — so the only long form
+ * would need two new words rather than one. `centered on` was proposed and
+ * rejected: beside `inside` and `outside` the three read as a series and `on`
+ * is unmistakable.
  *
- * One target only, unlike the other two. An overlay names an exact position on
- * a box, and the box that bounds two things is not a box anybody drew.
+ * One target only, unlike the other two. It names an exact point of one box,
+ * and the box that bounds two things is not a box anybody drew.
  */
 export interface OnPlacement {
   kind: 'on';
-  position: Position;
   targets: Targets;
-  /**
-   * How far in from the named corner or edge, as a named gap, from `(gap: none)`
-   * written after the target. Absent means `tight`.
-   *
-   * Deliberately not the node's own `gap:`, which says how this node stands off
-   * its neighbours. An inset is a statement about one pair and is written on the
-   * placement or not at all.
-   */
-  gap?: string;
   line: number;
 }
 
@@ -199,24 +281,32 @@ export const CONTENT_ALIGNMENTS = ['left', 'center', 'right'] as const;
 export function describePlacement(placement: Placement): string {
   const targets = listTargets(placement.targets);
   if (placement.kind === 'on') {
-    const gap = placement.gap === undefined ? '' : ` (gap: ${placement.gap})`;
-    return `on ${targets} at ${placement.position}${gap}`;
+    return `on ${targets}`;
   }
   if (placement.kind === 'align') {
     const side = placement.side === 'center' ? '' : `${placement.side} `;
     return `${side}level with ${targets}`;
   }
+  const gap = placement.gap === undefined ? '' : ` (gap: ${placement.gap})`;
+  // `inside` and `outside` take no `of`, and are quoted back as the author
+  // wrote them — the derived direction is what they *mean*, not what they say.
+  if (placement.written) return `${placement.written} ${targets}${gap}`;
   // "left of X" and "above X" are both good English; "above of X" is not.
   const joiner =
     placement.direction === 'above' || placement.direction === 'below' ? '' : 'of ';
-  const gap = placement.gap === undefined ? '' : ` (gap: ${placement.gap})`;
   return `${placement.direction} ${joiner}${targets}${gap}`;
 }
 
-/** "borg", "borg and bare", "borg, bare and media" — as the author would write them. */
+/** "borg", "hub text", "borg and bare" — as the author would write them. */
 export function listTargets(targets: Targets): string {
-  if (targets.length <= 1) return targets[0] ?? '';
-  return `${targets.slice(0, -1).join(', ')} and ${targets[targets.length - 1]}`;
+  const written = targets.map(nameTarget);
+  if (written.length <= 1) return written[0] ?? '';
+  return `${written.slice(0, -1).join(', ')} and ${written[written.length - 1]}`;
+}
+
+/** One target in the author's words: the node's name, and its part if it named one. */
+export function nameTarget(target: PlacementTarget): string {
+  return target.part === undefined ? target.name : `${target.name} ${target.part}`;
 }
 
 /**

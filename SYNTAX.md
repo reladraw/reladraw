@@ -133,7 +133,7 @@ Bundling a text's properties into a style is how they come to mean something: `s
 
 `wrap: <n>` folds the text at word boundaries every `n` characters, on top of whatever ` / ` already breaks. It is how you make a block of text narrow and tall so it can sit snugly beside something, rather than wide and short so it cannot. The number is a count of characters and not a distance: it says how much fits on a line and nothing about where anything sits.
 
-`at: <position>` is where the block of text sits in the node, named from [the nine positions](#on-a-box-overlays) — `top-left`, `bottom-center`, `center` and the rest. In a container the vertical half of the word says which end of the node the text's band is at, and the contents take the other end; a container whose text names neither end is an error, since there would be no other end left for the contents. The default is `top-left` in a container and `center` in a leaf.
+`at: <position>` is where the block of text sits in the node, named from [the nine positions](#against-a-part-of-a-node) — `top-left`, `bottom-center`, `center` and the rest. In a container the vertical half of the word says which end of the node the text's band is at, and the contents take the other end; a container whose text names neither end is an error, since there would be no other end left for the contents. The default is `top-left` in a container and `center` in a leaf.
 
 `align: left | center | right` is a different question and stays one: it says how the block's own *lines* range against each other, which matters whenever they are of unequal length and is not the same as where the block is. Its default is `left` in a container and `center` in a leaf.
 
@@ -195,7 +195,7 @@ A node has one body, so writing both keys is an error naming both.
 
 The `document` fold is worth having because a shape is a second channel alongside color, and a stronger one. A fill means whatever you assigned it and a reader has to learn it from the diagram; a folded corner has meant "a document" for as long as there have been flowcharts, and reads with no legend. Most diagrams lose the difference between a thing that runs and a thing that is produced, because every node is a rectangle. `circle` and `diamond` will join these when a diagram asks for them.
 
-A name says what the thing *is*, never what the picture looks like, for the same reason `gap: wide` beats `gap: 110`: naming the meaning is what lets the drawing be improved later without every diagram that uses it changing sense. `document`, not `folded-corner`. The one place that rule stops is a picture with no single meaning — the cube stands for a container in one diagram, a VM in another, a service in a third — which is why it is called `cube` and not `instance`. An unrecognized name is an error listing the whole set, rather than a node that quietly draws nothing.
+A name says what the thing *is*, never what the picture looks like: naming the meaning is what lets the drawing be improved later without every diagram that uses it changing sense. `document`, not `folded-corner`. The one place that rule stops is a picture with no single meaning — the cube stands for a container in one diagram, a VM in another, a service in a third — which is why it is called `cube` and not `instance`. An unrecognized name is an error listing the whole set, rather than a node that quietly draws nothing.
 
 The icon set is small on purpose, and it is not the trade a drawing tool makes. There you pick a shape out of a visual palette and hundreds are browsable; here you type the word from memory, which caps the useful vocabulary at what fits in a head. Adding your own is not possible yet — see "Not built yet".
 
@@ -243,7 +243,7 @@ Any of them may name more than one target — `right of borg and bare`, `level w
 
 `of` is optional after any direction, so `below X` and `below of X` both parse. Write whichever reads as English.
 
-There are no coordinates and no numeric offsets. Each direction leaves a gap, one of `none`, `tight`, `normal` (the default) and `wide`. Write it in brackets on the placement itself, or as `gap:` on a node to set the default for every relationship that node is in — including the ones named against it. See [A gap belongs to the placement](#a-gap-belongs-to-the-placement).
+There are no coordinates. Each direction leaves a gap, one of `none`, `tight`, `normal` (the default) and `wide`, or a plain number of pixels — `gap: 12`. Prefer the names: change what `tight` means and every tight gap follows. A number is for the distance you actually mean, and it is no less relative than a name, since it is still measured from the target. Write it in brackets on the placement itself, or as `gap:` on a node to set the default for every relationship that node is in — including the ones named against it. See [A gap belongs to the placement](#a-gap-belongs-to-the-placement).
 
 Exactly one node in the document may be left unplaced. Everything else is positioned, directly or transitively, relative to it.
 
@@ -339,7 +339,7 @@ The brackets take `gap:` and nothing else at present; anything else in them is a
 
 ### On a box
 
-A placement may also hold a node *on* another's box rather than clear of it — `on hub at top-right`. It is the one placement that overlaps on purpose, and it has a section of its own: [On a box: overlays](#on-a-box-overlays).
+A placement's target may be a *part* of a node rather than the whole of it — `inside hub top-right`, `right of hub text`, `on hub bottom-left`. That is where `inside`, `outside` and `on` come in, and it has a section of its own: [Against a part of a node](#against-a-part-of-a-node).
 
 ### Side to side
 
@@ -353,7 +353,7 @@ Every axis is solved as one system, so a target does not have to come first. Wha
 
 ## Nodes do not overlap
 
-You never have to say that two nodes must not sit on top of each other. Every pair carries that already, and `overlap: allow` on either one is the opt-out for the rare case where one is meant to cover another. A container never counts as overlapping its own contents, and neither does an overlay and the box it is stamped on — that exemption is for the pair and nothing else, so an overlay is still kept clear of everything else in the drawing.
+You never have to say that two nodes must not sit on top of each other. Every pair carries that already, and `overlap: allow` on either one is the opt-out for the rare case where one is meant to cover another. A container never counts as overlapping its own contents, and neither does a node placed `inside` or `on` a part of another and the box it is stamped on — naming a part and saying `inside` is the author stating the overlap, so there is nothing to report. That exemption is for the pair and nothing else, so the node is still kept clear of everything else in the drawing.
 
 **The tool never picks which way to separate two nodes.** It reads the direction off the arrangement you already stated. Say `A` is left of `B`, put `x` between them, and hang a wide node below `x`: because `x` is right of `A` and the wide node is centered under `x`, the file lets the wide node travel rightward away from `A` and offers no way back. So the only separation it allows is `A` moving further left. Nothing is chosen. Where nothing in the file orders a pair on either axis, the tool refuses and names the pair rather than guessing — which is what happens if you hang two nodes off the same side of the same target and expect them to sort themselves out.
 
@@ -472,14 +472,16 @@ Several edges may share one channel, and they take a lane each. As with attachme
 
 A named channel does not widen. It is measured off the layout you described, so if you name a gap too narrow for the lines you put through it they crowd together rather than pushing the two nodes apart. That is the difference between this and a text making room for itself, above: there, the corridor is the gap between the edge's own two ends, and opening it moves them apart exactly as anything else put between them would. Here the pair is named by an edge merely passing through, and nothing yet lets an edge bid into a gap it is only a visitor in. It is the remaining half and it is not built.
 
-## On a box: overlays
+## Against a part of a node
 
 ```
-on <node> at <position>
-on <node> at <position> (gap: <named gap>)
+<direction> of <node> <part>
+inside <node> <part>
+outside <node> <part>
+on <node> <part>
 ```
 
-A placement that holds the node **on** another's box, at one of nine named points, inset from that corner or edge, overlapping it by construction.
+A placement's target may be a node, as everywhere else, or **a part of a node** — written as the node's name and the part as a separate word. The parts are a node's `text`, its four sides `top`, `bottom`, `left` and `right`, and its nine points:
 
 ```
 top-left      top-center      top-right
@@ -487,22 +489,70 @@ left-center   center          right-center
 bottom-left   bottom-center   bottom-right
 ```
 
-```
-node bob "Bob the builder"
-node bob_link "bob.example.com"  on bob at bottom-center
-```
-
 Those nine are the whole set, and every part of the language that has a position accepts all of them. They are words anybody can point at without measuring, which is what makes them allowed where `x: 140` is not — and a diagram written in them still moves correctly when a box moves, which is the property that refusal exists to protect.
 
-**`on` is not containment.** A dotted name is what puts something inside a box: `server.docs` is padded, widens `server`, and is a member of its constraint system. An overlay is none of those. It sits outside the contents, never resizes what it is stamped on, and overlaps it on purpose. That is why the word is `on` and not `in`.
+**A side is a segment and a point is a point,** and the spelling is what says which. Bare `top`, `bottom`, `left` and `right` name a side, which is why every midpoint carries `-center`: `right` is the whole right edge, `right-center` is the one point halfway down it. Naming a side leaves the other axis free, so `inside plate right` sits against that edge and centers down it; `inside plate right-center` pins it to the midpoint.
 
-The inset is a named gap on the placement, and `tight` if nothing says. `(gap: none)` puts the node hard against the edge. It is deliberately *not* the node's own `gap:`, which says how the node stands off its neighbours — a node marked `gap: wide` so its siblings keep clear should not thereby wear its mark 110 pixels in from the corner. A midpoint or the centre ignores the inset on the axis it is centered on, because there is no edge there to be held off.
+Three direction words go with a part target:
 
-**The overlap exemption is for that one pair.** Everything else in the drawing still keeps clear of the overlay in the ordinary way.
+| | |
+|---|---|
+| `inside` | wholly within, against that part |
+| `outside` | wholly beyond it |
+| `on` | centered on it, so a node on a corner straddles it |
 
-One target only. A direction may name several — `right of a and b` means "clear of the box bounding both", which is a floor and decomposes into one demand per target — but an overlay names an exact point on a box, and the box that bounds two things is not a box anybody drew.
+```
+node bob "Bob the builder"
+node bob_link "bob.example.com"  inside bob bottom-center
+```
 
-**`at` and `of` are what tell the two position vocabularies apart.** A *direction* is a relation between two nodes and puts this one outside the other, clear of it by a gap: `above-left of hub`. A *position* is a point of one box and is always preceded by `at`: `on hub at top-left`. They reach the same corner with different words on purpose, because `above hub` could never become `top of hub` — "the top of the hub" is unambiguously its edge.
+**`inside` and `outside` are shorthands, and their long form is derived rather than listed.** *Inside* is the direction from the named part toward the box's center and *outside* is away from it, so `inside right` is `left of`, `inside top-right` is `below-left of`, and one rule covers every part. `inside <node> center` and `inside <node> text` are errors: neither part is on the boundary, so there is no direction toward the interior from them.
+
+**`on` is the one that is not a shorthand.** It is a center alignment on both axes at once, which the language did not otherwise have — `level with` gives the vertical and the edge alignments give whichever axis their edge belongs to, and there is no horizontal center alignment at all. It takes no gap: a center sits on a point rather than a distance from it.
+
+The inset for `inside` is a gap on the placement, and `tight` if nothing says. `(gap: none)` puts the node hard against the edge. It is deliberately *not* the node's own `gap:`, which says how the node stands off its neighbours — a node marked `gap: wide` so its siblings keep clear should not thereby wear its mark 110 pixels in from the corner.
+
+**Saying `inside` or `on` is saying the overlap,** so there is nothing for the overlap error to report about that pair. Everything else in the drawing still keeps clear in the ordinary way.
+
+`inside`, `outside` and `on` take one target. A direction may name several — `right of a and b` means "clear of the box bounding both", which is a floor and decomposes into one demand per target — but these three read a direction off one part of one box.
+
+### Against its own parent
+
+A child may name a part of the node it is inside. **The dotted name is what decides what happens:** a child grows its parent to hold it, and a stranger does not.
+
+```
+node server "Server"
+node server.web "web"
+node server.db "database"
+node server.mark "!"  level with server.db  inside server right
+node stamp "!"  on server top-right
+```
+
+`server` widens so `server.mark` sits a tight gap inside its right edge, on the database's row. `stamp` is not part of `server`, so nothing moves for it: it lies over the corner, half in and half out.
+
+The title band is not something a node has; it is what happens when things stack below the text. Children that say nothing about where they go stack below the text in written order, as they always have, and that is what makes the band. A node whose children all sit beside its text or against its frame has nothing below its text, so it has no band and draws as a leaf — its text centered, and whatever is placed against the text centered with it as one group:
+
+```
+node hub "Cloud sync"
+node hub.star "★"  right of hub text (gap: 10)
+```
+
+A child placed against one of its parent's sides stands beside the rest of the box, not above or below it: if it would cover the title or the contents, the box grows across for a left or right side and down for a top or bottom one. `overlap: allow` on the child is the other answer — "I am inside my parent, do not grow for me" — and it lies over whatever is there.
+
+### Several nodes saying the same thing
+
+```
+node hub "hub"
+node a "one"    right of hub
+node b "two"    right of hub
+node c "three"  right of hub
+```
+
+Three nodes that say the identical thing are one list, not three boxes on one spot. It runs down the page in the order they were written, and is centered on `hub` as a whole — the balanced picture that "hub points at three things" means, which no chain of placements can draw. The same goes for a part: three children `inside p right` are a column against that edge, and three at `inside p top-right` stack into the corner and grow down. The list runs down the page whatever the direction, so three nodes `below hub` are a column under it.
+
+Only the identical placement makes a list; add `level with x` to one of them and it places itself. `overlap: allow` asks for the literal pile instead.
+
+**A direction and a position are two vocabularies and stay two.** A *direction* is a relation between two nodes and puts this one outside the other, clear of it by a gap: `above-left of hub`. A *position* is a point of one box: `inside hub top-left`. They reach the same corner with different words on purpose, because `above hub` could never become `top of hub` — "the top of the hub" is unambiguously its edge.
 
 ## Notes and other bare text
 
@@ -735,7 +785,7 @@ Pre-1.0, so the minor number is where a breaking change goes. Every removal belo
 - A node's **body** is `shape: rectangle | document | none` or `icon: <name>`, and writing both is an error naming both. `note` is gone — a note is `node … shape: none`. `shape: instance` is gone — the icon is `cube`, and a node drawn as one is `icon: cube`.
 - A node drawn as a picture and given no text of its own shows none. A node with a body still falls back to its name.
 - The decoration icon is `badge:`, which freed `icon:` for the body.
-- `on X at <position>` places a node on another's box at one of nine named positions, overlapping it by construction.
+- A placement may target a *part* of a node — its text, a side or one of nine named points — with `inside`, `outside` and `on` reading a direction off it.
 - Everything a text says about itself is in the brackets after it — `color`, `size`, `wrap`, `align`, `at`. The top-level `size:`, `wrap:`, `align:` and the text color `text:` are gone; a style says them as `text: (…)`. `at:` grew from two positions to the nine.
 - `subtext:` is gone, replaced by inline markup `[style]word[/style]`, which names a style and reaches a word anywhere in a text. `\[` escapes a literal bracket.
 - `align: widths` is `contents: (widths: match)`, and the same brackets take `align:` for where the block of contents sits.

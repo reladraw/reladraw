@@ -46,6 +46,45 @@ export interface LayoutNode {
   headerHeight: number;
 
   /**
+   * Whether things stack beside this node's text — below it, or above it when
+   * the text is at the bottom. That is what a title band *is*, so it is what
+   * decides a container's look and its text's defaults, rather than whether
+   * the node has children: a node whose only child sits beside its text or in
+   * a corner has nothing stacked below the text, and draws as a leaf.
+   */
+  banded: boolean;
+
+  /**
+   * Where the badge is drawn, as an offset from the node's outer top-left.
+   * Absent where there is no badge. Worked out by the resolver for the reason
+   * `textBox` is: the resolver reserved the room, so it says where it is.
+   */
+  badgeBox?: { x: number; y: number; width: number; height: number };
+
+  /**
+   * The rectangle this node's own text occupies, as an offset from the node's
+   * outer top-left. The *ink* box, not the room it ranges in: for a container
+   * that is the title itself, not the width of the band.
+   *
+   * Worked out by the resolver rather than the renderer because `hub text` is
+   * a placement target, so it has to be a number before anything is solved —
+   * and because the resolver reserving the room and the renderer filling it
+   * must not be able to disagree about where it ended up. The renderer draws
+   * from this rather than recomputing it.
+   *
+   * All zeroes where the node has no text.
+   */
+  textBox: { x: number; y: number; width: number; height: number };
+
+  /**
+   * Which way the text ranges in the room it was given, kept because a node
+   * can be widened *after* it was sized — `contents: (widths: match)` and
+   * `(widths: fill)` both do — and a centered or right-ranged text has to move
+   * with the new width. Without it the box grows and the words stay put.
+   */
+  textSide: 'left' | 'center' | 'right';
+
+  /**
    * What the text's brackets said, with anything a style's `text: (…)`
    * contributed underneath it. Usually empty.
    */

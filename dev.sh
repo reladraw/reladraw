@@ -75,6 +75,13 @@ Commands:
                                  report which ones moved. The check to run after
                                  any renderer or resolver change: what the change
                                  does not concern should be byte-identical.
+  snapshot <dir>                Render every example with the working tree into
+                                 <dir>, as a baseline for `against`. For a long
+                                 change built in steps on top of uncommitted
+                                 work, where HEAD is not the baseline you mean.
+  against <dir>                 Render every example with the working tree and
+                                 say which differ from the SVGs `snapshot` put
+                                 in <dir>.
   pictures [ref]                Render every example as <ref> has it (its own
                                  sources, its own build) and as the working tree
                                  has it, and say which pictures changed. regress
@@ -127,6 +134,18 @@ Reading colors out of a reference image (all take any PNG):
                                  baseline. This is how a text size is read off
                                  a reference instead of guessed.
 EOF
+}
+
+# A fresh temp path ending in the given extension. BSD mktemp only replaces
+# trailing X's, so `mktemp -t name-XXXXXX.svg` on macOS yields a name that does
+# not end in .svg, and Chrome shows such a file as source text. GNU mktemp, for
+# its part, refuses a template without X's. So the template is a full path that
+# ends in X's, and the extension goes on after mktemp returns.
+tmp_path() {
+  local dir="${TMPDIR:-/tmp}" base
+  base="$(mktemp "${dir%/}/reladraw-$1.XXXXXX")"
+  rm -f "$base"
+  echo "$base.$2"
 }
 
 # Chrome clips to the window, so take the window from the drawing itself.
@@ -221,9 +240,7 @@ case "$cmd" in
     ;;
   try)
     src="${1:?source text required}"
-    # The template must carry its own X's: GNU mktemp refuses one without them,
-    # so `try` had never run on Linux at all.
-    tmp="$(mktemp -t reladraw-try.XXXXXX).reladraw"
+    tmp="$(tmp_path try reladraw)"
     printf '%s\n' "$src" > "$tmp"
     node dist/cli.js "$tmp" -o "${tmp%.reladraw}.svg" && echo "parsed, no complaint"
     rm -f "$tmp" "${tmp%.reladraw}.svg"
@@ -241,8 +258,8 @@ case "$cmd" in
     ;;
   look)
     in="${1:?input .reladraw path required}"
-    out="${2:-$(mktemp -t reladraw-XXXXXX.png)}"
-    svg="$(mktemp -t reladraw-XXXXXX.svg)"
+    out="${2:-$(tmp_path look png)}"
+    svg="$(tmp_path look svg)"
     node dist/cli.js "$in" -o "$svg" >/dev/null 2>&1
     screenshot "$svg" "$out" "$(svg_size "$svg")" ffffff
     rm -f "$svg"
@@ -257,7 +274,7 @@ case "$cmd" in
     for pair in "arch:docs/arch-render.png" "gap:docs/gap.png"; do
       name="${pair%%:*}"
       out="${pair#*:}"
-      svg="$(mktemp -t reladraw-XXXXXX.svg)"
+      svg="$(tmp_path readme svg)"
       node dist/cli.js "examples/$name.reladraw" -o "$svg" >/dev/null 2>&1
       screenshot "$svg" "$out" "$(svg_size "$svg")" ffffff
       rm -f "$svg"
@@ -339,7 +356,7 @@ case "$cmd" in
       "$(chrome_bin)" --headless --disable-gpu --no-sandbox \
         --virtual-time-budget=2000 --dump-dom "$url" 2>/dev/null
     else
-      out="${1:-$(mktemp -t reladraw-page-XXXXXX.png)}"
+      out="${1:-$(tmp_path page png)}"
       # A fragment here too, for the same reason the DOM mode takes one, and for
       # one more: the editor's syntax coloring is drawn behind the textarea, so
       # the thing to look at is a long file in a narrow pane, and the fragment is
@@ -426,6 +443,39 @@ PY
       fi
     done
     echo "$moved of $(ls examples/*.reladraw | wc -l | tr -d ' ') examples differ from $ref"
+    ;;
+  snapshot)
+    dir="${1:?output directory required}"
+    mkdir -p "$dir"
+    npx tsc >/dev/null
+    for in in examples/*.reladraw; do
+      name="$(basename "$in" .reladraw)"
+      node dist/cli.js "$in" -o "$dir/$name.svg" >/dev/null 2>&1 || echo "FAILS $name"
+    done
+    echo "$(ls "$dir"/*.svg | wc -l | tr -d ' ') examples rendered into $dir"
+    ;;
+  against)
+    # `regress` with a baseline taken by `snapshot` rather than built from a
+    # git ref, so a change made in steps can be checked against the step
+    # before it rather than against the last commit.
+    dir="${1:?baseline directory required}"
+    work="$(mktemp -d -t reladraw-against-XXXXXX)"
+    trap 'rm -rf "$work"' EXIT
+    npx tsc >/dev/null
+    moved=0
+    for in in examples/*.reladraw; do
+      name="$(basename "$in" .reladraw)"
+      if ! node dist/cli.js "$in" -o "$work/$name.svg" >"$work/$name.err" 2>&1; then
+        echo "FAILS $name: $(tail -1 "$work/$name.err")"
+        moved=$((moved + 1))
+      elif ! cmp -s "$dir/$name.svg" "$work/$name.svg"; then
+        echo "MOVED $name"
+        moved=$((moved + 1))
+      else
+        echo "same  $name"
+      fi
+    done
+    echo "$moved of $(ls examples/*.reladraw | wc -l | tr -d ' ') examples differ from $dir"
     ;;
   pictures)
     # The end-to-end counterpart to `regress`: each side renders its *own*

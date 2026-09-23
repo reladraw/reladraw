@@ -4,7 +4,6 @@ import {
   ATTACH_STEP,
   DECK_STEP,
   DEFAULT_FONT_SIZE,
-  ICON_GAP,
   ICON_LINES,
   LINE_WIDTH,
   PAD,
@@ -211,11 +210,9 @@ function nodeSvg(
   if (node.body.kind === 'none') {
     const style = textStyleFor(node.textAttrs, node.line, 'start', 'center');
     return { kids: [], tail: [], own: [sized(
-      textBlock(node.lines, node.x, node.y, node.width, textHeight, size, {
+      textBlock(node.lines, node.x, node.y, textHeight, size, node.textBox, {
         color: textColorOf(node.textAttrs, theme, theme.text),
         align: style.align,
-        side: style.side,
-        blockWidth,
         ink,
       }),
       size,
@@ -235,11 +232,9 @@ function nodeSvg(
     if (node.lines.some((line) => plain(line).length > 0)) {
       drawn.push(
         sized(
-          textBlock(node.lines, node.x, node.y + glyphSide + ICON_GAP, node.width, textHeight, size, {
+          textBlock(node.lines, node.x, node.y, textHeight, size, node.textBox, {
             color: textColorOf(node.textAttrs, theme, theme.text),
             align: style.align,
-            side: style.side,
-            blockWidth,
             ink,
           }),
           size,
@@ -255,7 +250,10 @@ function nodeSvg(
   const kids: string[] = [];
   const tail: string[] = [];
   const face = faceOf(node);
-  const container = node.children.length > 0;
+  // A container *looks* like one because things stack beside its text, not
+  // because it has children: a node whose only child sits beside its text is
+  // drawn as the leaf it reads as.
+  const container = node.banded;
   const border = borderOf(node.appearance, container ? theme.containerStroke : theme.boxStroke);
   const fill = fillOf(node.appearance, container ? theme.containerFill : theme.boxFill);
   // A box is the one kind with two inkable parts, which is why its text needs
@@ -273,13 +271,10 @@ function nodeSvg(
     if (copy !== undefined) {
       parts.push(
         sized(
-          textBlock([[{ text: copy }]], x + PAD, y + PAD, face.width - PAD * 2, textHeight, size, {
-            color: text,
-            align: 'start',
-            side: 'left',
-            blockWidth: face.width - PAD * 2,
-            ink,
-          }),
+          textBlock([[{ text: copy }]], x, y, textHeight, size,
+            { x: PAD, y: PAD, width: face.width - PAD * 2, height: textHeight },
+            { color: text, align: 'start', ink },
+          ),
           size,
           fontSize,
         ),
@@ -294,76 +289,37 @@ function nodeSvg(
     parts.push(`  <path d="${extra}" fill="none" stroke="${border}"/>`);
   }
 
-  // The badge takes a column on the right and the text lays out in what is
-  // left, which is the room the resolver already reserved for exactly this.
-  const icon = badgeFor(node.appearance, node.line);
-  const iconSide = icon === undefined ? 0 : glyphSide;
-  const hasText = node.lines.some((line) => plain(line).length > 0);
-  const iconRoom = icon === undefined ? 0 : iconSide + (hasText ? ICON_GAP : 0);
   // A leaf's text defaults to the middle of its box, a container's to the top
-  // left of the band; both then read `at` for where it really goes.
+  // left of the band; both then read `at` for where it really goes. Where the
+  // text sits is the resolver's answer, in `textBox`; only the alignment of
+  // its lines against each other is read here.
   const textStyle = textStyleFor(
     node.textAttrs,
     node.line,
     container ? 'start' : 'middle',
     container ? 'top-left' : 'center',
   );
-  const textDepth = node.lines.length * textHeight;
-
-  if (!container) {
-    // A leaf's text sits in the room beside the badge rather than in the whole
-    // box, so the two sit side by side. Wherever the box is exactly the size of
-    // what it holds there is no slack and `at` changes nothing; a badge is two
-    // lines tall, so a shorter text beside one has room to move.
-    const top = leafTop(textStyle.end, face.y, face.height, textDepth);
-    parts.push(
-      sized(
-        textBlock(node.lines, face.x, top, face.width - iconRoom, textHeight, size, {
-          color: text,
-          align: textStyle.align,
-          side: textStyle.side,
-          blockWidth,
-          ink,
-        }),
-        size,
-        fontSize,
-      ),
-    );
-  } else {
-    // The text and the icon share a band at one end of the box, and the
-    // resolver has already given the contents the other end.
-    const band = Math.max(textDepth, iconSide);
-    const bandTop = textStyle.end === 'top' ? face.y + PAD : face.y + face.height - PAD - band;
-    parts.push(
-      sized(
-        textBlock(node.lines, face.x + PAD, bandTop, face.width - PAD * 2 - iconRoom, textHeight, size, {
-          color: text,
-          align: textStyle.align,
-          side: textStyle.side,
-          blockWidth,
-          ink,
-        }),
-        size,
-        fontSize,
-      ),
-    );
-    for (const child of node.children) {
-      kids.push(drawNode(child, theme, measurer, fontSize, markup, url));
-    }
+  parts.push(
+    sized(
+      textBlock(node.lines, node.x, node.y, textHeight, size, node.textBox, {
+        color: text,
+        align: textStyle.align,
+        ink,
+      }),
+      size,
+      fontSize,
+    ),
+  );
+  for (const child of node.children) {
+    kids.push(drawNode(child, theme, measurer, fontSize, markup, url));
   }
 
-  if (icon !== undefined) {
-    // A container's badge rides in the text's band, at whichever end that is; a
-    // leaf's text is centered, so the icon centers with it. Both follow the
-    // text rather than being placed by a rule of their own, which is what
-    // keeps an icon reading as part of the title block and not as a sticker.
-    const left = face.x + face.width - PAD - iconSide;
-    const top = container
-      ? textStyle.end === 'top'
-        ? face.y + PAD
-        : face.y + face.height - PAD - iconSide
-      : leafTop(textStyle.end, face.y, face.height, iconSide);
-    (container ? tail : parts).push(drawIcon(icon, left, top, iconSide, theme));
+  const icon = badgeFor(node.appearance, node.line);
+  if (icon !== undefined && node.badgeBox) {
+    // Drawn where the resolver reserved room for it. A badge in a band goes
+    // over the children, since a decked node's stack can reach under it.
+    const badge = drawIcon(icon, node.x + node.badgeBox.x, node.y + node.badgeBox.y, node.badgeBox.width, theme);
+    (node.children.length > 0 ? tail : parts).push(badge);
   }
 
   return { own: parts, kids, tail };
@@ -552,15 +508,16 @@ function drawEdge(
     });
     parts.push(
       sized(
-        textBlock(lines, midX - width / 2, top, width, textHeight, size, {
-          // A colored edge carries its meaning into its text; an uncolored
-          // one leaves the words to read as ordinary text.
-          color: textColorOf(edge.textAttrs, theme, lineOf(edge.appearance, theme.text)),
-          align: 'middle',
-          side: 'center',
-          blockWidth: width,
-          ink: (run, own) => runInk(run, own, markup, theme),
-        }),
+        textBlock(lines, midX - width / 2, top, textHeight, size,
+          { x: 0, y: 0, width, height },
+          {
+            // A colored edge carries its meaning into its text; an uncolored
+            // one leaves the words to read as ordinary text.
+            color: textColorOf(edge.textAttrs, theme, lineOf(edge.appearance, theme.text)),
+            align: 'middle',
+            ink: (run, own) => runInk(run, own, markup, theme),
+          },
+        ),
         size,
         fontSize,
       ),
@@ -1641,29 +1598,26 @@ function sized(block: string, size: number, fontSize: number): string {
 function textBlock(
   lines: Line[],
   x: number,
-  top: number,
-  width: number,
+  y: number,
   lineHeight: number,
   fontSize: number,
+  box: { x: number; y: number; width: number; height: number },
   style: {
     color: string;
     align: 'start' | 'middle' | 'end';
-    side: 'left' | 'center' | 'right';
-    blockWidth: number;
     ink: (run: Run, own: string) => string;
   },
 ): string {
-  const blockLeft =
-    style.side === 'left'
-      ? x
-      : style.side === 'right'
-        ? x + width - style.blockWidth
-        : x + (width - style.blockWidth) / 2;
+  // `box` is the ink the text occupies, worked out by the resolver — the one
+  // place that decides where a text sits, because `hub text` is a placement
+  // target and the answer has to be a number before anything is solved.
+  const blockLeft = x + box.x;
+  const top = y + box.y;
   const anchorX =
     style.align === 'middle'
-      ? blockLeft + style.blockWidth / 2
+      ? blockLeft + box.width / 2
       : style.align === 'end'
-        ? blockLeft + style.blockWidth
+        ? blockLeft + box.width
         : blockLeft;
   return lines
     .map((line, index) => {
@@ -1689,13 +1643,6 @@ function textBlock(
     })
     .filter((element) => element.length > 0)
     .join('\n');
-}
-
-/** Where a leaf's text or badge starts vertically, given which end it sits at. */
-function leafTop(end: 'top' | 'center' | 'bottom', y: number, height: number, own: number): number {
-  if (end === 'top') return y + PAD;
-  if (end === 'bottom') return y + height - PAD - own;
-  return y + (height - own) / 2;
 }
 
 /**

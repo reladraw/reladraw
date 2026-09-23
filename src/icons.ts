@@ -8,7 +8,7 @@
  * the SVG. Inline paths cost a few hundred bytes each and always arrive.
  *
  * A name here says what the thing *is*, never what the picture looks like. The
- * same discipline as `gap: wide` over `gap: 110` and `muted` over a hex value:
+ * same discipline as `muted` over a hex value:
  * the word is the whole interface, so it has to carry meaning rather than
  * geometry, and naming the meaning is what lets the drawing be improved later
  * without every diagram that uses it changing sense.

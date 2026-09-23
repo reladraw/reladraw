@@ -1,4 +1,6 @@
 import type {
+  Part,
+  PartSide,
   Attrs,
   Axis,
   Side,
@@ -12,11 +14,13 @@ import type {
 import {
   ALL_ATTR_KEYS,
   ATTR_KEYS,
+  PART_SIDES,
   COLOR_KEYS,
   COLOR_PARTS,
   CONTENT_ALIGNMENTS,
   CONTENT_WIDTHS,
   describePlacement,
+  nameTarget,
 } from './ast.js';
 import {
   ARROW_LENGTH,
@@ -32,6 +36,7 @@ import {
   PAD,
   SEPARATION_GAP,
   fontSizeFor,
+  leafTop,
   textExtent,
   textStyleFor,
   widestLine,
@@ -164,6 +169,9 @@ function buildTree(statements: Stmt[], styles: Map<string, Attrs>) {
       inset: 0,
       deckTexts: [],
       headerHeight: 0,
+      banded: false,
+      textBox: { x: 0, y: 0, width: 0, height: 0 },
+      textSide: 'left',
       textAttrs,
       attrs: stmt.attrs,
       appearance,
@@ -405,7 +413,16 @@ function buildEdges(
     if (!from) throw new SourceError(`edge from "${stmt.from}", which does not exist`, stmt.line);
     if (!to) throw new SourceError(`edge to "${stmt.to}", which does not exist`, stmt.line);
     const between: LayoutPassage | undefined = stmt.between && {
-      nodes: stmt.between.targets.map((name) => {
+      nodes: stmt.between.targets.map(({ name, part }) => {
+        if (part !== undefined) {
+          // A passage is the gap between two boxes, and a side or a point has
+          // no gap on either hand. Refused by name rather than dropped.
+          throw new SourceError(
+            `edge passes between "${name} ${part}", and a passage runs between two whole boxes ` +
+              `— drop "${part}"`,
+            stmt.line,
+          );
+        }
         const node = byName.get(name);
         if (!node) {
           throw new SourceError(`edge passes between "${name}", which does not exist`, stmt.line);
@@ -489,6 +506,12 @@ function sizeNode(
     }
     node.width = textWidth;
     node.height = textHeight;
+    node.textBox = textBoxIn(
+      { x: 0, y: 0, width: node.width, height: node.height },
+      (node.textSide = textStyleFor(node.textAttrs, node.line, 'start', 'center').side),
+      textWidth,
+      textHeight,
+    );
     return;
   }
 
@@ -504,6 +527,14 @@ function sizeNode(
     }
     node.width = Math.max(glyphSide, textWidth);
     node.height = glyphSide + (hasText ? ICON_GAP + textHeight : 0);
+    // The caption is under the picture and nowhere else, so only the
+    // horizontal half of `at` reaches it.
+    node.textBox = textBoxIn(
+      { x: 0, y: glyphSide + ICON_GAP, width: node.width, height: textHeight },
+      (node.textSide = textStyleFor(node.textAttrs, node.line, 'middle', 'center').side),
+      textWidth,
+      textHeight,
+    );
     return;
   }
 
@@ -527,20 +558,52 @@ function sizeNode(
     // a one-line text beside one has a line of room to sit at either end of.
     // Inert-but-legal stays silent here, the same treatment `align` gets on a
     // leaf with one line.
-    textStyleFor(node.textAttrs, node.line, 'middle', 'center');
+    const style = textStyleFor(node.textAttrs, node.line, 'middle', 'center');
     node.width = textWidth + iconRoom + PAD * 2;
     node.height = Math.max(textHeight, iconSide) + PAD * 2;
+    // A leaf's text sits in the room beside the badge rather than in the whole
+    // box, which is what puts the two side by side.
+    node.textBox = textBoxIn(
+      {
+        x: 0,
+        y: leafTop(style.end, 0, node.height, textHeight),
+        width: node.width - iconRoom,
+        height: textHeight,
+      },
+      (node.textSide = style.side),
+      textWidth,
+      textHeight,
+    );
+    if (icon !== undefined) {
+      node.badgeBox = {
+        x: node.width - PAD - iconSide,
+        y: leafTop(style.end, 0, node.height, iconSide),
+        width: iconSide,
+        height: iconSide,
+      };
+    }
+  } else if (framedChildren(node).size > 0) {
+    // Something is placed against this node's own frame or text, so where its
+    // text sits and how big it is come out of one solve with its children.
+    const own: OwnText = { textWidth, textHeight, iconSide, hasIcon: icon !== undefined, contents };
+    const lay = (width: number): void => {
+      layoutFramed(node, own, edges, measurer, fontSize, local, width - node.deckTexts.length * DECK_STEP);
+      applyDeck(node, local);
+    };
+    lay(0);
+    relayout.set(node, lay);
+    return;
   } else {
-    if (contents.widths === 'match') matchWidths(node);
-    let content = layoutChildren(node, edges, measurer, fontSize, local);
+    if (contents.widths === 'match') matchWidths(node.children);
+    let content = layoutChildren(node.children, edges, measurer, fontSize, local);
     if (contents.widths === 'fill') {
       // The band is the wider of the title and the contents, so filling it
       // needs the contents measured first. Where they already set the width
       // this is `match` exactly; where the title wins it is the answer `match`
       // could not give.
       const band = Math.max(textWidth + iconRoom, content.width);
-      for (const child of node.children) child.width = band;
-      content = layoutChildren(node, edges, measurer, fontSize, local);
+      for (const child of node.children) widenTo(child, band);
+      content = layoutChildren(node.children, edges, measurer, fontSize, local);
     }
     const band = Math.max(textHeight, iconSide);
     // `headerHeight` is the band the text and icon take, whichever end of the
@@ -550,20 +613,21 @@ function sizeNode(
     node.height = node.headerHeight + content.height + PAD * 2;
 
     const style = textStyleFor(node.textAttrs, node.line);
-    if (style.end === 'center') {
-      // A container's band is at one end precisely so its contents can have the
-      // other, so the three positions that name neither end have nothing to
-      // mean here. Refused rather than rounded to an end, for the reason every
-      // other word in the language is: a value that quietly becomes a different
-      // value looks like the tool being broken.
-      throw new SourceError(
-        `"${node.name}" holds things and its text is at: ${style.at}. A container's text sits at ` +
-          'the top or the bottom so its contents can have the other end, so name a position on ' +
-          'one of those edges',
-        node.line,
-      );
-    }
+    if (style.end === 'center') throw bandInMiddle(node, style.at);
     const above = style.end === 'top' ? node.headerHeight : 0;
+    // The text and the badge share a band at one end of the box, and the
+    // contents have the other.
+    node.textBox = textBoxIn(
+      {
+        x: PAD,
+        y: style.end === 'top' ? PAD : node.height - PAD - band,
+        width: node.width - PAD * 2 - iconRoom,
+        height: textHeight,
+      },
+      (node.textSide = style.side),
+      textWidth,
+      textHeight,
+    );
     // Where the title is wider than the contents, the slack is all on the right
     // — every member sits at the smallest position its constraints allow and
     // nothing pushes it along. `align` is what says where the block goes in it.
@@ -574,20 +638,67 @@ function sizeNode(
       offset.x += PAD + shift;
       offset.y += PAD + above;
     }
+    node.banded = true;
+    if (icon !== undefined) {
+      // The badge rides in the band, flush with the box's right edge.
+      node.badgeBox = {
+        x: node.width - PAD - iconSide,
+        y: style.end === 'top' ? PAD : node.height - PAD - iconSide,
+        width: iconSide,
+        height: iconSide,
+      };
+    }
   }
 
+  applyDeck(node, local);
+}
+
+/**
+ * Make room for a deck's copies, once the node's own face has been sized.
+ *
+ * The copies sit behind and above-left, so the whole node grows by the depth
+ * of the stack and its own face moves down and right by the same.
+ */
+function applyDeck(node: LayoutNode, local: Local): void {
   if (node.deckTexts.length > 0) {
-    // The copies sit behind and above-left, so the whole node grows by the
-    // depth of the stack and its own face moves down and right by the same.
     node.inset = node.deckTexts.length * DECK_STEP;
     node.width += node.inset;
     node.height += node.inset;
+    node.textBox.x += node.inset;
+    node.textBox.y += node.inset;
+    if (node.badgeBox) {
+      node.badgeBox.x += node.inset;
+      node.badgeBox.y += node.inset;
+    }
     for (const child of node.children) {
       const offset = local.get(child)!;
       offset.x += node.inset;
       offset.y += node.inset;
     }
   }
+}
+
+/**
+ * Where a block of text ends up in the room it was given: the *ink* box, which
+ * is what `hub text` names as a placement target and what the renderer draws.
+ *
+ * Only the horizontal is decided here. The vertical is settled by whoever
+ * knows which end of the box the text sits at, which differs between a leaf, a
+ * container's band and a caption under a picture, and arrives as `room.y`.
+ */
+function textBoxIn(
+  room: { x: number; y: number; width: number; height: number },
+  side: 'left' | 'center' | 'right',
+  inkWidth: number,
+  inkHeight: number,
+): { x: number; y: number; width: number; height: number } {
+  const x =
+    side === 'left'
+      ? room.x
+      : side === 'right'
+        ? room.x + room.width - inkWidth
+        : room.x + (room.width - inkWidth) / 2;
+  return { x, y: room.y, width: inkWidth, height: inkHeight };
 }
 
 /**
@@ -625,9 +736,34 @@ function contentsStyleFor(node: LayoutNode): ContentsStyle {
  * before layoutChildren sizes and positions anything from those widths. A
  * container's own children are already sized by this point.
  */
-function matchWidths(node: LayoutNode): void {
-  const maxWidth = Math.max(...node.children.map((child) => child.width));
-  for (const child of node.children) child.width = maxWidth;
+function matchWidths(children: LayoutNode[]): void {
+  const maxWidth = Math.max(...children.map((child) => child.width));
+  for (const child of children) widenTo(child, maxWidth);
+}
+
+/**
+ * Make a node wider than it was sized, carrying its text with it.
+ *
+ * `widths: match` and `widths: fill` both set a child's width after that child
+ * was sized from its own contents, and the text's box was worked out against
+ * the old one. A left-ranged text stays where it is; a centered or right-ranged
+ * one moves by its share of the difference.
+ */
+function widenTo(node: LayoutNode, width: number): void {
+  // A node with something placed against its own frame is laid out by a
+  // solve, and a wider frame is one more thing that solve has to hold: the
+  // things against its right edge move, and a centered text re-centers.
+  const again = relayout.get(node);
+  if (again) {
+    again(width);
+    return;
+  }
+  const grew = width - node.width;
+  node.width = width;
+  if (node.textSide === 'center') node.textBox.x += grew / 2;
+  else if (node.textSide === 'right') node.textBox.x += grew;
+  // The badge is flush with the right edge, so it moves by the whole difference.
+  if (node.badgeBox) node.badgeBox.x += grew;
 }
 
 /**
@@ -637,21 +773,21 @@ function matchWidths(node: LayoutNode): void {
  * nodes. A placement may only name a sibling — containment scopes the group.
  */
 function layoutChildren(
-  parent: LayoutNode,
+  children: LayoutNode[],
   edges: LayoutEdge[],
   measurer: Measurer,
   fontSize: number,
   local: Local,
 ): { width: number; height: number } {
-  const siblings = new Map(parent.children.map((child) => [child.name, child]));
+  const siblings = new Map(children.map((child) => [child.name, child]));
 
   // Children that say nothing keep the written order, down the page and flush
   // left. Written as constraints rather than a cursor so a placed sibling can
   // push them along like anything else.
   const stack: Constraint[] = [];
   const alignment: Constraint[] = [];
-  const quiet = parent.children.filter((child) => child.placements.length === 0);
-  const indexOf = new Map(parent.children.map((child, index) => [child, index]));
+  const quiet = children.filter((child) => child.placements.length === 0);
+  const indexOf = new Map(children.map((child, index) => [child, index]));
   quiet.forEach((child, position) => {
     const previous = quiet[position - 1];
     if (!previous) return;
@@ -662,31 +798,36 @@ function layoutChildren(
   });
 
   const positions = positionGroup(
-    parent.children,
+    children,
     (placement, owner) =>
-      placement.targets.map((name) => {
+      placement.targets.map(({ name, part }) => {
         const target = siblings.get(name);
         if (!target) {
           throw new SourceError(
-            `"${owner.name}" is placed against "${name}", which is not one of its siblings`,
+            `"${owner.name}" is placed against "${name}", which is not one of its siblings or its parent`,
             placement.line,
           );
         }
-        return {
-          name,
-          node: target,
-          index: indexOf.get(target)!,
-          offset: { x: 0, y: 0 },
-          width: target.width,
-          height: target.height,
-        };
+        return partOf(
+          {
+            name,
+            node: target,
+            index: indexOf.get(target)!,
+            offset: { x: 0, y: 0 },
+            width: target.width,
+            height: target.height,
+          },
+          part,
+          owner,
+          placement.line,
+        );
       }),
     { x: alignment, y: stack },
     corridorsIn(edges, (node) => liftTo(node, indexOf, local), measurer, fontSize),
   );
 
-  for (const child of parent.children) local.set(child, positions.get(child)!);
-  return extentOf(parent.children, local);
+  for (const child of children) local.set(child, positions.get(child)!);
+  return extentOf(children, local);
 }
 
 function extentOf(children: LayoutNode[], local: Local): { width: number; height: number } {
@@ -710,6 +851,373 @@ function extentOf(children: LayoutNode[], local: Local): { width: number; height
   }
 
   return { width: maxX - minX, height: maxY - minY };
+}
+
+/** What a node's own text and badge take, measured once by `sizeNode`. */
+interface OwnText {
+  textWidth: number;
+  textHeight: number;
+  iconSide: number;
+  hasIcon: boolean;
+  contents: ContentsStyle;
+}
+
+/** How to lay a framed node out again at a given width, which is what `widenTo` needs. */
+const relayout = new WeakMap<LayoutNode, (width: number) => void>();
+
+/**
+ * The children placed against their parent — its frame, a part of it, or its
+ * text — together with any child placed against one of those, and so on.
+ *
+ * These hang off the frame. The rest hang off the default position under the
+ * text, which is the contents stack as it always was. Nothing sorts a child
+ * into one or the other; it is read off what each placement names.
+ */
+function framedChildren(parent: LayoutNode): Set<LayoutNode> {
+  const framed = new Set<LayoutNode>();
+  const byName = new Map(parent.children.map((child) => [child.name, child]));
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const child of parent.children) {
+      if (framed.has(child)) continue;
+      const names = child.placements.flatMap((placement) => placement.targets.map((target) => target.name));
+      const hangs = names.some((name) => {
+        if (name === parent.name) return true;
+        const sibling = byName.get(name);
+        return sibling !== undefined && framed.has(sibling);
+      });
+      if (hangs) {
+        framed.add(child);
+        grew = true;
+      }
+    }
+  }
+  return framed;
+}
+
+/**
+ * The sides of its parent's frame a child is not held inside by the padding.
+ *
+ * Every child is held a padding in from the frame on all four sides, which is
+ * how a box grows to hold what is in it. A child placed against a side is
+ * held by that placement instead — tucked a gap in with `inside`, straddling
+ * it with `on`, beyond it with `outside` — and holding it by the padding as
+ * well would contradict the placement whenever the gap is the smaller.
+ *
+ * `overlap: allow` on a child is "do not grow for me": it lies over whatever
+ * is there, and the frame is not held open around it at all.
+ */
+function freeSides(child: LayoutNode, parent: LayoutNode): Set<PartSide> {
+  if (allowsOverlap(child)) return new Set(PART_SIDES);
+  const free = new Set<PartSide>();
+  const across = (direction: string): PartSide[] => [
+    ...(/left|right/.test(direction) ? (['left', 'right'] as const) : []),
+    ...(/above|below/.test(direction) ? (['top', 'bottom'] as const) : []),
+  ];
+  for (const placement of child.placements) {
+    for (const target of placement.targets) {
+      if (target.name !== parent.name || target.part === 'text') continue;
+      if (placement.kind === 'offset' && placement.written !== 'inside') {
+        // Beyond the frame on this axis, so it neither holds the frame open
+        // nor is held in by it.
+        for (const side of across(placement.direction)) free.add(side);
+        continue;
+      }
+      const words = (target.part ?? '').split('-');
+      for (const side of PART_SIDES) if (words.includes(side)) free.add(side);
+      if (placement.kind === 'align' && placement.side !== 'center') free.add(placement.side as PartSide);
+    }
+  }
+  return free;
+}
+
+/**
+ * The parent's frame as a target, narrowed to the part that was named.
+ *
+ * The frame is two members of the child system, its top-left corner and its
+ * bottom-right, so a part of it is read off those two per axis: `right` is
+ * across at the bottom-right corner and spans both down, `top-center` spans
+ * both across and is down at the top-left. A part that spans comes as its two
+ * ends, and a placement against two targets already means the region that
+ * bounds them.
+ */
+function frameTargets(parent: LayoutNode, part: Part | undefined, first: number, last: number): Target[] {
+  const words = (part ?? '').split('-');
+  const pick = (near: string, far: string): number[] =>
+    words.includes(near) ? [first] : words.includes(far) ? [last] : [first, last];
+  const xs = pick('left', 'right');
+  const ys = pick('top', 'bottom');
+  const name = part === undefined ? parent.name : `${parent.name} ${part}`;
+  const point = (x: number, y: number): Target => ({
+    name,
+    node: parent,
+    index: x,
+    byAxis: { x, y },
+    frame: true,
+    offset: { x: 0, y: 0 },
+    width: 0,
+    height: 0,
+  });
+  const start = point(xs[0]!, ys[0]!);
+  const end = point(xs[xs.length - 1]!, ys[ys.length - 1]!);
+  return xs.length === 1 && ys.length === 1 ? [start] : [start, end];
+}
+
+/**
+ * A stand-in member for something of the parent's own that takes room among
+ * its children: its text, its badge, the block of its contents, a corner of
+ * its frame. Named after the parent so an error about it reads in the
+ * author's words — `"hub text" and "star" overlap`.
+ */
+function stand(of: LayoutNode, what: string, width: number, height: number): LayoutNode {
+  return {
+    ...of,
+    name: `${of.name} ${what}`,
+    parent: undefined,
+    children: [],
+    placements: [],
+    attrs: {},
+    appearance: {},
+    deckTexts: [],
+    x: 0,
+    y: 0,
+    width,
+    height,
+  };
+}
+
+function bandInMiddle(node: LayoutNode, at: string): SourceError {
+  // A container's band is at one end precisely so its contents can have the
+  // other, so the three positions that name neither end have nothing to mean
+  // here. Refused rather than rounded to an end, for the reason every other
+  // word in the language is: a value that quietly becomes a different value
+  // looks like the tool being broken.
+  return new SourceError(
+    `"${node.name}" holds things and its text is at: ${at}. A container's text sits at ` +
+      'the top or the bottom so its contents can have the other end, so name a position on ' +
+      'one of those edges',
+    node.line,
+  );
+}
+
+/**
+ * Lay out a node that has something placed against its own frame or text.
+ *
+ * One solve holds everything: the children placed against the frame, the
+ * block of ordinary contents solved as it always was, the node's text and
+ * badge, and the frame's two corners. Every one of them is held a padding in
+ * from the frame, so the frame is the smallest box that holds them all, which
+ * is what a node's size has always been. A part of the frame is then just a
+ * target like any other.
+ *
+ * The band falls out rather than being decided. It exists because the
+ * contents stack below the text; where every child hangs off the frame
+ * instead, nothing is below the text, there is no band, and the node reads as
+ * a leaf — its text centered, and whatever is beside the text centered with
+ * it as one group.
+ */
+function layoutFramed(
+  node: LayoutNode,
+  own: OwnText,
+  edges: LayoutEdge[],
+  measurer: Measurer,
+  fontSize: number,
+  local: Local,
+  minWidth: number,
+): void {
+  const { textWidth, textHeight, iconSide, hasIcon, contents } = own;
+  const hasText = textWidth > 0;
+  const framed = framedChildren(node);
+  const stacked = node.children.filter((child) => !framed.has(child));
+  const placed = node.children.filter((child) => framed.has(child));
+  const banded = stacked.length > 0;
+  const style = banded
+    ? textStyleFor(node.textAttrs, node.line)
+    : textStyleFor(node.textAttrs, node.line, 'middle', 'center');
+  if (banded && style.end === 'center') throw bandInMiddle(node, style.at);
+  const iconRoom = hasIcon ? iconSide + (hasText ? ICON_GAP : 0) : 0;
+  const band = Math.max(textHeight, iconSide);
+
+  let block = { width: 0, height: 0 };
+  if (banded) {
+    if (contents.widths === 'match') matchWidths(stacked);
+    block = layoutChildren(stacked, edges, measurer, fontSize, local);
+    if (contents.widths === 'fill') {
+      const across = Math.max(textWidth + iconRoom, block.width);
+      for (const child of stacked) widenTo(child, across);
+      block = layoutChildren(stacked, edges, measurer, fontSize, local);
+    }
+  }
+
+  const members: LayoutNode[] = [...placed];
+  const add = (member: LayoutNode): number => members.push(member) - 1;
+  const K = banded ? add(stand(node, 'contents', block.width, block.height)) : -1;
+  const T = hasText ? add(stand(node, 'text', textWidth, textHeight)) : -1;
+  const B = hasIcon ? add(stand(node, 'badge', iconSide, iconSide)) : -1;
+  const TL = add(stand(node, 'frame', 0, 0));
+  const BR = add(stand(node, 'frame', 0, 0));
+
+  const x: Constraint[] = [];
+  const y: Constraint[] = [];
+  const hold = (index: number, free: Set<PartSide>): void => {
+    const member = members[index]!;
+    if (!free.has('left')) x.push({ from: TL, to: index, weight: PAD });
+    if (!free.has('right')) x.push({ from: index, to: BR, weight: member.width + PAD });
+    if (!free.has('top')) y.push({ from: TL, to: index, weight: PAD });
+    if (!free.has('bottom')) y.push({ from: index, to: BR, weight: member.height + PAD });
+  };
+  placed.forEach((child, index) => hold(index, freeSides(child, node)));
+  for (const index of [K, T, B]) if (index >= 0) hold(index, new Set());
+  if (minWidth > 0) x.push({ from: TL, to: BR, weight: minWidth });
+
+  if (banded) {
+    // The text and the badge share a band at one end, the contents the other.
+    if (style.end === 'top') {
+      for (const above of [T, B]) if (above >= 0) y.push({ from: above, to: K, weight: band + HEADER_GAP });
+    } else {
+      if (T >= 0) y.push({ from: K, to: T, weight: block.height + HEADER_GAP });
+      if (B >= 0) y.push({ from: K, to: B, weight: block.height + HEADER_GAP + band - iconSide });
+    }
+    if (T >= 0 && B >= 0) x.push({ from: T, to: B, weight: textWidth + ICON_GAP });
+    if (B >= 0) x.push(...fix(B, BR, iconSide + PAD));
+  } else if (T >= 0 && B >= 0) {
+    // With no band the badge sits beside the text, as it does on a leaf.
+    x.push(...fix(T, B, textWidth + ICON_GAP));
+    const drop =
+      style.end === 'top' ? 0 : style.end === 'bottom' ? textHeight - iconSide : (textHeight - iconSide) / 2;
+    y.push(...fix(T, B, drop));
+  }
+
+  const siblings = new Map(node.children.map((child) => [child.name, child]));
+  const indexOf = new Map(members.map((member, index) => [member, index]));
+  const locate = (placement: Placement, owner: LayoutNode): Target[] =>
+    placement.targets.flatMap(({ name, part }): Target[] => {
+      if (name === node.name) {
+        if (part !== 'text') return frameTargets(node, part, TL, BR);
+        if (T < 0) {
+          throw new SourceError(
+            `"${owner.name}" is placed against "${name} text", and "${name}" has no text`,
+            placement.line,
+          );
+        }
+        const text = { x: 0, y: 0 };
+        return [{ name: `${name} text`, node, index: T, offset: text, width: textWidth, height: textHeight }];
+      }
+      const sibling = siblings.get(name);
+      if (!sibling) {
+        throw new SourceError(
+          `"${owner.name}" is placed against "${name}", which is not one of its siblings or its parent`,
+          placement.line,
+        );
+      }
+      // A child of the contents is reached through the block that holds it,
+      // at the offset the contents solve already gave it.
+      const inBlock = !framed.has(sibling);
+      const target: Target = {
+        name,
+        node: sibling,
+        index: inBlock ? K : indexOf.get(sibling)!,
+        offset: inBlock ? { ...local.get(sibling)! } : { x: 0, y: 0 },
+        width: sibling.width,
+        height: sibling.height,
+      };
+      return [partOf(target, part, owner, placement.line)];
+    });
+
+  // Which way a child against a side stands from the rest of the box: across
+  // for a left or right side or corner, down for the top or bottom.
+  const facing = new Map<number, Axis>();
+  placed.forEach((child, index) => {
+    for (const placement of child.placements) {
+      for (const target of placement.targets) {
+        if (target.name !== node.name || target.part === undefined || target.part === 'text') continue;
+        const words = target.part.split('-');
+        if (words.includes('left') || words.includes('right')) facing.set(index, 'x');
+        else if (words.includes('top') || words.includes('bottom')) facing.set(index, 'y');
+      }
+    }
+  });
+  const across = (i: number, j: number): Axis | undefined => facing.get(i) ?? facing.get(j);
+
+  const solve = (pins: Record<Axis, Constraint[]>) =>
+    positionGroup(members, locate, { x: [...x, ...pins.x], y: [...y, ...pins.y] }, [], across);
+  let solved = solve({ x: [], y: [] });
+
+  // Where a text is centered or ranged right, where it goes depends on how
+  // wide the frame came out, which depends on everything else. So it is
+  // measured off the first solve and pinned, the move `settle` makes.
+  const at = (index: number) => solved.get(members[index]!)!;
+  const inner = (axis: Axis) => ({
+    start: at(TL)[axis] + PAD,
+    size: at(BR)[axis] - at(TL)[axis] - PAD * 2,
+  });
+  const pins: Record<Axis, Constraint[]> = { x: [], y: [] };
+  const pin = (axis: Axis, index: number, to: number): void => {
+    if (to - at(index)[axis] <= 1e-9) return;
+    pins[axis].push(...fix(TL, index, to - at(TL)[axis]));
+  };
+  if (banded) {
+    if (T >= 0 && style.side !== 'left') {
+      const room = inner('x');
+      pin('x', T, alignedAt(style.side, { start: room.start, size: room.size - iconRoom }, textWidth));
+    }
+    if (contents.align !== 'left') pin('x', K, alignedAt(contents.align, inner('x'), block.width));
+  } else if (T >= 0 || B >= 0) {
+    // The text and the things placed against it center as a group, which is
+    // the fan rule's sentence again: several things against one target are
+    // balanced on it together.
+    const lead = T >= 0 ? T : B;
+    const against = placed.filter((child) =>
+      child.placements.some((placement) =>
+        placement.targets.some((target) => target.name === node.name && target.part === 'text'),
+      ),
+    );
+    const group = [lead, ...(T >= 0 && B >= 0 ? [B] : []), ...against.map((child) => indexOf.get(child)!)];
+    const sides: Record<Axis, Side> = { x: style.side, y: style.end };
+    for (const axis of AXES) {
+      if (sides[axis] === 'left' || sides[axis] === 'top') continue;
+      let start = Infinity;
+      let end = -Infinity;
+      for (const index of group) {
+        const size = axis === 'x' ? members[index]!.width : members[index]!.height;
+        start = Math.min(start, at(index)[axis]);
+        end = Math.max(end, at(index)[axis] + size);
+      }
+      const want = alignedAt(sides[axis], inner(axis), end - start);
+      pin(axis, lead, at(lead)[axis] + (want - start));
+    }
+  }
+  if (pins.x.length > 0 || pins.y.length > 0) solved = solve(pins);
+
+  const origin = at(TL);
+  const corner = at(BR);
+  node.inset = 0;
+  node.width = corner.x - origin.x;
+  node.height = corner.y - origin.y;
+  node.banded = banded;
+  node.headerHeight = banded && (hasText || hasIcon) ? band + HEADER_GAP : 0;
+  node.textSide = style.side;
+  const relative = (index: number, width: number, height: number) => ({
+    x: at(index).x - origin.x,
+    y: at(index).y - origin.y,
+    width,
+    height,
+  });
+  node.textBox = T >= 0 ? relative(T, textWidth, textHeight) : { x: 0, y: 0, width: 0, height: 0 };
+  if (B >= 0) node.badgeBox = relative(B, iconSide, iconSide);
+  for (const child of placed) {
+    const position = solved.get(child)!;
+    local.set(child, { x: position.x - origin.x, y: position.y - origin.y });
+  }
+  if (banded) {
+    const shift = relative(K, 0, 0);
+    for (const child of stacked) {
+      const offset = local.get(child)!;
+      offset.x += shift.x;
+      offset.y += shift.y;
+    }
+  }
 }
 
 // --- pass three: solve for positions -----------------------------------------
@@ -742,7 +1250,7 @@ function placeRoots(
   const positions = positionGroup(
     roots,
     (placement, owner) =>
-      placement.targets.map((name) => {
+      placement.targets.map(({ name, part }) => {
         const target = byName.get(name);
         if (!target) {
           throw new SourceError(
@@ -758,14 +1266,19 @@ function placeRoots(
           offset.y += step.y;
           root = root.parent;
         }
-        return {
-          name,
-          node: target,
-          index: indexOf.get(root)!,
-          offset,
-          width: target.width,
-          height: target.height,
-        };
+        return partOf(
+          {
+            name,
+            node: target,
+            index: indexOf.get(root)!,
+            offset,
+            width: target.width,
+            height: target.height,
+          },
+          part,
+          owner,
+          placement.line,
+        );
       }),
     { x: [], y: [] },
     corridorsIn(edges, (node) => liftTo(node, indexOf, local), measurer, fontSize),
@@ -805,9 +1318,28 @@ interface Target {
   /** The node that was named, which may be nested inside the member holding it. */
   node: LayoutNode;
   index: number;
+  /**
+   * A different member per axis, where one target's two coordinates come from
+   * two members. Only a point of a parent's frame needs this: its left and
+   * right edges are two members of the child system and its top and bottom
+   * two more, so `top-right` is across one and down another.
+   */
+  byAxis?: Record<Axis, number>;
+  /**
+   * A point or side of the parent's own frame, from inside it. The frame grows
+   * to hold the child, so every child is ahead of the frame's far edges by
+   * construction — which is not the circle `settle` refuses, and the one
+   * place it is told so.
+   */
+  frame?: boolean;
   offset: { x: number; y: number };
   width: number;
   height: number;
+}
+
+/** Which member a target's position on this axis is measured from. */
+function memberOn(target: Target, axis: Axis): number {
+  return target.byAxis ? target.byAxis[axis] : target.index;
 }
 
 /**
@@ -909,6 +1441,8 @@ interface Pending {
   side: Side;
   targets: Target[];
   placement: Placement;
+  /** The extent being aligned, where it is not the node's own — a fan's whole height. */
+  own?: number;
 }
 
 /**
@@ -928,12 +1462,27 @@ function positionGroup(
   locate: (placement: Placement, owner: LayoutNode) => Target[],
   extra: { x: Constraint[]; y: Constraint[] },
   corridors: Corridor[] = [],
+  across?: (i: number, j: number) => Axis | undefined,
 ): Map<LayoutNode, { x: number; y: number }> {
   const constraints: Record<Axis, Constraint[]> = { x: [...extra.x], y: [...extra.y] };
   const indexOf = new Map(members.map((member, index) => [member, index]));
   const pending: Pending[] = [];
   /** Pairs an overlay put on top of each other, which is the point of it. */
   const overlaid: Array<[number, number]> = [];
+
+  // Several nodes saying the identical thing are one list, running down the
+  // page in the order they were written. The first carries the placement for
+  // the whole list; each of the rest hangs a fixed step below the one before,
+  // and places itself across as it said.
+  const fans = fansIn(members);
+  for (const fan of fans.values()) {
+    for (let at = 1; at < fan.members.length; at += 1) {
+      const previous = fan.members[at - 1]!;
+      constraints.y.push(
+        ...fix(indexOf.get(previous)!, indexOf.get(fan.members[at]!)!, previous.height + CHILD_GAP),
+      );
+    }
+  }
 
   for (const node of members) {
     // Checked here as well as in `gapFor`, so a misspelt node-wide gap is caught
@@ -942,8 +1491,13 @@ function positionGroup(
     namedGap(node, node.attrs['gap'], node.line);
     if (node.placements.length === 0) continue;
     const me = indexOf.get(node)!;
-    const size: Record<Axis, number> = { x: node.width, y: node.height };
+    const fan = fans.get(node);
+    // A later member of a fan has its vertical from the list, so its own
+    // placements speak only across; the first speaks for the whole list.
+    const follows = fan !== undefined && fan.members[0] !== node;
+    const size: Record<Axis, number> = { x: node.width, y: fan ? fan.height : node.height };
     const located = node.placements.map((placement) => ({ placement, targets: locate(placement, node) }));
+    const speaks = (axis: Axis): boolean => !(follows && axis === 'y');
 
     const spokenFor: Record<Axis, boolean> = { x: false, y: false };
     for (const { placement } of located) {
@@ -963,9 +1517,10 @@ function positionGroup(
     // them. That box is a constant only while its members hold still relative
     // to one another; otherwise the alignment waits for the first solution.
     const alignOn = (axis: Axis, side: Side, targets: Target[], placement: Placement): void => {
-      const anchor = sharedMember(targets);
+      if (!speaks(axis)) return;
+      const anchor = sharedMember(targets, axis);
       if (anchor === undefined) {
-        pending.push({ node, me, axis, side, targets, placement });
+        pending.push({ node, me, axis, side, targets, placement, own: size[axis] });
         return;
       }
       const span = spanOf(targets, axis, () => 0);
@@ -978,20 +1533,20 @@ function positionGroup(
         continue;
       }
       if (placement.kind === 'on') {
-        // An exact position on one box, on both axes. The target's size is
-        // already settled, so every one of the nine is a fixed distance from
-        // it — no maximum to take and nothing to measure later, which is what
-        // keeps the overlay out of `settle` even though it is not a floor.
-        const target = targets[0]!;
-        const inset = insetFor(node, placement);
-        overlaid.push([me, target.index]);
-        for (const axis of AXES) {
-          const span = { start: target.offset[axis], size: axis === 'x' ? target.width : target.height };
-          constraints[axis].push(
-            ...fix(target.index, me, overlaidAt(placement.position, axis, span, size[axis], inset), placement),
-          );
-        }
+        // The node's center at the part's center, on both axes. That is the
+        // ordinary center alignment the language already has on one axis, said
+        // twice — which is why `on` needs nothing of its own in the solver.
+        // A side of a parent's frame comes as its two ends, so centering on
+        // the part is centering on everything it came as.
+        overlaid.push([me, targets[0]!.index]);
+        for (const axis of AXES) alignOn(axis, 'center', targets, placement);
         continue;
+      }
+      // Saying `inside` is the author stating the overlap, so there is
+      // nothing for the separation pass to report. `outside` is clear of the
+      // box by construction and needs no exemption.
+      if (placement.written === 'inside') {
+        for (const target of targets) overlaid.push([me, target.index]);
       }
       // One constraint per target, so the node clears the furthest of them.
       // Taking that maximum is what longest paths already does, which is why a
@@ -1003,38 +1558,22 @@ function positionGroup(
       // against one of them and wide of the other.
       for (const target of targets) {
         const gap = gapFor(node, placement, target.node);
-        if (direction.includes('right')) {
-          constraints.x.push({
-            from: target.index,
-            to: me,
-            weight: target.offset.x + target.width + gap,
-            placement,
-          });
-        }
-        if (direction.includes('left')) {
-          constraints.x.push({
-            from: me,
-            to: target.index,
-            weight: node.width + gap - target.offset.x,
-            placement,
-          });
-        }
-        if (direction.includes('below')) {
-          constraints.y.push({
-            from: target.index,
-            to: me,
-            weight: target.offset.y + target.height + gap,
-            placement,
-          });
-        }
-        if (direction.includes('above')) {
-          constraints.y.push({
-            from: me,
-            to: target.index,
-            weight: node.height + gap - target.offset.y,
-            placement,
-          });
-        }
+        // Tucked inside the frame of the box that holds it, a child is *at*
+        // that edge rather than at least so far from it: the frame is also
+        // held open around every child, which is a pull the other way, and
+        // without this the child would sit wherever that left it.
+        const exact = target.frame === true && placement.written === 'inside';
+        const push = (axis: Axis, from: number, to: number, weight: number): void => {
+          if (!speaks(axis)) return;
+          constraints[axis].push({ from, to, weight, placement });
+          if (exact) constraints[axis].push({ from: to, to: from, weight: -weight, placement });
+        };
+        const x = memberOn(target, 'x');
+        const y = memberOn(target, 'y');
+        if (direction.includes('right')) push('x', x, me, target.offset.x + target.width + gap);
+        if (direction.includes('left')) push('x', me, x, size.x + gap - target.offset.x);
+        if (direction.includes('below')) push('y', y, me, target.offset.y + target.height + gap);
+        if (direction.includes('above')) push('y', me, y, size.y + gap - target.offset.y);
       }
     }
 
@@ -1044,7 +1583,7 @@ function positionGroup(
     // so that is refused rather than guessed — but two targets named by one
     // placement are a single region, and centering on it is unambiguous.
     for (const axis of AXES) {
-      if (spokenFor[axis]) continue;
+      if (spokenFor[axis] || !speaks(axis)) continue;
       const offers = located.filter((entry) => entry.placement.kind === 'offset');
       const first = offers[0];
       if (!first) {
@@ -1053,7 +1592,8 @@ function positionGroup(
           node.placements[0]!.line,
         );
       }
-      const named = (entry: { placement: Placement }) => entry.placement.targets.join('\u0000');
+      const named = (entry: { placement: Placement }) =>
+        entry.placement.targets.map(nameTarget).join('\u0000');
       const other = offers.find((entry) => named(entry) !== named(first));
       if (other) {
         throw new SourceError(
@@ -1080,7 +1620,7 @@ function positionGroup(
   room(corridors, constraints, solved, solveAll);
   settle(pending, members, constraints, solved, solveAll);
   snug(members, constraints, solved, solveAll);
-  separate(members, constraints, solved, solveAll, overlaid);
+  separate(members, constraints, solved, solveAll, overlaid, across);
   confirm(pending, solved);
 
   return new Map(
@@ -1091,10 +1631,49 @@ function positionGroup(
   );
 }
 
-/** The member every target belongs to, or nothing if they are spread across several. */
-function sharedMember(targets: Target[]): number | undefined {
-  const first = targets[0]!.index;
-  return targets.every((target) => target.index === first) ? first : undefined;
+/** The member every target belongs to on this axis, or nothing if they are spread across several. */
+function sharedMember(targets: Target[], axis: Axis): number | undefined {
+  const first = memberOn(targets[0]!, axis);
+  return targets.every((target) => memberOn(target, axis) === first) ? first : undefined;
+}
+
+interface Fan {
+  /** In declaration order, which is the order they run down the page. */
+  members: LayoutNode[];
+  /** The whole list, top of the first to bottom of the last. */
+  height: number;
+}
+
+/**
+ * The fans in a group: two or more members whose placements say the identical
+ * thing, each member mapped to the one fan it is in.
+ *
+ * `b right of a`, `c right of a` and `d right of a` otherwise put three boxes
+ * on one spot, and what they mean is "a points at three things" — the three
+ * balanced against `a`, which no chain of placements can say. The same holds
+ * of a part: three children `inside parent right` are a column against that
+ * edge. The list runs down the page whatever the direction, including at a
+ * corner, where it stacks into the corner and grows down.
+ *
+ * A node saying `overlap: allow` has asked for the literal pile, and gets it.
+ */
+function fansIn(members: LayoutNode[]): Map<LayoutNode, Fan> {
+  const bySaying = new Map<string, LayoutNode[]>();
+  for (const node of members) {
+    if (node.placements.length === 0 || allowsOverlap(node)) continue;
+    const saying = node.placements.map(describePlacement).join('\n');
+    const list = bySaying.get(saying) ?? [];
+    list.push(node);
+    bySaying.set(saying, list);
+  }
+  const fans = new Map<LayoutNode, Fan>();
+  for (const list of bySaying.values()) {
+    if (list.length < 2) continue;
+    const height = list.reduce((sum, node) => sum + node.height, 0) + CHILD_GAP * (list.length - 1);
+    const fan = { members: list, height };
+    for (const node of list) fans.set(node, fan);
+  }
+  return fans;
 }
 
 /** The stretch of one axis that just covers every target. */
@@ -1114,43 +1693,54 @@ function spanOf(
 }
 
 /**
- * How far in from the named corner or edge an overlay sits. Its own bracketed
- * gap, or `tight`.
+ * Narrow a target to the part of it the placement named — its text, one of its
+ * four sides, or one of its nine points.
  *
- * Deliberately not `gapFor`, which maxes the node's `gap:` against the target's.
- * Those say how a node stands off its *neighbours*, and an overlay has no
- * neighbour — it is on the box. A node marked `gap: wide` so its siblings keep
- * clear should not thereby wear its badge 110 pixels in from the corner.
- */
-function insetFor(node: LayoutNode, placement: OnPlacement): number {
-  return namedGap(node, placement.gap ?? 'tight', placement.line);
-}
-
-/**
- * Where a node of this size sits so it is at the named position of the span.
+ * A side comes back as a segment of zero thickness and a point as a rectangle
+ * of no size at all, which is the whole of what a part is to the solver: an
+ * extent, exactly as a whole box is, just a thinner one. Everything else — the
+ * direction, the gap, the alignment on the axis nobody spoke to — then works
+ * on it unchanged, which is why a part target needed nothing added to the
+ * constraint system.
  *
  * Each position is read as two independent halves, one per axis, which is why
  * nine words need no table of nine entries: `top-right` is "right" across and
- * "top" down, `top` is "top" down and says nothing across, `center` says
- * nothing either way. A half that says nothing centres.
- *
- * An end is inset from that edge; a centre ignores the inset, because there is
- * no edge for it to be held off.
+ * "top" down, `top-center` is "top" down and centered across.
  */
-function overlaidAt(
-  position: string,
-  axis: Axis,
-  span: { start: number; size: number },
-  own: number,
-  inset: number,
-): number {
-  const [near, far] = axis === 'x' ? ['left', 'right'] : ['top', 'bottom'];
-  const parts = position.split('-');
-  if (parts.includes(near!)) return span.start + inset;
-  if (parts.includes(far!)) return span.start + span.size - own - inset;
-  // Neither half named this axis, so the node is centred on it — which is what
-  // `center` says twice and what `bottom-center` says once.
-  return span.start + (span.size - own) / 2;
+function partOf(target: Target, part: Part | undefined, owner: LayoutNode, line: number): Target {
+  if (part === undefined) return target;
+  const box = { ...target, offset: { ...target.offset } };
+
+  if (part === 'text') {
+    const text = target.node.textBox;
+    if (text.width === 0 && text.height === 0) {
+      throw new SourceError(
+        `"${owner.name}" is placed against "${target.name} text", and "${target.name}" has no text`,
+        line,
+      );
+    }
+    box.offset.x += text.x;
+    box.offset.y += text.y;
+    box.width = text.width;
+    box.height = text.height;
+    return box;
+  }
+
+  const words = part.split('-');
+  const isSide = (PART_SIDES as readonly string[]).includes(part);
+  const narrow = (axis: Axis, near: string, far: string): void => {
+    const size = axis === 'x' ? box.width : box.height;
+    const named = words.includes(near) ? 0 : words.includes(far) ? size : undefined;
+    // A *side* leaves the axis it does not name alone: `right` is the whole
+    // right edge, top to bottom, where `right-center` is the one point on it.
+    if (named === undefined && isSide) return;
+    box.offset[axis] += named ?? size / 2;
+    if (axis === 'x') box.width = 0;
+    else box.height = 0;
+  };
+  narrow('x', 'left', 'right');
+  narrow('y', 'top', 'bottom');
+  return box;
 }
 
 /** Where a node of this size sits so that the named side of it meets the span's. */
@@ -1250,7 +1840,9 @@ function settle(
 
     for (const entry of here) {
       for (const target of entry.targets) {
-        if (target.index !== entry.me && !reach[entry.me]![target.index]) continue;
+        if (target.frame) continue;
+        const at = memberOn(target, axis);
+        if (at !== entry.me && !reach[entry.me]![at]) continue;
         throw new SourceError(
           `"${entry.node.name}" is ${describePlacement(entry.placement)}, but "${target.name}" ` +
             `is placed ${AXIS_WORD[axis]} against "${entry.node.name}" in turn, so there is no ` +
@@ -1259,9 +1851,9 @@ function settle(
         );
       }
 
-      const span = spanOf(entry.targets, axis, (target) => solved[axis][target.index]!);
-      const own = axis === 'x' ? entry.node.width : entry.node.height;
-      const anchor = entry.targets[0]!.index;
+      const span = spanOf(entry.targets, axis, (target) => solved[axis][memberOn(target, axis)]!);
+      const own = entry.own ?? (axis === 'x' ? entry.node.width : entry.node.height);
+      const anchor = memberOn(entry.targets[0]!, axis);
       constraints[axis].push(
         ...fix(anchor, entry.me, alignedAt(entry.side, span, own) - solved[axis][anchor]!, entry.placement),
       );
@@ -1283,8 +1875,8 @@ function settle(
 function confirm(pending: Pending[], solved: Record<Axis, number[]>): void {
   for (const entry of pending) {
     const { axis } = entry;
-    const span = spanOf(entry.targets, axis, (target) => solved[axis][target.index]!);
-    const own = axis === 'x' ? entry.node.width : entry.node.height;
+    const span = spanOf(entry.targets, axis, (target) => solved[axis][memberOn(target, axis)]!);
+    const own = entry.own ?? (axis === 'x' ? entry.node.width : entry.node.height);
     if (Math.abs(alignedAt(entry.side, span, own) - solved[axis][entry.me]!) <= 0.5) continue;
     throw new SourceError(
       `"${entry.node.name}" cannot be ${describePlacement(entry.placement)}: keeping boxes off ` +
@@ -1394,6 +1986,7 @@ function separate(
   solved: Record<Axis, number[]>,
   solveAll: () => void,
   overlaid: Array<[number, number]> = [],
+  across?: (i: number, j: number) => Axis | undefined,
 ): void {
   const eligible = members.map(allowsOverlap).map((allowed) => !allowed);
   if (eligible.filter(Boolean).length < 2) return;
@@ -1426,7 +2019,12 @@ function separate(
           if (order) orders[axis] = order;
         }
 
-        const axis = pickAxis(orders, over);
+        // A child against a side of its parent's frame has said which way it
+        // stands from the rest of the box — `inside p right` is beside it —
+        // so where that way is open, it is the way, and the smaller overlap
+        // is not asked.
+        const named = across?.(i, j);
+        const axis = named !== undefined && orders[named] ? named : pickAxis(orders, over);
         if (!axis) throw unordered(members[i]!, members[j]!);
 
         const { before, after } = orders[axis]!;
@@ -1539,6 +2137,12 @@ function noRoom(contradiction: Contradiction, axis: Axis, members: LayoutNode[])
  */
 function gapFor(node: LayoutNode, placement: OffsetPlacement, target: LayoutNode): number {
   if (placement.gap !== undefined) return namedGap(node, placement.gap, placement.line);
+  // An `inside` placement is an inset rather than a standoff, and the two want
+  // different defaults: "beside that box" reads as room to breathe, "tucked in
+  // that corner" reads as close to it. A node-wide `gap:`, which says how this
+  // node stands off its *neighbours*, has no business setting an inset either
+  // — so `inside` takes `tight` and stops there unless the placement says.
+  if (placement.written === 'inside') return namedGap(node, 'tight', placement.line);
   const mine = node.attrs['gap'];
   const theirs = target.attrs['gap'];
   // Only a gap somebody actually wrote down counts. Reading an absent one as the
@@ -1551,16 +2155,27 @@ function gapFor(node: LayoutNode, placement: OffsetPlacement, target: LayoutNode
   return Math.max(...stated);
 }
 
+/**
+ * A gap is one of the named steps or a plain number of pixels. The names are
+ * the default because retuning `tight` moves every tight gap together, but a
+ * number is no less relative: it is still a minimum distance from the target,
+ * and nothing unrelated moving can make it wrong.
+ */
 function namedGap(node: LayoutNode, named: string | undefined, line: number): number {
   const gap = GAPS[named ?? 'normal'];
-  if (gap === undefined) {
-    const known = Object.keys(GAPS).join(', ');
-    throw new SourceError(
-      `"${node.name}" asks for gap: ${named}, which is not one of ${known}`,
-      line,
-    );
-  }
-  return gap;
+  if (gap !== undefined) return gap;
+  if (named !== undefined && /^\d+(\.\d+)?$/.test(named)) return Number(named);
+  const known = Object.keys(GAPS).join(', ');
+  const unit = named?.match(/^(\d+(?:\.\d+)?)px$/);
+  const hint = unit
+    ? `; write "gap: ${unit[1]}", a gap's number is already in pixels`
+    : named?.startsWith('-')
+      ? '; a gap is a distance and cannot be negative, and "overlap: allow" is what lets two boxes meet'
+      : '';
+  throw new SourceError(
+    `"${node.name}" asks for gap: ${named}, which is not one of ${known} or a number of pixels${hint}`,
+    line,
+  );
 }
 
 // --- shared helpers ----------------------------------------------------------

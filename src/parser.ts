@@ -7,7 +7,9 @@ import type {
   DiagramStmt,
   Document,
   EdgeStmt,
+  Part,
   Passage,
+  PlacementTarget,
   Stmt,
   StyleStmt,
 } from './ast.js';
@@ -23,9 +25,14 @@ import {
   TEXT_KEYS,
   CONTENTS_KEYS,
   PLACEMENT_KEYS,
+  BOUNDARY_PARTS,
+  INWARD,
+  OPPOSITE,
   isDirection,
+  isPart,
   isPosition,
   listTargets,
+  nameTarget,
 } from './ast.js';
 import { SourceError } from './errors.js';
 import { isAttrKey, tokenizeLine, type Token } from './lexer.js';
@@ -609,6 +616,9 @@ function readPlacement(
   }
 
   if (word.text === 'on') return readOn(tokens, at, line, subject);
+  if (word.text === 'inside' || word.text === 'outside') {
+    return readTucked(tokens, at, line, subject, word.text);
+  }
 
   // `top level with media` names a side rather than the center line. `left`
   // and `right` are sides as well as directions, so it is the word after them
@@ -653,8 +663,9 @@ function readPlacement(
     if (isPosition(word.text)) {
       throw new SourceError(
         `${subject}: "${word.text}" is a position on a box rather than a direction from one — ` +
-          `write \`on <node> at ${word.text}\` to put this on that box, or a direction like ` +
-          `${DIRECTIONS.join(', ')} to put it outside`,
+          `write \`inside <node> ${word.text}\` to put this in that corner, \`on <node> ` +
+          `${word.text}\` to straddle it, or a direction like ${DIRECTIONS.join(', ')} to put ` +
+          'it outside',
         line,
       );
     }
@@ -677,13 +688,13 @@ function readPlacement(
 }
 
 /**
- * `on hub at top-right [(gap: none)]` — the overlay placement.
+ * `on hub top-right` — the node's center at the part's center, straddling it.
  *
  * One target, and the `and` list the other placements take is refused by name.
  * A direction against several targets means "clear of the box that bounds them
- * all", which is a floor and decomposes into one constraint per target; an
- * overlay names an exact point on a box, and the box bounding two things is not
- * a box anybody drew.
+ * all", which is a floor and decomposes into one constraint per target; this
+ * names an exact point of one box, and the box bounding two things is not a
+ * box anybody drew.
  */
 function readOn(
   tokens: Token[],
@@ -692,37 +703,86 @@ function readOn(
   subject: string,
 ): { placement: Placement; next: number } {
   const read = readTargets(tokens, at + 1, subject, 'on', line);
+  const target = read.targets[0]!;
   if (read.targets.length > 1) {
     throw new SourceError(
-      `${subject}: "on ${listTargets(read.targets)}" names ${read.targets.length} nodes, and an ` +
-        'overlay sits on one box — name the one it is stamped on',
+      `${subject}: "on ${listTargets(read.targets)}" names ${read.targets.length} nodes, and a ` +
+        'stamp sits on one box — name the one it is stamped on',
       line,
     );
   }
-  if (!follows(tokens, read.next, 'at')) {
+  // `on X at <position>` shipped in 0.3.0 and never reached a release. Every
+  // picture it drew is still drawable, in words that had to exist anyway, so
+  // it is refused by name rather than left as a second spelling.
+  if (follows(tokens, read.next, 'at')) {
+    const wordToken = tokens[read.next + 1];
+    const word = wordToken && !wordToken.quoted ? wordToken.text : '<position>';
     throw new SourceError(
-      `${subject}: an overlay reads "on ${read.targets[0]} at <position>", where a position is ` +
-        `one of ${POSITIONS.join(', ')}`,
+      `${subject}: "on ${target.name} at ${word}" is no longer how a node is put on a box — ` +
+        `write \`inside ${target.name} ${word}\` to tuck it inside that corner, or ` +
+        `\`on ${target.name} ${word}\` to straddle it`,
       line,
     );
   }
-  const wordToken = tokens[read.next + 1];
-  const word = wordToken && !wordToken.quoted ? wordToken.text : undefined;
-  if (word === undefined || !isPosition(word)) {
+  const modifiers = readModifiers(tokens, read.next, subject, `on ${nameTarget(target)}`, line);
+  if (modifiers.gap !== undefined) {
     throw new SourceError(
-      `${subject}: ` +
-        (word === undefined
-          ? '"at" names no position'
-          : `"at ${word}" is not a position`) +
-        ` — a position is one of ${POSITIONS.join(', ')}`,
+      `${subject}: "on ${nameTarget(target)}" puts this node's center on that point rather than ` +
+        'leaving a space, so it takes no gap',
       line,
     );
   }
-  const modifiers = readModifiers(tokens, read.next + 2, subject, `on ${read.targets[0]} at ${word}`, line);
+  return {
+    placement: { kind: 'on', targets: read.targets, line },
+    next: modifiers.next,
+  };
+}
+
+/**
+ * `inside server right`, `outside board top-left` — a direction read off the
+ * part rather than written.
+ *
+ * Both are shorthands, and their expansion is *derived* rather than listed:
+ * inside is the direction from the named part toward the box's center, outside
+ * is away from it. One rule covers every part — `inside right` is `left of`,
+ * `inside top-right` is `below-left of` — so nobody writes a table and the
+ * long form can be printed back.
+ */
+function readTucked(
+  tokens: Token[],
+  at: number,
+  line: number,
+  subject: string,
+  written: 'inside' | 'outside',
+): { placement: Placement; next: number } {
+  const read = readTargets(tokens, at + 1, subject, written, line);
+  const target = read.targets[0]!;
+  if (read.targets.length > 1) {
+    throw new SourceError(
+      `${subject}: "${written} ${listTargets(read.targets)}" names ${read.targets.length} nodes, ` +
+        `and "${written}" reads its direction off one part of one box`,
+      line,
+    );
+  }
+  const inward = target.part === undefined ? undefined : INWARD[target.part];
+  if (inward === undefined) {
+    const named =
+      target.part === undefined
+        ? `"${written} ${target.name}" names no part of "${target.name}"`
+        : `"${written} ${nameTarget(target)}" reads no direction from "${target.part}", ` +
+          'which is not on the boundary';
+    throw new SourceError(
+      `${subject}: ${named} — "${written}" takes a side or a point of the box: ` +
+        `${BOUNDARY_PARTS.join(', ')}`,
+      line,
+    );
+  }
+  const modifiers = readModifiers(tokens, read.next, subject, `${written} ${nameTarget(target)}`, line);
   return {
     placement: {
-      kind: 'on',
-      position: word,
+      kind: 'offset',
+      direction: written === 'inside' ? inward : OPPOSITE[inward],
+      written,
       targets: read.targets,
       ...(modifiers.gap !== undefined ? { gap: modifiers.gap } : {}),
       line,
@@ -827,6 +887,8 @@ function startsPlacement(token: Token): boolean {
     isDirection(token.text) ||
     token.text === 'level' ||
     token.text === 'on' ||
+    token.text === 'inside' ||
+    token.text === 'outside' ||
     (SIDES as readonly string[]).includes(token.text)
   );
 }
@@ -839,6 +901,10 @@ function isSideWord(word: string): word is Side {
  * One target, or several joined by `and` — `right of borg and bare`, or
  * `level with borg, bare and media`. A trailing comma separates just as `and`
  * does, so both the way people write lists come out the same.
+ *
+ * Each name may be followed by a *part* of that node, spaced: `right of hub
+ * text`, `inside server right`. See `partAfter` for the two words that are
+ * parts everywhere else in the language too, and how they are told apart.
  */
 function readTargets(
   tokens: Token[],
@@ -846,8 +912,8 @@ function readTargets(
   subject: string,
   placement: string,
   line: number,
-): { targets: string[]; next: number } {
-  const targets: string[] = [];
+): { targets: PlacementTarget[]; next: number } {
+  const targets: PlacementTarget[] = [];
   let i = start;
 
   for (;;) {
@@ -856,8 +922,14 @@ function readTargets(
       throw new SourceError(`${subject}: "${placement}" names no node`, line);
     }
     const listed = token.text.endsWith(',') && token.text.length > 1;
-    targets.push(listed ? token.text.slice(0, -1) : token.text);
+    const name = listed ? token.text.slice(0, -1) : token.text;
     i += 1;
+
+    // A part can only follow a name the author did not already close with a
+    // comma — `a, b` is two targets and the comma says so.
+    const part = listed ? undefined : partAfter(tokens, i);
+    if (part) i += 1;
+    targets.push(part === undefined ? { name } : { name, part });
 
     if (follows(tokens, i, 'and')) {
       i += 1;
@@ -866,4 +938,24 @@ function readTargets(
     if (listed) continue;
     return { targets, next: i };
   }
+}
+
+/**
+ * The part word after a target's name, if there is one.
+ *
+ * Two of the part words are also the openings of something else, and both are
+ * settled by the word that follows rather than by a reservation:
+ *
+ * - `right of hub right of mirror` — a side followed by `of` is the *direction*
+ *   opening the next placement, which is how `left` and `right` have always
+ *   been told apart.
+ * - `right of hub top level with mirror` — a side followed by `level` is the
+ *   alignment opening the next placement, the same lookahead `readPlacement`
+ *   makes for `top level with`.
+ */
+function partAfter(tokens: Token[], at: number): Part | undefined {
+  const token = tokens[at];
+  if (!token || token.quoted || !isPart(token.text)) return undefined;
+  if (follows(tokens, at + 1, 'of') || follows(tokens, at + 1, 'level')) return undefined;
+  return token.text;
 }
