@@ -361,7 +361,7 @@ You never have to say that two nodes must not sit on top of each other. Every pa
 
 If you want that pinned down rather than defaulted, group the nodes: put `x` and the wide node in an invisible container. The container becomes the thing that must not overlap `A` and `B`, and it moves as one.
 
-Separation leaves a tight gap, deliberately small — enough to read as two nodes rather than one, never enough to look like a distance somebody asked for. Say `gap:` if you want breathing room there.
+Separation leaves a tight gap, deliberately small — enough to read as two nodes rather than one, never enough to look like a distance somebody asked for. Say `gap:` if you want breathing room there. Between two things inside one box it leaves the step the box's contents are stacked by instead, since that is the spacing everything else in there has.
 
 ## Edges
 
@@ -510,7 +510,7 @@ node bob_link "bob.example.com"  inside bob bottom-center
 
 **`on` is the one that is not a shorthand.** It is a center alignment on both axes at once, which the language did not otherwise have — `level with` gives the vertical and the edge alignments give whichever axis their edge belongs to, and there is no horizontal center alignment at all. It takes no gap: a center sits on a point rather than a distance from it.
 
-The inset for `inside` is a gap on the placement, and `tight` if nothing says. `(gap: none)` puts the node hard against the edge. It is deliberately *not* the node's own `gap:`, which says how the node stands off its neighbours — a node marked `gap: wide` so its siblings keep clear should not thereby wear its mark 110 pixels in from the corner.
+The inset for `inside` is a gap on the placement. If nothing says, it is `tight` against another node's box and the box's own padding against the node's own parent — see [Against its own parent](#against-its-own-parent). `(gap: none)` puts the node hard against the edge. It is deliberately *not* the node's own `gap:`, which says how the node stands off its neighbours — a node marked `gap: wide` so its siblings keep clear should not thereby wear its mark 110 pixels in from the corner.
 
 **Saying `inside` or `on` is saying the overlap,** so there is nothing for the overlap error to report about that pair. Everything else in the drawing still keeps clear in the ordinary way.
 
@@ -524,20 +524,36 @@ A child may name a part of the node it is inside. **The dotted name is what deci
 node server "Server"
 node server.web "web"
 node server.db "database"
-node server.mark "!"  level with server.db  inside server right
+node server.mark "!"  inside server right level with server.db
 node stamp "!"  on server top-right
 ```
 
-`server` widens so `server.mark` sits a tight gap inside its right edge, on the database's row. `stamp` is not part of `server`, so nothing moves for it: it lies over the corner, half in and half out.
+`server` widens so `server.mark` sits against its right edge, held in by the padding, on the database's row. A side word straight after `inside`, `outside` or `on <node>` is always the part, so `right level with` here is not read as the right-edge alignment. `stamp` is not part of `server`, so nothing moves for it: it lies over the corner, half in and half out.
 
 The title band is not something a node has; it is what happens when things stack below the text. Children that say nothing about where they go stack below the text in written order, as they always have, and that is what makes the band. A node whose children all sit beside its text or against its frame has nothing below its text, so it has no band and draws as a leaf — its text centered, and whatever is placed against the text centered with it as one group:
 
 ```
 node hub "Cloud sync"
-node hub.star "★"  right of hub text (gap: 10)
+node hub.star "★"  right of hub text
 ```
 
+**A child against its own parent is spaced as that parent spaces what it holds.** `inside` insets it by the padding, a placement against the parent's text stands off by the step the contents are stacked by, and the parent's own `gap:` — which says how the parent stands off its neighbours — does not reach it. A gap written on the placement still wins.
+
+To give a node a band on purpose, place things below its text. The band is the same one the contents would have made — title at the top, what was placed beneath it one step below:
+
+```
+node q "Deployment"
+node q.a "north-west"  below q text  inside q left
+node q.b "north-east"  below q text  inside q right
+node q.c "south-west"  inside q bottom-left
+node q.d "south-east"  inside q bottom-right
+```
+
+A text given an `at:` in a node with no band ranges in the room its own row and column leave it — between whatever sits beside, above or below it — not across the whole box, so a `top-right` title stops short of a child in the top-right corner rather than pushing it out.
+
 A child placed against one of its parent's sides stands beside the rest of the box, not above or below it: if it would cover the title or the contents, the box grows across for a left or right side and down for a top or bottom one. `overlap: allow` on the child is the other answer — "I am inside my parent, do not grow for me" — and it lies over whatever is there.
+
+**A child placed `outside` its parent is still part of it.** The parent does not grow for it, but everything that keeps clear of the parent keeps clear of the child too: `right of router` lands beyond the note hanging off Router's right side, not on top of it, and a container holding Router widens to hold the note. An alignment still reads the parent's own box, so `below router` centers under Router and not under Router and its note together.
 
 ### Several nodes saying the same thing
 
