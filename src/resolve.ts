@@ -213,7 +213,7 @@ function buildTree(statements: Stmt[], styles: Map<string, Attrs>) {
     byName.set(stmt.name, node);
 
     // `badge: X` is a shorthand, and this is its expansion:
-    //   node <self>.badge  icon: X  right of <self> text (gap: 10)
+    //   node <self>.badge  icon: X  right of <self> text
     // set at the parent's text size, so the picture is two of the parent's
     // lines tall. Read from the merged appearance, so a style carrying a badge
     // gives one to every box wearing it. Only a box has a text to be beside;
@@ -262,7 +262,6 @@ function badgeChild(parent: LayoutNode, named: string): LayoutNode {
         kind: 'offset',
         direction: 'right',
         targets: [{ name: parent.name, part: 'text' }],
-        gap: String(ICON_GAP),
         line: parent.line,
       },
     ],

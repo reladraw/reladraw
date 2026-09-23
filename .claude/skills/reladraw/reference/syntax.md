@@ -137,7 +137,7 @@ Bundling a text's properties into a style is how they come to mean something: `s
 
 `align: left | center | right` is a different question and stays one: it says how the block's own *lines* range against each other, which matters whenever they are of unequal length and is not the same as where the block is. Its default is `left` in a container and `center` in a leaf.
 
-Where the node is exactly the size of what it holds — which is most leaves, since a leaf is sized from its own text — there is no slack and `at` changes nothing. It bites where there is some: a badge is two lines tall, so a one-line text beside one has room to sit at either end of.
+Where the node is exactly the size of what it holds — which is most leaves, since a leaf is sized from its own text — there is no slack and `at` changes nothing. It bites where there is some: an icon placed `inside <node> right` is two lines tall, so a one-line text beside it has room to sit at either end of. A badge does not give it that room, because a badge is placed against the text and goes wherever the text goes.
 
 #### Markup in a text
 
@@ -201,7 +201,7 @@ The icon set is small on purpose, and it is not the trade a drawing tool makes. 
 
 `cubes` draws three whatever the number, because it is the symbol for "several" and not a count. Where the number matters — where one of them is the end of an arrow — they are separate nodes, each with `icon: cube`.
 
-A node drawn as a picture is an ordinary node in every other way. It takes placements, it takes edges and sides, other nodes keep clear of it. That is what it buys over a badge: a badge cannot be the end of an arrow. It cannot contain anything, though, and a picture with children is an error, as is a `shape: none` node with children — neither has a box for anything to go inside.
+A node drawn as a picture is an ordinary node in every other way. It takes placements, it takes edges and sides, other nodes keep clear of it. A [badge](#badges) is one of these, written for you beside a node's text. It cannot contain anything, though, and a picture with children is an error, as is a `shape: none` node with children — neither has a box for anything to go inside.
 
 **A picture with no text of its own shows none.** Everywhere else a node with no text is labelled with its name, because `node a` and `node b right of a` mean the two boxes to read "a" and "b". A picture usually *is* the statement, so the default flips: `node svc icon: cube` draws the cube and no caption, and a row of five of them does not come out reading a, b, c, d, e. Write the text if you want one.
 
@@ -215,9 +215,26 @@ Icons are drawn from path data inside the tool, never from a font or a linked fi
 node drive "External HD"  badge: disk
 ```
 
-**A badge decorates a node; `icon:` replaces its body.** The test is whether the node still sizes itself from its text: a badged node does, a picture does not. The same artwork serves both.
+**`badge:` is a shorthand, and this is what it stands for:**
 
-The badge is two lines of the text tall, so it follows `(size: …)` down and up with the text, and it follows the text to whichever end of the node `at` puts it — the top of a container beside the title, the middle of a leaf beside its words. There is nothing to write about where it goes or how big it is. It takes a column of its own, so the node grows to hold the text and the badge side by side and one never runs under the other.
+```
+node drive "External HD"
+node drive.badge  icon: disk  right of drive text
+```
+
+A child drawn as a picture, placed beside its parent's text. Everything a badge does follows from that line and from the rules for [a child against its own parent](#against-its-own-parent) — there is no rule of its own:
+
+- The node grows to hold the text and the badge side by side, because a node grows to hold its children.
+- On a leaf the text and the badge center in the box as one group. On a container the badge sits beside the title in the band, and the band is as tall as the two together.
+- The picture is two lines of the node's text tall, so it follows `(size: …)` down and up with the text.
+- With no text at all — `node flag "" badge: disk` — the badge sits where the text would have been, with no gap beside it, so the node is exactly the badge and its padding. That makes a badge usable as a marker and not only as a title-block ornament.
+- A text sent to one end with `at:` does not take the badge with it. A leaf is as tall as the badge, the badge is centered on the text, and so the text sits in the middle. To give a text room to move, put the picture against a side instead — see `at:` under [The text and its brackets](#the-text-and-its-brackets).
+
+The child is called `<node>.badge` and can be named like any other: `below drive.badge`, or an edge to it. Declaring your own `drive.badge` beside a `badge:` is an error naming both ways out. Something else placed `right of drive text` is placed exactly as the badge is, so the two form [one list](#several-nodes-saying-the-same-thing), badge first.
+
+A badge in the far corner of a container is not what the shorthand says. Write the child yourself, `node drive.mark icon: disk inside drive top-right`.
+
+**A badge decorates a node; `icon:` replaces its body.** The test is whether the node still sizes itself from its text: a badged node does, a picture does not. The same artwork serves both. Only a box can wear a badge. On a picture or a `shape: none` node the word is an error, since neither has a box to grow around it.
 
 `badge` is appearance, so a style can carry one and every store in a diagram then looks alike without the word being written more than once:
 
@@ -225,8 +242,6 @@ The badge is two lines of the text tall, so it follows `(size: …)` down and up
 style store  fill: #142814  border: #486544  badge: database
 node records "Records"  style: store
 ```
-
-A node with no text at all is exactly the badge and its padding, which makes a badge usable as a marker and not only as a title-block ornament.
 
 ## Placement
 
@@ -389,7 +404,7 @@ edge parser -> resolver  "statements"  from: right  to: left
 
 Nothing there says how far apart those two nodes are. The default gap is sized for two nodes to breathe rather than to hold a word, so without this the text would be drawn across both of them. Delete the text and the gap closes back to the default. Write `gap: wide` on that placement and nothing further happens, because the minimum you asked for is already the larger of the two — a gap is a minimum, and a text is one more thing bidding into it.
 
-Which gap the text lands in is derived, never stated. Two nodes clear of each other on exactly one axis have exactly one corridor between them, and that is the one that widens. Two sitting corner to corner have no single corridor, because the line runs diagonally through open space, so nothing is widened for them. The room is measured along the run: an edge traveling horizontally needs the text's width, one traveling vertically needs only its depth, so a long text across a vertical gap opens it by a single line and hangs out either side.
+Which gap the text lands in is derived, never stated. Two nodes clear of each other on exactly one axis have exactly one corridor between them, and that is the one that widens. It is judged where the nodes finally sit — after anything centered has been centered and anything overlapping pulled apart — and if widening a gap moves something that was centered on what moved, it is centered again. The same holds between the children of a node, however they are placed. Two sitting corner to corner have no single corridor, because the line runs diagonally through open space, so nothing is widened for them. The room is measured along the run: an edge traveling horizontally needs the text's width, one traveling vertically needs only its depth, so a long text across a vertical gap opens it by a single line and hangs out either side.
 
 An edge with no text asks for nothing, since every gap is wide enough for an arrowhead. An edge carrying a `between` clause asks for nothing here either — its text rides in the channel it named rather than in the gap between its own two ends, and what that does *not* do yet is at the end of the next section but one.
 
@@ -602,7 +617,7 @@ Every attribute, and what takes one. The kinds here are what a node's **body** i
 | `gap` | ✓ | ✓ | ✓ | | the default distance to whatever it is placed against |
 | `overlap` | ✓ | ✓ | ✓ | | `allow`, to opt out of non-overlap |
 | `contents` | ✓ | | | | how the children are sized and where the block of them sits, in brackets |
-| `badge` | ✓ | ✓ | ✓ | | the picture that takes the column beside the text |
+| `badge` | ✓ | | | | the picture beside the text |
 | `shape` | ✓ | | ✓ | | the outline the node is drawn with, `none` included |
 | `icon` | | ✓ | | | the picture the node is drawn as |
 | `from` `to` | | | | ✓ | which side the line leaves and arrives on |
@@ -800,7 +815,7 @@ Pre-1.0, so the minor number is where a breaking change goes. Every removal belo
 - `box` is `node` and `link` is `edge`. The string on either is its *text*; "label" is not a word the language has.
 - A node's **body** is `shape: rectangle | document | none` or `icon: <name>`, and writing both is an error naming both. `note` is gone — a note is `node … shape: none`. `shape: instance` is gone — the icon is `cube`, and a node drawn as one is `icon: cube`.
 - A node drawn as a picture and given no text of its own shows none. A node with a body still falls back to its name.
-- The decoration icon is `badge:`, which freed `icon:` for the body.
+- The decoration icon is `badge:`, which freed `icon:` for the body. It is a shorthand for a child placed beside the text, so a container's badge now sits beside its title rather than in the far corner. It is refused on a picture and on a `shape: none` node, where it used to draw nothing.
 - A placement may target a *part* of a node — its text, a side or one of nine named points — with `inside`, `outside` and `on` reading a direction off it.
 - Everything a text says about itself is in the brackets after it — `color`, `size`, `wrap`, `align`, `at`. The top-level `size:`, `wrap:`, `align:` and the text color `text:` are gone; a style says them as `text: (…)`. `at:` grew from two positions to the nine.
 - `subtext:` is gone, replaced by inline markup `[style]word[/style]`, which names a style and reaches a word anywhere in a text. `\[` escapes a literal bracket.

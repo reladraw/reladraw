@@ -44,6 +44,7 @@ const OFFERED = [
   'shapes',
   'icons',
   'overlays',
+  'frames',
   'text',
   'lanes',
   'coincident',
