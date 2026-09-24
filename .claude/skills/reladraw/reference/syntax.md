@@ -129,7 +129,7 @@ Bundling a text's properties into a style is how they come to mean something: `s
 
 `color` takes a color written as the viewer will receive it — `#8b8b8b`, or any CSS color — or the one reserved word `muted`, which means the theme's secondary text color and so survives a change of theme.
 
-`size: small | normal | large` sets how big the text is set. The sizes are named for the reason gaps are named: a number would be typography by coordinate, stale the moment the document is set at another size, and silent about *why* one piece of text is smaller than another. Every kind of text has a default and `size` overrides it, exactly as `fill:` overrides the theme's color; only `shape: none` defaults to anything but `normal`, and it defaults to `small`.
+`size: small | normal | large` sets how big the text is set, and so does a plain number of pixels, `size: 22`. The names are the default and the preferred form: they follow the document's size if it is ever set differently, where `22` stays 22. A number says nothing about *why* one text is bigger than another, so bundle it into a style that does. `14px` is refused, since the number is already in pixels, and so is zero or less. Every kind of text has a default and `size` overrides it, exactly as `fill:` overrides the theme's color; only `shape: none` defaults to anything but `normal`, and it defaults to `small`.
 
 `wrap: <n>` folds the text at word boundaries every `n` characters, on top of whatever ` / ` already breaks. It is how you make a block of text narrow and tall so it can sit snugly beside something, rather than wide and short so it cannot. The number is a count of characters and not a distance: it says how much fits on a line and nothing about where anything sits.
 
@@ -813,6 +813,7 @@ Pre-1.0, so the minor number is where a breaking change goes. Every removal belo
 **Unreleased**
 
 - A node with any children takes the theme's container colors, however the children are placed. A node with a `badge:` or a single child in a corner now draws as a container too; in 0.3.0 only a node with a title band did. Its text still sits where it did. Say `fill:` and `border:` to keep one looking like a leaf.
+- A text's `size` takes a plain number of pixels beside `small`, `normal` and `large`: `(size: 22)`.
 
 **0.3.0** — the vocabulary, reworked in one breaking version so there is one migration rather than five.
 

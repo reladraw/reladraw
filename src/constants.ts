@@ -136,10 +136,10 @@ export const ICON_GAP = 10;
 export const DEFAULT_FONT_SIZE = 14;
 
 /**
- * The named text sizes, each a multiple of the document's own size. Named
- * rather than numeric for the reason gaps are: a number here is typography by
- * coordinate. It goes stale the moment the document is set at another size, and
- * it says nothing about why one piece of text is smaller than another.
+ * The named text sizes, each a multiple of the document's own size. A plain
+ * number of pixels is accepted too, as it is for a gap: nothing else in the
+ * diagram moving can make it wrong. The names stay the default because they
+ * follow the document's size when that is retuned, and a number does not.
  *
  * `small` is sampled rather than chosen. In
  * `examples/reference/arch.png` the box and container texts run 25
@@ -176,10 +176,18 @@ export function fontSizeFor(
 ): number {
   const named = textAttrs['size'] ?? DEFAULT_TEXT_SIZE[kind] ?? 'normal';
   const scale = TEXT_SIZES[named];
-  if (scale === undefined) {
-    throw new SourceError(`size takes ${Object.keys(TEXT_SIZES).join(', ')}, not "${named}"`, line);
-  }
-  return Math.round(fontSize * scale);
+  if (scale !== undefined) return Math.round(fontSize * scale);
+  if (/^\d+(\.\d+)?$/.test(named) && Number(named) > 0) return Number(named);
+  const unit = named.match(/^(\d+(?:\.\d+)?)px$/);
+  const hint = unit
+    ? `; write "size: ${unit[1]}", a size's number is already in pixels`
+    : named.startsWith('-') || /^0+(\.0+)?$/.test(named)
+      ? '; a text size has to be more than zero'
+      : '';
+  throw new SourceError(
+    `size takes ${Object.keys(TEXT_SIZES).join(', ')} or a number of pixels, not "${named}"${hint}`,
+    line,
+  );
 }
 
 export const DEFAULT_MARGIN = 40;

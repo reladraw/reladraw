@@ -64,5 +64,6 @@ node aside "A quiet remark that folds itself, with [dim]one word[/dim] quieter t
 // A literal bracket is written \[, since [ opens markup.
 node literal "sizes \[small, normal, large]"  below aside  gap: tight  shape: none
 
-// An edge's text takes the same brackets, less `at`.
-edge tall -> aside  "carried" (color: muted)  from: right  to: left
+// An edge's text takes the same brackets, less `at`. A size may be a number of
+// pixels as well as a name.
+edge tall -> aside  "carried" (color: muted, size: 12)  from: right  to: left
