@@ -65,9 +65,10 @@ export interface LayoutNode {
   /**
    * Whether things stack beside this node's text — below it, or above it when
    * the text is at the bottom. That is what a title band *is*, so it is what
-   * decides a container's look and its text's defaults, rather than whether
-   * the node has children: a node whose only child sits beside its text or in
-   * a corner has nothing stacked below the text, and draws as a leaf.
+   * decides its text's defaults, rather than whether the node has children: a
+   * node whose only child sits beside its text or in a corner has nothing
+   * stacked below the text, and its text sits as a leaf's does. Its *colors*
+   * follow having children, not this.
    */
   banded: boolean;
 

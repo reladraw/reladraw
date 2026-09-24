@@ -6,7 +6,7 @@
 
 diagram  background: #111111
 
-style mark  fill: #fde68a  border: #b89c3c  text: (color: #111111)
+style mark  fill: #cdb96f  border: #8f7a3a  text: (color: #111111)
 
 // Four children in the four corners, and nothing below the text, so there is
 // no band: the text sits in the middle, as a leaf's does.

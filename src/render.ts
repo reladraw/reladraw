@@ -245,10 +245,10 @@ function nodeSvg(
   const parts: string[] = [];
   const kids: string[] = [];
   const face = faceOf(node);
-  // A container *looks* like one because things stack beside its text, not
-  // because it has children: a node whose only child sits beside its text is
-  // drawn as the leaf it reads as.
-  const container = node.banded;
+  // A node with children is colored as a backdrop however they are placed,
+  // including a lone badge beside its text. Every rule that tried to tell a
+  // badge from contents was a guess; this one is visible in the source.
+  const container = node.children.length > 0;
   const border = borderOf(node.appearance, container ? theme.containerStroke : theme.boxStroke);
   const fill = fillOf(node.appearance, container ? theme.containerFill : theme.boxFill);
   // A box is the one kind with two inkable parts, which is why its text needs
@@ -287,12 +287,13 @@ function nodeSvg(
   // A leaf's text defaults to the middle of its box, a container's to the top
   // left of the band; both then read `at` for where it really goes. Where the
   // text sits is the resolver's answer, in `textBox`; only the alignment of
-  // its lines against each other is read here.
+  // its lines against each other is read here. This follows the band, not the
+  // colors: a badged leaf is a backdrop but its text still centers.
   const textStyle = textStyleFor(
     node.textAttrs,
     node.line,
-    container ? 'start' : 'middle',
-    container ? 'top-left' : 'center',
+    node.banded ? 'start' : 'middle',
+    node.banded ? 'top-left' : 'center',
   );
   parts.push(
     sized(

@@ -810,6 +810,10 @@ That one was found by testing the lexer, not by rendering — and it could not h
 
 Pre-1.0, so the minor number is where a breaking change goes. Every removal below is refused by name with the replacement quoted, rather than dropped in silence — an older file stops with an error saying what to write instead.
 
+**Unreleased**
+
+- A node with any children takes the theme's container colors, however the children are placed. A node with a `badge:` or a single child in a corner now draws as a container too; in 0.3.0 only a node with a title band did. Its text still sits where it did. Say `fill:` and `border:` to keep one looking like a leaf.
+
 **0.3.0** — the vocabulary, reworked in one breaking version so there is one migration rather than five.
 
 - `box` is `node` and `link` is `edge`. The string on either is its *text*; "label" is not a word the language has.
