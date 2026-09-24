@@ -395,15 +395,6 @@ export interface EdgeStmt {
   line: number;
 }
 
-export interface DeckStmt {
-  kind: 'deck';
-  /** The container to draw with offset copies behind it. */
-  name: string;
-  /** One text per copy, back to front as written. */
-  texts: string[];
-  line: number;
-}
-
 /**
  * `diagram background: #111111` — settings that belong to the drawing as a
  * whole rather than to anything in it. It has no name because there is only
@@ -495,7 +486,7 @@ export type Kind = 'shape' | 'icon' | 'none' | 'edge';
  *   an edge is not placed — it joins two things that are.
  */
 export const ATTR_KEYS: Record<Kind, readonly string[]> = {
-  shape: ['style', 'gap', 'overlap', 'contents', 'badge', 'shape', 'fill', 'border', 'text', 'url'],
+  shape: ['style', 'gap', 'overlap', 'contents', 'badge', 'deck', 'shape', 'fill', 'border', 'text', 'url'],
   icon: ['style', 'gap', 'overlap', 'icon', 'text', 'url'],
   none: ['style', 'gap', 'overlap', 'shape', 'text', 'url'],
   edge: ['style', 'from', 'to', 'line', 'text', 'url'],
@@ -522,7 +513,7 @@ export interface StyleStmt {
   line: number;
 }
 
-export type Stmt = NodeStmt | EdgeStmt | DeckStmt | StyleStmt | DiagramStmt;
+export type Stmt = NodeStmt | EdgeStmt | StyleStmt | DiagramStmt;
 
 export interface Document {
   statements: Stmt[];

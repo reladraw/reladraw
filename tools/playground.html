@@ -432,7 +432,6 @@
               <code>node <i>name</i> <i>["text"]</i> <i>[placements]</i> <i>[key: value …]</i></code><br />
               <code>edge <i>a</i> -&gt; <i>b</i> <i>["text"]</i> <i>[key: value …]</i></code>
               &nbsp;<i>(<code>&lt;-</code> to write the target first, <code>&lt;-&gt;</code> for both ends)</i><br />
-              <code>deck <i>name</i> "text" <i>["text" …]</i></code><br />
               <code>style <i>name</i> <i>key: value …</i></code><br />
               <code>diagram background: #111111</code>
             </dd>
@@ -496,6 +495,7 @@
               <code>none</code> is text with no box, which is what an annotation is.<br />
               <code>icon: <i>name</i></code> — the node <i>is</i> that picture, with no box.<br />
               <code>badge: <i>name</i></code> — the picture sits <i>beside</i> the text and the node keeps its box.<br />
+              <code>deck: "text" <i>["text" …]</i></code> — offset copies behind the box, one per text.<br />
               Pictures: <code>disk</code> <code>desktop</code> <code>laptop</code>
               <code>package</code> <code>cubes</code> <code>cube</code> <code>database</code>.
             </dd>

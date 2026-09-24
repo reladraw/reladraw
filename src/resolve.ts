@@ -75,7 +75,6 @@ export function resolve(doc: Document, options: ResolveOptions = {}): Layout {
   const styles = collectStyles(doc.statements);
   checkStyleKeys(doc.statements);
   const { nodes, byName, roots } = buildTree(doc.statements, styles);
-  applyDecks(doc.statements, byName);
 
   // Edges are resolved to nodes before anything is sized, because a labeled
   // edge claims room in the gap it crosses and so has to be in hand while the
@@ -192,6 +191,11 @@ function buildTree(statements: Stmt[], styles: Map<string, Attrs>) {
 
     checkAttrs(kind, node.name, stmt.attrs, stmt.line);
     checkStyleUse(kind, node.name, stmt.attrs, styles, stmt.line);
+
+    // `deck:` holds one text per copy, joined on a line break the source cannot
+    // contain. Like a badge, only a box has an outline to repeat.
+    const deck = appearance['deck'];
+    if (deck !== undefined && body.kind === 'shape') node.deckTexts = deck.split('\n');
 
     const cut = stmt.name.lastIndexOf('.');
     if (cut === -1) {
@@ -329,8 +333,10 @@ function checkAttrs(kind: Kind, name: string, attrs: Attrs, line: number): void 
 
     // Quoted back the way it was written. A bracketed value arrives one dotted
     // key at a time, and `contents: match` is not a line anybody could look for.
+    // A deck's texts are stored joined on a line break; quote them back as written.
+    const shown = key === 'deck' ? value.split('\n').map((text) => `"${text}"`).join(' ') : value;
     const wrote =
-      written === key ? `${key}: ${value}` : `${key}: (${written.slice(key.length + 1)}: ${value})`;
+      written === key ? `${key}: ${shown}` : `${key}: (${written.slice(key.length + 1)}: ${shown})`;
 
     if (!ALL_ATTR_KEYS.includes(key)) {
       // Nothing anywhere in the language answers to this word, so the only
@@ -453,15 +459,6 @@ function appearanceOf(attrs: Attrs, styles: Map<string, Attrs>, line: number): A
   const base = styles.get(named);
   if (!base) throw new SourceError(`no style named "${named}"`, line);
   return { ...base, ...attrs };
-}
-
-function applyDecks(statements: Stmt[], byName: Map<string, LayoutNode>): void {
-  for (const stmt of statements) {
-    if (stmt.kind !== 'deck') continue;
-    const node = byName.get(stmt.name);
-    if (!node) throw new SourceError(`deck names "${stmt.name}", which does not exist`, stmt.line);
-    node.deckTexts = stmt.texts;
-  }
 }
 
 function buildEdges(

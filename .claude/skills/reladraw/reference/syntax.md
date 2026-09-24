@@ -602,10 +602,12 @@ Nothing bounds bare text the way a border bounds a node, so a sentence-length on
 ## Decks
 
 ```
-deck <name> "<text>" ["<text>" ...]
+node drive "Drive 1"  deck: "Drive 2" "Drive 3"
 ```
 
-Draws the named container with offset copies behind it, one per text, to say "there are several of these and they are the same." Only the front copy shows its contents.
+`deck:` draws offset copies behind a box, one per text, back to front, to say "there are several of these and they are the same." Only the front copy shows its contents. It goes on a box only; a picture or a `shape: none` node has no outline to repeat, and refuses it. A style may carry it.
+
+**Changed after 0.3.0.** This was a statement of its own, `deck drive "Drive 2" "Drive 3"`, which created nothing and only said more about a node declared elsewhere. The statement is now an error that quotes the attribute to write instead.
 
 ## Attributes
 
@@ -618,6 +620,7 @@ Every attribute, and what takes one. The kinds here are what a node's **body** i
 | `overlap` | ✓ | ✓ | ✓ | | `allow`, to opt out of non-overlap |
 | `contents` | ✓ | | | | how the children are sized and where the block of them sits, in brackets |
 | `badge` | ✓ | | | | the picture beside the text |
+| `deck` | ✓ | | | | offset copies behind the box, one quoted text each |
 | `shape` | ✓ | | ✓ | | the outline the node is drawn with, `none` included |
 | `icon` | | ✓ | | | the picture the node is drawn as |
 | `from` `to` | | | | ✓ | which side the line leaves and arrives on |
@@ -814,6 +817,7 @@ Pre-1.0, so the minor number is where a breaking change goes. Every removal belo
 
 - A node with any children takes the theme's container colors, however the children are placed. A node with a `badge:` or a single child in a corner now draws as a container too; in 0.3.0 only a node with a title band did. Its text still sits where it did. Say `fill:` and `border:` to keep one looking like a leaf.
 - A text's `size` takes a plain number of pixels beside `small`, `normal` and `large`: `(size: 22)`.
+- **Breaking:** `deck` is an attribute of the node, not a statement. `deck drive "Drive 2" "Drive 3"` is written `deck: "Drive 2" "Drive 3"` on `node drive`, and the old statement is an error that quotes that line back. It is refused on a picture and on a `shape: none` node, where the statement used to draw nothing.
 
 **0.3.0** — the vocabulary, reworked in one breaking version so there is one migration rather than five.
 

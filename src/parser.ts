@@ -3,7 +3,6 @@ import type {
   NodeStmt,
   Side,
   Placement,
-  DeckStmt,
   DiagramStmt,
   Document,
   EdgeStmt,
@@ -62,8 +61,6 @@ function parseStatement(tokens: Token[], line: number): Stmt {
       return parseNode(tokens, line);
     case 'edge':
       return parseEdge(tokens, line);
-    case 'deck':
-      return parseDeck(tokens, line);
     case 'style':
       return parseStyle(tokens, line);
     case 'diagram':
@@ -106,6 +103,14 @@ function substitution(word: string, head: Token[]): string {
   if (word === 'note') {
     return `reladraw has no \`note\` statement — a note is a node with no body, so try ` +
       `\`node ${rewrite(head)} shape: none\``;
+  }
+  // A statement until 0.4.0. It created nothing, only said more about a node
+  // declared elsewhere, which is what an attribute on that node is for.
+  if (word === 'deck') {
+    const name = head[1] && !head[1].quoted ? head[1].text : '<name>';
+    const texts = head.slice(2).map((token) => (token.quoted ? quoteOf(token.text) : token.text));
+    return `reladraw has no \`deck\` statement — a deck is an attribute of the node, so write ` +
+      `\`deck: ${texts.length > 0 ? texts.join(' ') : '"…"'}\` on \`node ${name}\``;
   }
   const replacement = SUBSTITUTIONS[word];
   if (replacement === undefined) return `unknown statement "${word}"`;
@@ -240,6 +245,23 @@ function readAttr(
     }
     attrs[key] = value.text;
     return at + 2;
+  }
+  if (key === 'deck') {
+    // One quoted text per copy behind the node, back to front, as many as are
+    // written. Stored joined on a line break, which no source line can hold.
+    const texts: string[] = [];
+    let next = at + 1;
+    while (tokens[next]?.quoted) texts.push(tokens[next++]!.text);
+    if (texts.length === 0) {
+      const given = tokens[next];
+      throw new SourceError(
+        `${subject}: \`deck:\` takes one quoted text per copy behind the node, as in \`deck: "Drive 2" "Drive 3"\`` +
+          (given && !isAttrKey(given) ? `, not \`deck: ${given.text}\`` : ''),
+        line,
+      );
+    }
+    attrs[key] = texts.join('\n');
+    return next;
   }
   if (bracketKeys !== undefined && key !== 'text') {
     // `contents: match` names the part and then says one of its two properties
@@ -519,31 +541,6 @@ function parseEdge(head: Token[], line: number): EdgeStmt {
     attrs: tail.attrs,
     line,
   };
-}
-
-/** `deck <name> "<text>" ["<text>" ...]` */
-function parseDeck(head: Token[], line: number): DeckStmt {
-  const name = requireName(head[1], 'deck', line);
-  const texts: string[] = [];
-  for (const token of head.slice(2)) {
-    if (!token.quoted) {
-      // Until 0.3.0 the head/attributes split cut these off and threw them
-      // away, so `deck d "one" fill: red` drew an uncolored deck in silence.
-      if (isAttrKey(token)) {
-        throw new SourceError(
-          `deck "${name}" has ${token.text} — a deck says how many copies a node has and what ` +
-            `each one reads, so write attributes on \`node ${name}\` itself`,
-          line,
-        );
-      }
-      throw new SourceError(`deck "${name}" takes quoted texts only`, line);
-    }
-    texts.push(token.text);
-  }
-  if (texts.length === 0) {
-    throw new SourceError(`deck "${name}" needs at least one text`, line);
-  }
-  return { kind: 'deck', name, texts, line };
 }
 
 /** `style <name> <attributes>` */

@@ -432,7 +432,6 @@
               <code>node <i>name</i> <i>["text"]</i> <i>[placements]</i> <i>[key: value …]</i></code><br />
               <code>edge <i>a</i> -&gt; <i>b</i> <i>["text"]</i> <i>[key: value …]</i></code>
               &nbsp;<i>(<code>&lt;-</code> to write the target first, <code>&lt;-&gt;</code> for both ends)</i><br />
-              <code>deck <i>name</i> "text" <i>["text" …]</i></code><br />
               <code>style <i>name</i> <i>key: value …</i></code><br />
               <code>diagram background: #111111</code>
             </dd>
@@ -496,6 +495,7 @@
               <code>none</code> is text with no box, which is what an annotation is.<br />
               <code>icon: <i>name</i></code> — the node <i>is</i> that picture, with no box.<br />
               <code>badge: <i>name</i></code> — the picture sits <i>beside</i> the text and the node keeps its box.<br />
+              <code>deck: "text" <i>["text" …]</i></code> — offset copies behind the box, one per text.<br />
               Pictures: <code>disk</code> <code>desktop</code> <code>laptop</code>
               <code>package</code> <code>cubes</code> <code>cube</code> <code>database</code>.
             </dd>
@@ -840,7 +840,7 @@ const COLOR_PARTS = {
  *   an edge is not placed — it joins two things that are.
  */
 const ATTR_KEYS = {
-    shape: ['style', 'gap', 'overlap', 'contents', 'badge', 'shape', 'fill', 'border', 'text', 'url'],
+    shape: ['style', 'gap', 'overlap', 'contents', 'badge', 'deck', 'shape', 'fill', 'border', 'text', 'url'],
     icon: ['style', 'gap', 'overlap', 'icon', 'text', 'url'],
     none: ['style', 'gap', 'overlap', 'shape', 'text', 'url'],
     edge: ['style', 'from', 'to', 'line', 'text', 'url'],
@@ -991,8 +991,6 @@ function parseStatement(tokens, line) {
             return parseNode(tokens, line);
         case 'edge':
             return parseEdge(tokens, line);
-        case 'deck':
-            return parseDeck(tokens, line);
         case 'style':
             return parseStyle(tokens, line);
         case 'diagram':
@@ -1033,6 +1031,14 @@ function substitution(word, head) {
     if (word === 'note') {
         return `reladraw has no \`note\` statement — a note is a node with no body, so try ` +
             `\`node ${rewrite(head)} shape: none\``;
+    }
+    // A statement until 0.4.0. It created nothing, only said more about a node
+    // declared elsewhere, which is what an attribute on that node is for.
+    if (word === 'deck') {
+        const name = head[1] && !head[1].quoted ? head[1].text : '<name>';
+        const texts = head.slice(2).map((token) => (token.quoted ? quoteOf(token.text) : token.text));
+        return `reladraw has no \`deck\` statement — a deck is an attribute of the node, so write ` +
+            `\`deck: ${texts.length > 0 ? texts.join(' ') : '"…"'}\` on \`node ${name}\``;
     }
     const replacement = SUBSTITUTIONS[word];
     if (replacement === undefined)
@@ -1145,6 +1151,21 @@ function readAttr(tokens, at, attrs, line, subject) {
         }
         attrs[key] = value.text;
         return at + 2;
+    }
+    if (key === 'deck') {
+        // One quoted text per copy behind the node, back to front, as many as are
+        // written. Stored joined on a line break, which no source line can hold.
+        const texts = [];
+        let next = at + 1;
+        while (tokens[next]?.quoted)
+            texts.push(tokens[next++].text);
+        if (texts.length === 0) {
+            const given = tokens[next];
+            throw new SourceError(`${subject}: \`deck:\` takes one quoted text per copy behind the node, as in \`deck: "Drive 2" "Drive 3"\`` +
+                (given && !isAttrKey(given) ? `, not \`deck: ${given.text}\`` : ''), line);
+        }
+        attrs[key] = texts.join('\n');
+        return next;
     }
     if (bracketKeys !== undefined && key !== 'text') {
         // `contents: match` names the part and then says one of its two properties
@@ -1372,27 +1393,6 @@ function parseEdge(head, line) {
         attrs: tail.attrs,
         line,
     };
-}
-/** `deck <name> "<text>" ["<text>" ...]` */
-function parseDeck(head, line) {
-    const name = requireName(head[1], 'deck', line);
-    const texts = [];
-    for (const token of head.slice(2)) {
-        if (!token.quoted) {
-            // Until 0.3.0 the head/attributes split cut these off and threw them
-            // away, so `deck d "one" fill: red` drew an uncolored deck in silence.
-            if (isAttrKey(token)) {
-                throw new SourceError(`deck "${name}" has ${token.text} — a deck says how many copies a node has and what ` +
-                    `each one reads, so write attributes on \`node ${name}\` itself`, line);
-            }
-            throw new SourceError(`deck "${name}" takes quoted texts only`, line);
-        }
-        texts.push(token.text);
-    }
-    if (texts.length === 0) {
-        throw new SourceError(`deck "${name}" needs at least one text`, line);
-    }
-    return { kind: 'deck', name, texts, line };
 }
 /** `style <name> <attributes>` */
 function parseStyle(head, line) {
@@ -3774,7 +3774,6 @@ function resolve(doc, options = {}) {
     const styles = collectStyles(doc.statements);
     checkStyleKeys(doc.statements);
     const { nodes, byName, roots } = buildTree(doc.statements, styles);
-    applyDecks(doc.statements, byName);
     // Edges are resolved to nodes before anything is sized, because a labeled
     // edge claims room in the gap it crosses and so has to be in hand while the
     // gaps are being worked out. Nothing here reads geometry.
@@ -3879,6 +3878,11 @@ function buildTree(statements, styles) {
         };
         checkAttrs(kind, node.name, stmt.attrs, stmt.line);
         checkStyleUse(kind, node.name, stmt.attrs, styles, stmt.line);
+        // `deck:` holds one text per copy, joined on a line break the source cannot
+        // contain. Like a badge, only a box has an outline to repeat.
+        const deck = appearance['deck'];
+        if (deck !== undefined && body.kind === 'shape')
+            node.deckTexts = deck.split('\n');
         const cut = stmt.name.lastIndexOf('.');
         if (cut === -1) {
             roots.push(node);
@@ -4004,7 +4008,9 @@ function checkAttrs(kind, name, attrs, line) {
             continue;
         // Quoted back the way it was written. A bracketed value arrives one dotted
         // key at a time, and `contents: match` is not a line anybody could look for.
-        const wrote = written === key ? `${key}: ${value}` : `${key}: (${written.slice(key.length + 1)}: ${value})`;
+        // A deck's texts are stored joined on a line break; quote them back as written.
+        const shown = key === 'deck' ? value.split('\n').map((text) => `"${text}"`).join(' ') : value;
+        const wrote = written === key ? `${key}: ${shown}` : `${key}: (${written.slice(key.length + 1)}: ${shown})`;
         if (!ALL_ATTR_KEYS.includes(key)) {
             // Nothing anywhere in the language answers to this word, so the only
             // remedy is the vocabulary itself.
@@ -4103,16 +4109,6 @@ function appearanceOf(attrs, styles, line) {
     if (!base)
         throw new SourceError(`no style named "${named}"`, line);
     return { ...base, ...attrs };
-}
-function applyDecks(statements, byName) {
-    for (const stmt of statements) {
-        if (stmt.kind !== 'deck')
-            continue;
-        const node = byName.get(stmt.name);
-        if (!node)
-            throw new SourceError(`deck names "${stmt.name}", which does not exist`, stmt.line);
-        node.deckTexts = stmt.texts;
-    }
 }
 function buildEdges(statements, byName, styles) {
     const edges = [];
@@ -5832,9 +5828,9 @@ function normalize(nodes, margin) {
  * it. A word missing here is a word that draws in the plain color, which is a
  * dull page rather than a wrong one.
  */
-const STATEMENT_KEYWORDS = ['node', 'edge', 'deck', 'style', 'diagram'];
+const STATEMENT_KEYWORDS = ['node', 'edge', 'style', 'diagram'];
 /** Statements whose second word declares a name. `diagram` has none. */
-const DECLARES_NAME = ['node', 'deck', 'style'];
+const DECLARES_NAME = ['node', 'style'];
 /**
  * Every word that says something about where a thing goes. Assembled from the
  * lists the parser itself reads, so a direction or a passage axis added there
