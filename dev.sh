@@ -432,7 +432,7 @@ PY
     ln -s "$PWD/node_modules" "$work/base/node_modules"
     (cd "$work/base" && npx tsc >/dev/null)
 
-    npx tsc >/dev/null
+    npx tsc
     moved=0
     for in in examples/*.reladraw; do
       name="$(basename "$in" .reladraw)"
@@ -461,7 +461,7 @@ PY
   snapshot)
     dir="${1:?output directory required}"
     mkdir -p "$dir"
-    npx tsc >/dev/null
+    npx tsc
     for in in examples/*.reladraw; do
       name="$(basename "$in" .reladraw)"
       node dist/cli.js "$in" -o "$dir/$name.svg" >/dev/null 2>&1 || echo "FAILS $name"
@@ -475,7 +475,7 @@ PY
     dir="${1:?baseline directory required}"
     work="$(mktemp -d -t reladraw-against-XXXXXX)"
     trap 'rm -rf "$work"' EXIT
-    npx tsc >/dev/null
+    npx tsc
     moved=0
     for in in examples/*.reladraw; do
       name="$(basename "$in" .reladraw)"
@@ -505,7 +505,7 @@ PY
     ln -s "$PWD/node_modules" "$work/base/node_modules"
     (cd "$work/base" && npx tsc >/dev/null)
 
-    npx tsc >/dev/null
+    npx tsc
     moved=0
     for in in examples/*.reladraw; do
       name="$(basename "$in" .reladraw)"

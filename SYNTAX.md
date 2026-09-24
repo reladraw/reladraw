@@ -94,7 +94,7 @@ node svc "Ingestion and enrichment pipeline"  contents: (widths: match, align: c
 |---|---|
 | nothing | natural widths, ranged left |
 | `contents: (widths: match)` | every child as wide as the widest, ranged left |
-| `contents: (widths: fill)` | every child spans the whole content band; `align` then has no slack to work in |
+| `contents: (widths: fill)` | every child spans the whole content band; `align` then has no slack to work in. A single column only: children side by side cannot all be the full width, and are refused by name |
 | `contents: (align: center)` | natural widths, the block of them centered |
 | `contents: (widths: match, align: center)` | the tidy centered column |
 

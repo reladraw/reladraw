@@ -650,6 +650,7 @@ function sizeNode(
       const band = Math.max(textWidth, content.width);
       for (const child of node.children) widenTo(child, band);
       content = layoutChildren(node.children, edges, measurer, fontSize, local);
+      checkOneColumn(node, node.children, local);
     }
     // `headerHeight` is the band the text takes, whichever end of the box that
     // band is at. Only the contents' offset depends on the side.
@@ -771,6 +772,27 @@ function contentsStyleFor(node: LayoutNode): ContentsStyle {
 function matchWidths(children: LayoutNode[]): void {
   const maxWidth = Math.max(...children.map((child) => child.width));
   for (const child of children) widenTo(child, maxWidth);
+}
+
+/**
+ * `widths: fill` makes every child as wide as the band, which only holds for
+ * a single column: two children set to the band's width and not one above the
+ * other make the contents wider than the band, the band grows with them, and
+ * no child is the width it was asked to be. Every child of a column starts at
+ * the same x once they are all one width, so a child that does not is the
+ * proof, and the pair is named rather than drawn wrong.
+ */
+function checkOneColumn(node: LayoutNode, children: LayoutNode[], local: Local): void {
+  const [first, ...rest] = children;
+  if (!first) return;
+  const off = rest.find((child) => Math.abs(local.get(child)!.x - local.get(first)!.x) > 0.5);
+  if (!off) return;
+  throw new SourceError(
+    `"${node.name}" has contents: (widths: fill), which makes every child the full width of the box, ` +
+      `and that only works in a single column — "${first.name}" and "${off.name}" are not one above the other. ` +
+      'Put them in one column, or use contents: (widths: match) to make them one width without filling the box',
+    node.line,
+  );
 }
 
 /**
@@ -1093,6 +1115,7 @@ function layoutFramed(
       const across = Math.max(row, block.width);
       for (const child of stacked) widenTo(child, across);
       block = layoutChildren(stacked, edges, measurer, fontSize, local);
+      checkOneColumn(node, stacked, local);
     }
   }
 
