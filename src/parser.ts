@@ -202,6 +202,30 @@ const BRACKET_ABOUT: Record<string, { kind: string; example: string }> = {
  */
 const MOVED_INTO_BRACKET = ['size', 'wrap', 'align'] as const;
 
+/**
+ * Store one attribute, refusing a key the line has already set. Two words on
+ * one line are equally explicit, so nothing says which was meant — and keeping
+ * either drops the other in silence. It is almost always an edit that forgot to
+ * delete the old value, so the error shows both and asks for one.
+ */
+function setOnce(
+  attrs: Attrs,
+  key: string,
+  value: string,
+  subject: string,
+  line: number,
+  shown: { key: string; value: (value: string) => string } = { key, value: (v) => v },
+): void {
+  const had = attrs[key];
+  if (had !== undefined) {
+    throw new SourceError(
+      `${subject}: "${shown.key}" is written twice (${shown.value(had)}, ${shown.value(value)}) — keep one`,
+      line,
+    );
+  }
+  attrs[key] = value;
+}
+
 /** Read one `key: value` pair, and refuse the words that used to be keys. */
 function readAttr(
   tokens: Token[],
@@ -227,7 +251,11 @@ function readAttr(
     if (Object.keys(read.values).length === 0) {
       throw new SourceError(`${subject}: \`${key}:\` opens empty brackets`, line);
     }
-    for (const [inner, value] of Object.entries(read.values)) attrs[`${key}.${inner}`] = value;
+    // Two brackets for one part are fine as long as they say different things;
+    // the same property in both is the same defect as `fill:` written twice.
+    for (const [inner, value] of Object.entries(read.values)) {
+      setOnce(attrs, `${key}.${inner}`, value, subject, line, { key: `${key}: (${inner}: …)`, value: (v) => v });
+    }
     return read.next;
   }
   if (key === 'url') {
@@ -243,7 +271,7 @@ function readAttr(
         line,
       );
     }
-    attrs[key] = value.text;
+    setOnce(attrs, key, value.text, subject, line, { key, value: quoteOf });
     return at + 2;
   }
   if (key === 'deck') {
@@ -260,7 +288,10 @@ function readAttr(
         line,
       );
     }
-    attrs[key] = texts.join('\n');
+    setOnce(attrs, key, texts.join('\n'), subject, line, {
+      key,
+      value: (v) => v.split('\n').map(quoteOf).join(' '),
+    });
     return next;
   }
   if (bracketKeys !== undefined && key !== 'text') {
@@ -355,7 +386,7 @@ function readAttr(
       line,
     );
   }
-  attrs[key] = valueToken.text;
+  setOnce(attrs, key, valueToken.text, subject, line);
   return at + 2;
 }
 
@@ -630,7 +661,7 @@ function readPlacement(
       throw new SourceError(`${subject}: an alignment reads "${written} <node>"`, line);
     }
     const read = readTargets(tokens, from + 2, subject, written, line);
-    const modifiers = readModifiers(tokens, read.next, subject, written, line);
+    const modifiers = readModifiers(tokens, read.next, subject, `${written} ${listTargets(read.targets)}`, line);
     // An alignment shares a line outright, so there is no distance in it for
     // a gap to set. Refusing rather than dropping it, for the reason unknown
     // modifier names are refused: a word that quietly does nothing reads as a
@@ -669,9 +700,16 @@ function readPlacement(
     throw new SourceError(`${subject}: "${word.text}" is not a direction`, line);
   }
   let next = at + 1;
-  if (follows(tokens, next, 'of')) next += 1;
+  const of = follows(tokens, next, 'of');
+  if (of) next += 1;
   const read = readTargets(tokens, next, subject, word.text, line);
-  const modifiers = readModifiers(tokens, read.next, subject, word.text, line);
+  const modifiers = readModifiers(
+    tokens,
+    read.next,
+    subject,
+    `${word.text}${of ? ' of' : ''} ${listTargets(read.targets)}`,
+    line,
+  );
   return {
     placement: {
       kind: 'offset',
@@ -861,7 +899,15 @@ function readBracket(
     // targets of a placement. `(at: bottom, align: center)` and the same without
     // the comma are the same statement.
     const value = valueToken.text;
-    values[key] = value.endsWith(',') && value.length > 1 ? value.slice(0, -1) : value;
+    const clean = value.endsWith(',') && value.length > 1 ? value.slice(0, -1) : value;
+    const had = values[key];
+    if (had !== undefined) {
+      throw new SourceError(
+        `${about.subject}: "${key}" is written twice in the brackets after ${about.what} (${had}, ${clean}) — keep one`,
+        about.line,
+      );
+    }
+    values[key] = clean;
     i += 2;
   }
 

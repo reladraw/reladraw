@@ -640,6 +640,8 @@ The `diagram` statement has a vocabulary of its own — `background`, and so far
 
 Some of the gaps in the table are worth saying out loud, because none of them looks like a mistake while you are writing it. A picture and a bodiless node take no `fill:` or `border:` — there is no outline for either to reach. Neither takes `contents:` either, which says how a node's children sit, and neither may have any. `shape:` and `icon:` each appear only on the kind they make, and writing both is an error naming both. An edge takes no `gap:` or `overlap:` — those say where a node sits, and an edge is not placed, it joins two things that are.
 
+**A key is written once per statement.** `fill: red  fill: blue` is an error that quotes both values and asks you to keep one: two words on one line are equally explicit, so nothing says which was meant, and keeping either would drop the other in silence. It is almost always an edit that forgot to delete the old value. The same holds inside brackets — `(size: small, size: large)`, a placement's `(gap: wide, gap: tight)` — for `style:` written twice, and for a `style` statement that repeats one of its own keys. Two `text: (…)` brackets in one style are fine as long as they say different things. A node overriding its style is not a repeat; see "Styles".
+
 **Changed 2026-09-09.** Until then a node or edge attribute the tool did not recognize was parsed, stored and never read: `wibble: red` on a node drew nothing and said nothing. This was the last place in the language where a key could silently do nothing, and the rule everywhere else — an unknown `diagram` key, an unknown placement modifier, a color naming a part the kind has not got — has always been that a key which silently does nothing looks like the tool being broken rather than like a typo. A file that rendered with a stray word in it will now stop with an error naming it.
 
 ## Destinations
@@ -675,6 +677,15 @@ node server.mirror "shared folder / mirror"  style: backup
 ```
 
 The appearance attributes are `fill`, `border`, `line`, `text`, `badge`, `icon` and `shape`. The first three each take a color written as the viewer will receive it — `#142814`, or any CSS color, or `none`; `text` takes the bracket described under "The text and its brackets".
+
+**What a statement says itself beats what its style says**, wherever `style:` sits on the line. Here the server's border is red, not orange:
+
+```
+style backup  border: #d2904e
+node server "Server"  border: red  style: backup
+```
+
+Whoever wrote `border: red` on the node meant it for that node, so it is an override rather than a contradiction, and nothing is refused. The rest of the style still applies.
 
 ### A color names the part it colors
 
@@ -818,7 +829,7 @@ Pre-1.0, so the minor number is where a breaking change goes. Every removal belo
 - A node with any children takes the theme's container colors, however the children are placed. A node with a `badge:` or a single child in a corner now draws as a container too; in 0.3.0 only a node with a title band did. Its text still sits where it did. Say `fill:` and `border:` to keep one looking like a leaf.
 - A text's `size` takes a plain number of pixels beside `small`, `normal` and `large`: `(size: 22)`.
 - **Breaking:** `deck` is an attribute of the node, not a statement. `deck drive "Drive 2" "Drive 3"` is written `deck: "Drive 2" "Drive 3"` on `node drive`, and the old statement is an error that quotes that line back. It is refused on a picture and on a `shape: none` node, where the statement used to draw nothing.
-
+- **Breaking:** a key written twice on one statement is an error that quotes both values — `fill: red  fill: blue`, `style:` twice, or the same property twice inside one set of brackets. In 0.3.0 one of the two was dropped in silence. A node's own word overriding its style's is unaffected.
 **0.3.0** — the vocabulary, reworked in one breaking version so there is one migration rather than five.
 
 - `box` is `node` and `link` is `edge`. The string on either is its *text*; "label" is not a word the language has.
