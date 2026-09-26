@@ -615,7 +615,7 @@ Every attribute, and what takes one. The kinds here are what a node's **body** i
 
 | attribute | `shape:` | `icon:` | `shape: none` | edge | says |
 |---|---|---|---|---|---|
-| `style` | ✓ | ✓ | ✓ | ✓ | the named bundle to take appearance from |
+| `style` | ✓ | ✓ | ✓ | ✓ | the named bundles to take appearance from, one or a list |
 | `gap` | ✓ | ✓ | ✓ | | the default distance to whatever it is placed against |
 | `overlap` | ✓ | ✓ | ✓ | | `allow`, to opt out of non-overlap |
 | `contents` | ✓ | | | | how the children are sized and where the block of them sits, in brackets |
@@ -686,6 +686,14 @@ node server "Server"  border: red  style: backup
 ```
 
 Whoever wrote `border: red` on the node meant it for that node, so it is an override rather than a contradiction, and nothing is refused. The rest of the style still applies.
+
+**A thing may take several styles**, listed the way a placement lists its targets — commas and `and` both separate:
+
+```
+node pump "Pump 3"  style: equipment, critical and alarm
+```
+
+They apply in the order written, and a later style wins where two set the same key; the statement's own words still win over all of them. Each style in the list is checked on its own, so one that gives the thing nothing is refused even when its neighbors do not. A style named twice in one list is refused, and so is `style:` written twice on one statement — the list is the way to say several.
 
 ### A color names the part it colors
 
@@ -830,6 +838,7 @@ Pre-1.0, so the minor number is where a breaking change goes. Every removal belo
 - A text's `size` takes a plain number of pixels beside `small`, `normal` and `large`: `(size: 22)`.
 - **Breaking:** `deck` is an attribute of the node, not a statement. `deck drive "Drive 2" "Drive 3"` is written `deck: "Drive 2" "Drive 3"` on `node drive`, and the old statement is an error that quotes that line back. It is refused on a picture and on a `shape: none` node, where the statement used to draw nothing.
 - **Breaking:** a key written twice on one statement is an error that quotes both values — `fill: red  fill: blue`, `style:` twice, or the same property twice inside one set of brackets. In 0.3.0 one of the two was dropped in silence. A node's own word overriding its style's is unaffected.
+- `style:` takes a list, `style: equipment, critical and alarm`, applied in order with a later style winning where two set the same key.
 **0.3.0** — the vocabulary, reworked in one breaking version so there is one migration rather than five.
 
 - `box` is `node` and `link` is `edge`. The string on either is its *text*; "label" is not a word the language has.

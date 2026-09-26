@@ -1168,6 +1168,36 @@ function readAttr(tokens, at, attrs, line, subject) {
         setOnce(attrs, key, value.text, subject, line, { key, value: quoteOf });
         return at + 2;
     }
+    if (key === 'style') {
+        // `style: base, critical and alarm` — several bundles, applied in the order
+        // written, a later one winning where two set the same key. The list reads
+        // the way a placement's targets do: commas and `and` both separate. Stored
+        // joined on a space, which no style name can hold.
+        const names = [];
+        let next = at + 1;
+        for (;;) {
+            const token = tokens[next];
+            if (!token || token.quoted || isAttrKey(token) || token.text === '(' || token.text === ')') {
+                throw new SourceError(names.length === 0 ? `attribute "style" has no value` : `${subject}: "style:" ends its list with a comma`, line);
+            }
+            const listed = token.text.endsWith(',') && token.text.length > 1;
+            const name = listed ? token.text.slice(0, -1) : token.text;
+            if (names.includes(name)) {
+                throw new SourceError(`${subject}: style "${name}" is named twice in one \`style:\` — keep one`, line);
+            }
+            names.push(name);
+            next += 1;
+            if (follows(tokens, next, 'and')) {
+                next += 1;
+                continue;
+            }
+            if (listed)
+                continue;
+            break;
+        }
+        setOnce(attrs, key, names.join(' '), subject, line, { key, value: (v) => v.split(' ').join(', ') });
+        return next;
+    }
     if (key === 'deck') {
         // One quoted text per copy behind the node, back to front, as many as are
         // written. Stored joined on a line break, which no source line can hold.
@@ -4069,23 +4099,25 @@ function checkAttrs(kind, name, attrs, line) {
  * construction — that hole is left open, because nobody writes one by accident.
  */
 function checkStyleUse(kind, name, attrs, styles, line) {
-    const named = attrs['style'];
-    if (named === undefined)
-        return;
-    const base = styles.get(named);
-    if (base === undefined)
-        return; // `appearanceOf` reports the missing style.
-    // A style naming another style is the one way to carry nothing at all: the
-    // parser already refuses one with no attributes, and `appearanceOf` does not
-    // recurse, so the name would sit there doing nothing.
-    const carried = [...new Set(Object.keys(base).map(topKey))].filter((key) => key !== 'style');
-    if (carried.length === 0) {
-        throw new SourceError(`style "${named}" carries nothing but a style name`, line);
+    // Each style in a list is checked on its own: one that gives this thing
+    // nothing is a name written on the wrong sort of thing, whatever its
+    // neighbours in the list carry.
+    for (const named of styleNames(attrs)) {
+        const base = styles.get(named);
+        if (base === undefined)
+            continue; // `appearanceOf` reports the missing style.
+        // A style naming another style is the one way to carry nothing at all: the
+        // parser already refuses one with no attributes, and `appearanceOf` does not
+        // recurse, so the name would sit there doing nothing.
+        const carried = [...new Set(Object.keys(base).map(topKey))].filter((key) => key !== 'style');
+        if (carried.length === 0) {
+            throw new SourceError(`style "${named}" carries nothing but a style name`, line);
+        }
+        if (carried.some((key) => ATTR_KEYS[kind].includes(key)))
+            continue;
+        throw new SourceError(`style "${named}" gives "${name}" nothing. It carries ${carried.join(' and ')}; ` +
+            `${article(KIND_WORD[kind])} is ${KIND_PARTS[kind]}`, line);
     }
-    if (carried.some((key) => ATTR_KEYS[kind].includes(key)))
-        return;
-    throw new SourceError(`style "${named}" gives "${name}" nothing. It carries ${carried.join(' and ')}; ` +
-        `${article(KIND_WORD[kind])} is ${KIND_PARTS[kind]}`, line);
 }
 /**
  * A style is a bundle spanning kinds, so its keys cannot be checked against any
@@ -4126,14 +4158,25 @@ function listKinds(kinds) {
         return words[0] ?? 'nothing';
     return `${words.slice(0, -1).join(', ')} or ${words[words.length - 1]}`;
 }
-function appearanceOf(attrs, styles, line) {
+/** The styles a `style:` names, in the order written. The parser joins them on a space. */
+function styleNames(attrs) {
     const named = attrs['style'];
-    if (named === undefined)
-        return { ...attrs };
-    const base = styles.get(named);
-    if (!base)
-        throw new SourceError(`no style named "${named}"`, line);
-    return { ...base, ...attrs };
+    return named === undefined ? [] : named.split(' ');
+}
+/**
+ * The styles in the order written, a later one winning where two set the same
+ * key, and then the statement's own words over all of them — a word written on
+ * the line was meant for this thing, wherever `style:` sits.
+ */
+function appearanceOf(attrs, styles, line) {
+    const merged = {};
+    for (const named of styleNames(attrs)) {
+        const base = styles.get(named);
+        if (!base)
+            throw new SourceError(`no style named "${named}"`, line);
+        Object.assign(merged, base);
+    }
+    return { ...merged, ...attrs };
 }
 function buildEdges(statements, byName, styles) {
     const edges = [];

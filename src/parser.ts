@@ -274,6 +274,38 @@ function readAttr(
     setOnce(attrs, key, value.text, subject, line, { key, value: quoteOf });
     return at + 2;
   }
+  if (key === 'style') {
+    // `style: base, critical and alarm` — several bundles, applied in the order
+    // written, a later one winning where two set the same key. The list reads
+    // the way a placement's targets do: commas and `and` both separate. Stored
+    // joined on a space, which no style name can hold.
+    const names: string[] = [];
+    let next = at + 1;
+    for (;;) {
+      const token = tokens[next];
+      if (!token || token.quoted || isAttrKey(token) || token.text === '(' || token.text === ')') {
+        throw new SourceError(
+          names.length === 0 ? `attribute "style" has no value` : `${subject}: "style:" ends its list with a comma`,
+          line,
+        );
+      }
+      const listed = token.text.endsWith(',') && token.text.length > 1;
+      const name = listed ? token.text.slice(0, -1) : token.text;
+      if (names.includes(name)) {
+        throw new SourceError(`${subject}: style "${name}" is named twice in one \`style:\` — keep one`, line);
+      }
+      names.push(name);
+      next += 1;
+      if (follows(tokens, next, 'and')) {
+        next += 1;
+        continue;
+      }
+      if (listed) continue;
+      break;
+    }
+    setOnce(attrs, key, names.join(' '), subject, line, { key, value: (v) => v.split(' ').join(', ') });
+    return next;
+  }
   if (key === 'deck') {
     // One quoted text per copy behind the node, back to front, as many as are
     // written. Stored joined on a line break, which no source line can hold.

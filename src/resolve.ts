@@ -389,25 +389,28 @@ function checkStyleUse(
   styles: Map<string, Attrs>,
   line: number,
 ): void {
-  const named = attrs['style'];
-  if (named === undefined) return;
-  const base = styles.get(named);
-  if (base === undefined) return; // `appearanceOf` reports the missing style.
+  // Each style in a list is checked on its own: one that gives this thing
+  // nothing is a name written on the wrong sort of thing, whatever its
+  // neighbours in the list carry.
+  for (const named of styleNames(attrs)) {
+    const base = styles.get(named);
+    if (base === undefined) continue; // `appearanceOf` reports the missing style.
 
-  // A style naming another style is the one way to carry nothing at all: the
-  // parser already refuses one with no attributes, and `appearanceOf` does not
-  // recurse, so the name would sit there doing nothing.
-  const carried = [...new Set(Object.keys(base).map(topKey))].filter((key) => key !== 'style');
-  if (carried.length === 0) {
-    throw new SourceError(`style "${named}" carries nothing but a style name`, line);
+    // A style naming another style is the one way to carry nothing at all: the
+    // parser already refuses one with no attributes, and `appearanceOf` does not
+    // recurse, so the name would sit there doing nothing.
+    const carried = [...new Set(Object.keys(base).map(topKey))].filter((key) => key !== 'style');
+    if (carried.length === 0) {
+      throw new SourceError(`style "${named}" carries nothing but a style name`, line);
+    }
+    if (carried.some((key) => ATTR_KEYS[kind].includes(key))) continue;
+
+    throw new SourceError(
+      `style "${named}" gives "${name}" nothing. It carries ${carried.join(' and ')}; ` +
+        `${article(KIND_WORD[kind])} is ${KIND_PARTS[kind]}`,
+      line,
+    );
   }
-  if (carried.some((key) => ATTR_KEYS[kind].includes(key))) return;
-
-  throw new SourceError(
-    `style "${named}" gives "${name}" nothing. It carries ${carried.join(' and ')}; ` +
-      `${article(KIND_WORD[kind])} is ${KIND_PARTS[kind]}`,
-    line,
-  );
 }
 
 /**
@@ -453,12 +456,25 @@ function listKinds(kinds: Kind[]): string {
   return `${words.slice(0, -1).join(', ')} or ${words[words.length - 1]}`;
 }
 
-function appearanceOf(attrs: Attrs, styles: Map<string, Attrs>, line: number): Attrs {
+/** The styles a `style:` names, in the order written. The parser joins them on a space. */
+function styleNames(attrs: Attrs): string[] {
   const named = attrs['style'];
-  if (named === undefined) return { ...attrs };
-  const base = styles.get(named);
-  if (!base) throw new SourceError(`no style named "${named}"`, line);
-  return { ...base, ...attrs };
+  return named === undefined ? [] : named.split(' ');
+}
+
+/**
+ * The styles in the order written, a later one winning where two set the same
+ * key, and then the statement's own words over all of them — a word written on
+ * the line was meant for this thing, wherever `style:` sits.
+ */
+function appearanceOf(attrs: Attrs, styles: Map<string, Attrs>, line: number): Attrs {
+  const merged: Attrs = {};
+  for (const named of styleNames(attrs)) {
+    const base = styles.get(named);
+    if (!base) throw new SourceError(`no style named "${named}"`, line);
+    Object.assign(merged, base);
+  }
+  return { ...merged, ...attrs };
 }
 
 function buildEdges(
