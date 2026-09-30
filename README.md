@@ -86,6 +86,10 @@ Version 0.14.3. Early stage, but works. The parser, layout engine, and SVG rende
 
 The language isn't stable yet, so expect the syntax to change.
 
+## Community templates
+
+[reladrawtemplates.com](https://reladrawtemplates.com) — a community gallery of 50+ ready-to-use reladraw templates (cloud architectures, flowcharts, sequence diagrams, mind maps, and more). Every template ships with its full `.reladraw` source and a build-time rendered preview, so you can copy, paste, and adapt. Independent project, not affiliated with reladraw.
+
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE). The license covers the code, not the name. It grants no rights to "reladraw", the project logo or the project's other marks. See [NOTICE](NOTICE).
