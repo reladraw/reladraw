@@ -92,4 +92,4 @@ Apache-2.0. See [LICENSE](LICENSE). The license covers the code, not the name. I
 
 ## Contributing
 
-Issues are welcome. Particularly helpful is a diagram you could not represent in reladraw. While the language is still changing quickly, an issue helps more than a pull request. See [CONTRIBUTING.md](CONTRIBUTING.md).
+Issues are welcome. Particularly helpful is a diagram you could not represent in reladraw. Pull requests are not accepted; please open an issue instead. See [CONTRIBUTING.md](CONTRIBUTING.md).
