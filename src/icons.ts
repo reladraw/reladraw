@@ -177,11 +177,13 @@ export const ICON_NAMES = Object.keys(ICONS);
  *
  * `circle` is the one geometric name, because a circle carries no single
  * meaning to name it after — it is a state, a step, a person, whatever the
- * diagram's own convention makes it. `diamond` joins these when a diagram
- * asks. The set being short is a fact about what has been drawn, not about the
+ * diagram's own convention makes it. The flowchart outlines are named for
+ * their geometry too - `diamond`, `pill`, `framed`, `half-pill` - since each
+ * means what the diagram's legend says: a decision, a start or end, a step
+ * drawn elsewhere, a wait in the usual flowchart. The set being short is a fact about what has been drawn, not about the
  * key.
  */
-export const OUTLINES = ['rectangle', 'document', 'circle'] as const;
+export const OUTLINES = ['rectangle', 'document', 'circle', 'diamond', 'pill', 'framed', 'half-pill'] as const;
 export type Outline = (typeof OUTLINES)[number];
 
 /** Every value `shape:` accepts, `none` included. */

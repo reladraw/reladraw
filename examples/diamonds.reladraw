@@ -1,0 +1,36 @@
+// `shape: diamond`. A diamond is a decision, sized to hold its text the way a
+// circle is: the smallest diamond around the text, clear of it by a padding.
+
+style decision  shape: diamond  border: theme-secondary
+style terminal  shape: circle   border: theme-primary
+
+node start  "start"                    style: terminal
+node read   "read the request"         below start
+node valid  "valid?"                   below read  style: decision
+node work   "do the work"              below valid (gap: wide)
+node reject "reject / with a reason"   right of valid (gap: wide)  level with valid
+node more   "more requests / waiting?" below work  style: decision
+node done   "done"                     below more (gap: wide)  style: terminal
+
+edge start -> read
+edge read -> valid
+edge valid -> work "yes"
+edge valid -> reject "no"  from: right  to: left
+edge work -> more
+edge more -> read "yes"  from: left  to: left  line: (path: square)
+edge more -> done "no"
+edge reject -> done  from: bottom  to: right  line: (path: square)
+
+// Several edges on one side of a diamond spread along the two edges that
+// meet at its point, each leaving square to the side.
+node a "a"  right of reject (gap: wide)
+node b "b"  below a
+node c "c"  below b
+edge a -> reject  from: left  to: right
+edge b -> more    from: left  to: right
+edge c -> more    from: left  to: right
+
+// An edge naming no side meets the diamond where the line to the far end
+// crosses it, and a corner of a diamond is the middle of its edge.
+edge c -> valid
+node dot ""  on more top-right  shape: circle

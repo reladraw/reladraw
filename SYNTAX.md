@@ -182,6 +182,10 @@ Every node has a *body*: the thing that is drawn where the node is. Two keys nam
 | `rectangle` | The plain rounded box. The default, so nothing has to say it. |
 | `document` | The same box with its top-right corner folded — the flowchart symbol saying *this is an artifact, not a process*. |
 | `circle` | A circle just big enough to hold the text, and always round — a longer text makes a bigger circle, never an oval. |
+| `diamond` | A diamond just big enough to hold the text — the flowchart symbol for *a decision*. A longer text makes a wider diamond. |
+| `pill` | A box with both ends round — in a flowchart, *where the flow starts or ends*. |
+| `framed` | A box with a bar inside each side — in a flowchart, *a step drawn elsewhere*, in another chart or section. |
+| `half-pill` | A box with its right end round — in a flowchart, *a wait* until something outside the flow happens. |
 | `none` | No outline, no fill, no padding. The node is its text and nothing else. |
 
 `icon: <name>` is a picture the node is drawn **as**, with no box at all.
@@ -204,9 +208,13 @@ node svc  icon: cube
 
 A node has one body, so writing both keys is an error naming both.
 
-The `document` fold is worth having because a shape is a second channel alongside color, and a stronger one. A fill means whatever you assigned it and a reader has to learn it from the diagram; a folded corner has meant "a document" for as long as there have been flowcharts, and reads with no legend. Most diagrams lose the difference between a thing that runs and a thing that is produced, because every node is a rectangle. `diamond` will join these when a diagram asks for one.
+The `document` fold is worth having because a shape is a second channel alongside color, and a stronger one. A fill means whatever you assigned it and a reader has to learn it from the diagram; a folded corner has meant "a document" for as long as there have been flowcharts, and reads with no legend. Most diagrams lose the difference between a thing that runs and a thing that is produced, because every node is a rectangle. A `diamond` has meant "a decision" just as long, and a flowchart whose questions are boxes reads as a list of steps until the reader finds the two lines leaving each one.
 
 A circle is an ordinary node in every other way, and the file means the same thing whichever shape its nodes are. `from: right` on a circle leaves from its rightmost point, and several edges on one side spread round the quarter of the circle about that point, each meeting it square on. A corner such as `top-right` is the point on the circle halfway between those two sides, not the corner of the square around it. A circle can hold other nodes; they sit in the middle of it. A circle cannot yet take a `badge:`, a `deck:`, or a node placed against its own edge or text, and each is refused with an error saying so.
+
+A diamond is the same kind of ordinary node. Of the diamonds that hold its text it is the one with the shortest outline, which keeps a one-line question from stretching into a flat sliver, and the text sits clear of the slanted edges. `from: right` leaves from its right point, and several edges on one side spread along the two edges meeting at that point, each leaving square to the side as from a rectangle. A corner such as `top-right` is the middle of the edge between those two points. A diamond can hold other nodes, takes `widths:` by growing wider, and refuses a `badge:`, a `deck:` or a node placed against its own edge or text exactly as a circle does.
+
+`pill`, `framed` and `half-pill` complete the flowchart, named like `circle` and `diamond` for what is drawn rather than what it means: with `rectangle` for a step, `diamond` for a decision and `document` for what a step produces, a flowchart can be drawn in the symbols a reader already knows. Each is the box its text needs with its ends added, so the text stays clear of a round end or a bar. An edge on a round end meets its curve, and a corner of a round end is the point on the curve halfway round. Like a circle, these cannot yet take a `badge:`, a `deck:`, or a node placed against their own edge or text.
 
 `circle` is the one name that describes the picture rather than the meaning, because a circle has no single meaning to name it after: it is a state in one diagram, a step in another, a person in a third.
 
@@ -1139,6 +1147,11 @@ That one was found by testing the lexer, not by rendering — and it could not h
 ## Changelog
 
 Pre-1.0, so the minor number is where a breaking change goes. Every removal below is refused by name with the replacement quoted, rather than dropped in silence — an older file stops with an error saying what to write instead.
+
+**Unreleased**
+
+- `shape: pill`, `shape: framed` and `shape: half-pill`, the flowchart's start and end, step drawn elsewhere, and wait. Edges and corners on a round end meet its curve.
+- `shape: diamond`, a decision. A diamond is sized to hold its text, the way a circle is. Edges on one of its sides spread along the two edges that meet at that point, and a corner of it is the middle of an edge. It does not yet take a badge, a deck or a node placed against its own edge. Nothing that already renders changes.
 
 **0.16.0**
 

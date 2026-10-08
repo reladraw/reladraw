@@ -7,6 +7,7 @@ import {
   DEFAULT_FONT_SIZE,
   ICON_LINES,
   LINE_WIDTH,
+  BAR,
   PAD,
   SEPARATION_GAP,
   arrowLength,
@@ -417,6 +418,33 @@ function outlinePath(shape: Outline, x: number, y: number, w: number, h: number)
       'Z',
     ].join(' ');
   }
+  if (shape === 'diamond') {
+    // The four points are the middles of the box's sides.
+    return [
+      `M${round(x + w / 2)} ${round(y)}`,
+      `L${round(x + w)} ${round(y + h / 2)}`,
+      `L${round(x + w / 2)} ${round(y + h)}`,
+      `L${round(x)} ${round(y + h / 2)}`,
+      'Z',
+    ].join(' ');
+  }
+  if (shape === 'pill' || shape === 'half-pill') {
+    // A half circle on the right, and on the left too for a pill; a half pill's
+    // left corners are a box's.
+    const cap = h / 2;
+    const left = shape === 'pill' ? cap : r;
+    const start = [
+      `M${round(x + left)} ${round(y)}`,
+      `H${round(x + w - cap)}`,
+      `a${round(cap)} ${round(cap)} 0 0 1 0 ${round(h)}`,
+      `H${round(x + left)}`,
+    ];
+    const back =
+      shape === 'pill'
+        ? [`a${round(cap)} ${round(cap)} 0 0 1 0 ${round(-h)}`]
+        : [`a${r} ${r} 0 0 1 ${-r} ${-r}`, `V${round(y + r)}`, `a${r} ${r} 0 0 1 ${r} ${-r}`];
+    return [...start, ...back, 'Z'].join(' ');
+  }
   if (shape === 'document') {
     // Every corner rounded but the top-right one, which is cut away and folded.
     return [
@@ -448,7 +476,9 @@ function outlinePath(shape: Outline, x: number, y: number, w: number, h: number)
 
 /** Lines drawn inside the outline: the flap of a fold, and nothing else so far. */
 function outlineDetail(shape: Outline, x: number, y: number, w: number, h: number): string[] {
-  void h;
+  if (shape === 'framed') {
+    return [`M${round(x + BAR)} ${round(y)} V${round(y + h)}`, `M${round(x + w - BAR)} ${round(y)} V${round(y + h)}`];
+  }
   if (shape !== 'document') return [];
   return [
     `M${round(x + w - FOLD)} ${round(y)} V${round(y + FOLD)} H${round(x + w)}`,
@@ -1256,12 +1286,16 @@ function sidePoint(box: Box, toward: { x: number; y: number }): { x: number; y: 
     const scale = box.width / 2 / Math.hypot(dx, dy);
     return { x: center.x + dx * scale, y: center.y + dy * scale };
   }
+  if (box.pointed) {
+    const scale = 1 / (Math.abs(dx) / (box.width / 2) + Math.abs(dy) / (box.height / 2));
+    return { x: center.x + dx * scale, y: center.y + dy * scale };
+  }
 
   const scaleX = dx === 0 ? Infinity : box.width / 2 / Math.abs(dx);
   const scaleY = dy === 0 ? Infinity : box.height / 2 / Math.abs(dy);
   const scale = Math.min(scaleX, scaleY);
 
-  return { x: center.x + dx * scale, y: center.y + dy * scale };
+  return ontoCaps(box, center, { x: dx, y: dy }, { x: center.x + dx * scale, y: center.y + dy * scale });
 }
 
 // --- where an edge meets a box -------------------------------------------------
@@ -1805,6 +1839,8 @@ function claim(
 /** The point `at` along one side of a box, with the outward normal for that side. */
 function anchorOn(face: Box, side: AttachSide, at: number): Anchor {
   if (face.round) return anchorOnCircle(face, side, at);
+  if (face.pointed) return anchorOnDiamond(face, side, at);
+  if (face.caps) return anchorOnCaps(face, side, at);
   switch (side) {
     case 'top':
       return { x: at, y: face.y, tx: 0, ty: -1, side };
@@ -1838,6 +1874,85 @@ function anchorOnCircle(face: Box, side: AttachSide, at: number): Anchor {
   const tx = Math.cos(angle);
   const ty = Math.sin(angle);
   return { x: center.x + radius * tx, y: center.y + radius * ty, tx, ty, side };
+}
+
+/**
+ * The same, on a diamond: a side is its point, and `at` slides along the two
+ * edges meeting there, so points spaced a step apart across a side stay a step
+ * apart. The line leaves square to the side, as from a rectangle, which keeps
+ * it clear of the diamond on its way out.
+ */
+function anchorOnDiamond(face: Box, side: AttachSide, at: number): Anchor {
+  const center = centerOf(face);
+  const halfW = face.width / 2;
+  const halfH = face.height / 2;
+  if (side === 'top' || side === 'bottom') {
+    const x = Math.max(face.x, Math.min(face.x + face.width, at));
+    const reach = halfH * (1 - Math.abs(x - center.x) / halfW);
+    const down = side === 'bottom' ? 1 : -1;
+    return { x, y: center.y + down * reach, tx: 0, ty: down, side };
+  }
+  const y = Math.max(face.y, Math.min(face.y + face.height, at));
+  const reach = halfW * (1 - Math.abs(y - center.y) / halfH);
+  const right = side === 'right' ? 1 : -1;
+  return { x: center.x + right * reach, y, tx: right, ty: 0, side };
+}
+
+/**
+ * The same, on a box with rounded ends: the point on the border straight out
+ * from `at`, which on a rounded end is on its curve. The line still leaves
+ * square to the side.
+ */
+function anchorOnCaps(face: Box, side: AttachSide, at: number): Anchor {
+  const flat = anchorOn({ ...face, caps: undefined }, side, at);
+  const { left, right } = face.caps!;
+  const radius = face.height / 2;
+  const cy = face.y + radius;
+  if (side === 'top' || side === 'bottom') {
+    const cx =
+      flat.x < face.x + left
+        ? face.x + left
+        : flat.x > face.x + face.width - right
+          ? face.x + face.width - right
+          : undefined;
+    if (cx === undefined) return flat;
+    const reach = Math.sqrt(Math.max(0, radius * radius - (flat.x - cx) ** 2));
+    return { ...flat, y: cy + (side === 'bottom' ? reach : -reach) };
+  }
+  const cap = side === 'left' ? left : right;
+  if (cap === 0) return flat;
+  const reach = Math.sqrt(Math.max(0, radius * radius - (flat.y - cy) ** 2));
+  const cx = side === 'left' ? face.x + radius : face.x + face.width - radius;
+  return { ...flat, x: cx + (side === 'right' ? reach : -reach) };
+}
+
+/**
+ * Move a point found on a box's rectangle onto its rounded end, when it falls
+ * beside one: where the ray from `from` along `dir` leaves that end's circle.
+ */
+function ontoCaps(
+  box: Box,
+  from: { x: number; y: number },
+  dir: { x: number; y: number },
+  point: { x: number; y: number },
+): { x: number; y: number } {
+  if (!box.caps) return point;
+  const radius = box.height / 2;
+  const cx =
+    point.x < box.x + box.caps.left
+      ? box.x + radius
+      : point.x > box.x + box.width - box.caps.right
+        ? box.x + box.width - radius
+        : undefined;
+  if (cx === undefined) return point;
+  const px = from.x - cx;
+  const py = from.y - (box.y + radius);
+  const a = dir.x * dir.x + dir.y * dir.y;
+  const b = px * dir.x + py * dir.y;
+  const reach = b * b - a * (px * px + py * py - radius * radius);
+  if (a === 0 || reach < 0) return point;
+  const t = Math.max(0, (-b + Math.sqrt(reach)) / a);
+  return { x: from.x + dir.x * t, y: from.y + dir.y * t };
 }
 
 /** An end with no side named: leave from the border, pointing at the far end. */
@@ -1880,11 +1995,28 @@ function exitAlong(
     const t = Math.max(0, (-b + Math.sqrt(reach)) / a);
     return { x: x + dir.x * t, y: y + dir.y * t };
   }
+  if (box.pointed) {
+    // Where the ray leaves the first of the four edges it heads out through.
+    const center = centerOf(box);
+    const px = x - center.x;
+    const py = y - center.y;
+    let t = Infinity;
+    for (const sx of [-1, 1]) {
+      for (const sy of [-1, 1]) {
+        const along = (sx * dir.x) / (box.width / 2) + (sy * dir.y) / (box.height / 2);
+        if (along <= 0) continue;
+        const left = 1 - (sx * px) / (box.width / 2) - (sy * py) / (box.height / 2);
+        t = Math.min(t, left / along);
+      }
+    }
+    if (!Number.isFinite(t)) return { x, y };
+    return { x: x + dir.x * Math.max(0, t), y: y + dir.y * Math.max(0, t) };
+  }
   const tx = dir.x === 0 ? Infinity : ((dir.x > 0 ? box.x + box.width : box.x) - x) / dir.x;
   const ty = dir.y === 0 ? Infinity : ((dir.y > 0 ? box.y + box.height : box.y) - y) / dir.y;
   const t = Math.min(tx, ty);
   if (!Number.isFinite(t)) return { x, y };
-  return { x: x + dir.x * Math.max(0, t), y: y + dir.y * Math.max(0, t) };
+  return ontoCaps(box, { x, y }, dir, { x: x + dir.x * Math.max(0, t), y: y + dir.y * Math.max(0, t) });
 }
 
 /**
@@ -2653,10 +2785,11 @@ function shareGaps(
  */
 function obstaclesFor(edge: LayoutEdge, nodes: LayoutNode[]): Extent[] {
   return [
-    // A circle's ends sit inside its square extent, so the square cannot stand
-    // for it here; a line meeting a circle square on does not cross it anyway.
+    // A circle's or diamond's ends sit inside its square extent, so the square
+    // cannot stand for it here; a line meeting either square on does not cross
+    // it anyway.
     ...[edge.from, edge.to]
-      .filter((node) => !faceOf(node).round)
+      .filter((node) => !faceOf(node).round && !faceOf(node).pointed && !faceOf(node).caps)
       .map((node) => grow(extentOfBox(faceOf(node)), -1)),
     ...nodes
       .filter((node) => !contains(node, edge.from) && !contains(node, edge.to))
@@ -3260,7 +3393,7 @@ function sweptPath(
 function sweepObstacles(edge: LayoutEdge, nodes: LayoutNode[]): Extent[] {
   return [
     ...[edge.from, edge.to]
-      .filter((node) => !faceOf(node).round)
+      .filter((node) => !faceOf(node).round && !faceOf(node).pointed && !faceOf(node).caps)
       .map((node) => grow(extentOfBox(faceOf(node)), -1)),
     ...nodes
       .filter((node) => !contains(node, edge.from) && !contains(node, edge.to))
@@ -3435,6 +3568,10 @@ interface Box {
   height: number;
   /** The circle in this square is what is drawn, so a line meets that instead. */
   round?: boolean;
+  /** The diamond in this box is what is drawn, so a line meets that instead. */
+  pointed?: boolean;
+  /** The radius of each half-circle end, so a line meets the curve instead. */
+  caps?: { left: number; right: number };
 }
 
 /** The rectangle actually drawn. Differs from the node box only for a deck. */
@@ -3445,7 +3582,18 @@ function faceOf(node: LayoutNode): Box {
     width: node.width - node.inset,
     height: node.height - node.inset,
     round: node.body.kind === 'shape' && node.body.outline === 'circle',
+    pointed: node.body.kind === 'shape' && node.body.outline === 'diamond',
+    caps: capsOf(node),
   };
+}
+
+/** The radius of each rounded end of a pill or a half pill; none on other outlines. */
+function capsOf(node: LayoutNode): { left: number; right: number } | undefined {
+  if (node.body.kind !== 'shape') return undefined;
+  const radius = (node.height - node.inset) / 2;
+  if (node.body.outline === 'pill') return { left: radius, right: radius };
+  if (node.body.outline === 'half-pill') return { left: 0, right: radius };
+  return undefined;
 }
 
 function centerOf(box: Box): { x: number; y: number } {

@@ -1,0 +1,29 @@
+// The flowchart symbols. A `pill` is where the flow starts and ends, a
+// `rectangle` a step, a `diamond` a decision, a `framed` box a step drawn in
+// another chart, a `half-pill` a wait for something outside the flow, and a
+// `document` what a step produces.
+
+node start   "start"                           shape: pill
+node read    "read the request"                below start
+node valid   "valid?"                          below read  shape: diamond
+node handle  "handle the request"              below valid (gap: wide)  shape: framed
+node review  "wait for review"                 below handle  shape: half-pill
+node report  "report"                          left of review (gap: wide)  shape: document
+node reject  "reject / with a reason"          right of valid (gap: wide)
+node done    "end"                             below review (gap: wide)  shape: pill
+
+edge start -> read
+edge read -> valid
+edge valid -> handle "yes"
+edge valid -> reject "no"  from: right  to: left
+edge handle -> review
+edge review -> report  from: left  to: right
+edge review -> done
+edge reject -> done  from: bottom  to: right  line: (path: square)
+
+// Edges on a rounded end meet its curve, and a corner of one is the point on
+// the curve halfway round.
+node note "filed"  below report (gap: wide)  shape: none
+edge note -> done
+node dot ""  on done top-right  shape: circle
+node dot2 ""  on review bottom-right  shape: circle

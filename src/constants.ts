@@ -7,6 +7,8 @@ import { plain, type Line } from './text.js';
 
 /** Inside a box, between its border and its contents. */
 export const PAD = 14;
+/** How far in from each side a `framed` box draws its inner bars. */
+export const BAR = 8;
 /** Between stacked children of one container. */
 export const CHILD_GAP = 10;
 /** Between a container's own text and its first child. */

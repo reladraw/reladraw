@@ -38,6 +38,7 @@ import {
   ICON_GAP,
   ICON_LINES,
   TEXT_CLEARANCE,
+  BAR,
   PAD,
   SEPARATION_GAP,
   THICKNESS,
@@ -852,8 +853,8 @@ function sizeNode(
   // too. The *absence* of children makes the setting inert, which stays silent;
   // a value the language does not have is wrong wherever it is written.
   const contents = contentsStyleFor(node);
-  const circle = isCircle(node);
-  if (circle) refuseOnCircle(node);
+  const outline = pointedOutline(node);
+  if (outline) refuseOnOutline(node, outline);
 
   if (node.children.length === 0) {
     // `at` is read on a leaf too, and is inert wherever the box is exactly the
@@ -935,12 +936,49 @@ function sizeNode(
     node.banded = true;
   }
 
-  if (circle) circumscribe(node, local);
+  if (outline === 'circle') circumscribe(node, local);
+  if (outline === 'diamond') enclose(node, local);
+  if (outline === 'pill' || outline === 'half-pill' || outline === 'framed') addEnds(node, outline, local);
   applyDeck(node, local);
 }
 
 function isCircle(node: LayoutNode): boolean {
   return node.body.kind === 'shape' && node.body.outline === 'circle';
+}
+
+function isDiamond(node: LayoutNode): boolean {
+  return node.body.kind === 'shape' && node.body.outline === 'diamond';
+}
+
+type GrownOutline = 'circle' | 'diamond' | 'pill' | 'framed' | 'half-pill';
+
+/** The outline that grows the node's box beyond what it holds, if any. */
+function pointedOutline(node: LayoutNode): GrownOutline | undefined {
+  if (node.body.kind !== 'shape') return undefined;
+  const outline = node.body.outline;
+  return outline === 'rectangle' || outline === 'document' ? undefined : outline;
+}
+
+/** How round each end of a node is: the radius of its rounded ends, or 0. */
+function capOf(node: LayoutNode): { left: number; right: number } {
+  if (node.body.kind !== 'shape') return { left: 0, right: 0 };
+  const radius = node.height / 2;
+  if (node.body.outline === 'pill') return { left: radius, right: radius };
+  if (node.body.outline === 'half-pill') return { left: 0, right: radius };
+  return { left: 0, right: 0 };
+}
+
+/**
+ * Widen a node sized as a rectangle by the ends its outline adds: a half
+ * circle on both ends of a pill, on the right of a half pill, and a bar on
+ * both sides of a framed box. What it holds stays clear of them.
+ */
+function addEnds(node: LayoutNode, outline: 'pill' | 'half-pill' | 'framed', local: Local): void {
+  const cap = node.height / 2 - PAD;
+  const left = outline === 'pill' ? cap : outline === 'framed' ? BAR : 0;
+  const right = outline === 'framed' ? BAR : cap;
+  moveInside(node, left, 0, local);
+  node.width += left + right;
 }
 
 /**
@@ -959,6 +997,26 @@ function circumscribe(node: LayoutNode, local: Local): void {
   node.height = side;
 }
 
+/**
+ * Grow a node sized as a rectangle into the diamond around what it holds.
+ *
+ * Every diamond through the corners of a block holds it; the one taken is the
+ * shortest way round, which leans toward a square rather than stretching flat
+ * along a line of text. The block is padded by half a padding first, so
+ * whatever fits in the rectangle fits in the diamond, clear of its edges.
+ * Everything inside moves to keep the block centered.
+ */
+function enclose(node: LayoutNode, local: Local): void {
+  const across = node.width - PAD;
+  const down = node.height - PAD;
+  const mean = Math.sqrt(across * down);
+  const width = across + mean;
+  const height = down + mean;
+  moveInside(node, (width - node.width) / 2, (height - node.height) / 2, local);
+  node.width = width;
+  node.height = height;
+}
+
 function moveInside(node: LayoutNode, dx: number, dy: number, local: Local): void {
   node.textBox.x += dx;
   node.textBox.y += dy;
@@ -970,35 +1028,37 @@ function moveInside(node: LayoutNode, dx: number, dy: number, local: Local): voi
 }
 
 /**
- * What a circle does not take yet, refused by name rather than drawn as an
- * ellipse or with a copy's text outside the outline.
+ * What a circle or a diamond does not take yet, refused by name rather than
+ * drawn out of shape or with a copy's text outside the outline.
  *
- * Something placed against the circle's own edge or text — a badge included —
- * sizes the frame in the same solve as the thing placed, and a circle's corner
- * points are a fraction of a radius that solve does not know yet. A deck's
- * copies write their text at the top-left of the face, which on a circle is
- * outside it.
+ * Something placed against the node's own edge or text — a badge included —
+ * sizes the frame in the same solve as the thing placed, and the corner points
+ * of these outlines are a fraction of the box that solve does not know yet. A
+ * deck's copies write their text at the top-left of the face, which on these
+ * outlines is outside it.
  */
-function refuseOnCircle(node: LayoutNode): void {
+function refuseOnOutline(node: LayoutNode, outline: GrownOutline): void {
   const [framed] = framedChildren(node);
+  const noun = outline === 'framed' ? 'framed box' : outline.replace('-', ' ');
+  const many = /[sx]$/.test(noun) ? `${noun}es` : `${noun}s`;
   if (node.attrs['badge'] !== undefined || node.appearance['badge'] !== undefined) {
     throw new SourceError(
-      `"${node.name}" is a circle with a badge:, and a badge is not built for circles yet — ` +
-        'make it a rectangle, or place the badge as a node of its own against the circle',
+      `"${node.name}" is a ${noun} with a badge:, and a badge is not built for ${many} yet — ` +
+        `make it a rectangle, or place the badge as a node of its own against the ${noun}`,
       node.line,
     );
   }
   if (framed !== undefined) {
     throw new SourceError(
-      `"${framed.name}" is placed against "${node.name}" itself, and "${node.name}" is a circle. ` +
-        'Something placed against a circle\'s own edge or text is not built yet — place it against ' +
+      `"${framed.name}" is placed against "${node.name}" itself, and "${node.name}" is a ${noun}. ` +
+        `Something placed against a ${noun}'s own edge or text is not built yet — place it against ` +
         `another node, or make "${node.name}" a rectangle`,
       framed.line,
     );
   }
   if (node.deckTexts.length > 0) {
     throw new SourceError(
-      `"${node.name}" is a circle with a deck:, and a deck is not built for circles yet`,
+      `"${node.name}" is a ${noun} with a deck:, and a deck is not built for ${many} yet`,
       node.line,
     );
   }
@@ -1126,6 +1186,13 @@ function widenTo(node: LayoutNode, width: number, local: Local): void {
     moveInside(node, grew / 2, grew / 2, local);
     node.width = width;
     node.height = width;
+    return;
+  }
+  // A wider diamond still holds what it held, so only its width changes and
+  // what is inside stays centered.
+  if (isDiamond(node)) {
+    moveInside(node, (width - node.width) / 2, 0, local);
+    node.width = width;
     return;
   }
   // A node with something placed against its own frame is laid out by a
@@ -2298,6 +2365,20 @@ function partOf(target: Target, part: Part | undefined, owner: LayoutNode, line:
   const down = words.includes('top') || words.includes('bottom');
   if (isCircle(target.node) && across && down) {
     const pull = (target.width / 2) * (1 - Math.SQRT1_2);
+    box.offset.x += words.includes('left') ? pull : -pull;
+    box.offset.y += words.includes('top') ? pull : -pull;
+  }
+  // A diamond's corners are its four points, so a corner between two of them
+  // is the middle of the edge joining them.
+  if (isDiamond(target.node) && across && down) {
+    box.offset.x += words.includes('left') ? target.width / 4 : -target.width / 4;
+    box.offset.y += words.includes('top') ? target.height / 4 : -target.height / 4;
+  }
+  // A rounded end has no corner either: its corner is the point on it halfway
+  // between the two sides named.
+  const cap = capOf(target.node)[words.includes('left') ? 'left' : 'right'];
+  if (cap > 0 && across && down) {
+    const pull = cap * (1 - Math.SQRT1_2);
     box.offset.x += words.includes('left') ? pull : -pull;
     box.offset.y += words.includes('top') ? pull : -pull;
   }
