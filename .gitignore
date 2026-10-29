@@ -1,7 +1,3 @@
-# Working context that names private paths. Never commit: this repo is public.
-CLAUDE.md
-CLAUDE.local.md
-
 node_modules/
 dist/
 build/
@@ -20,22 +16,9 @@ venv/
 
 .DS_Store
 
-# Never ships from this repo: the design record lives in notes, not here.
-*.org
-
-# Scratch space for throwaway files, so private things are unstageable by default.
-scratch/
-
 # Local agent settings. .claude/skills/ ships; this does not.
 .claude/settings.local.json
-
-# The maintainer's docs-upkeep skill. Kept out of .claude/skills/ on GitHub so
-# `npx skills add reladraw/reladraw` offers only the skill for writing diagrams.
-.claude/skills/reladraw-upkeep/
 
 # draw.io's own lock and backup files, written beside an open drawing.
 .$*.bkp
 .$*.dtmp
-
-# The original benchmark drawing and its transcription. Never commit.
-private/
