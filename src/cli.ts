@@ -1,7 +1,9 @@
 #!/usr/bin/env node
+import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname, resolve as resolvePath } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { nearMatch, readChecks, type Checks, type Finding } from './checks.js';
 import { SourceError } from './errors.js';
 import { format } from './format.js';
@@ -18,6 +20,7 @@ const USAGE = `reladraw — draw a diagram from stated placement
   reladraw format <input.reladraw>... [--check]
   reladraw format - [--check]
   reladraw format --init
+  reladraw install-skill [skills options]
 
   render      draw the diagram to an SVG, and print any findings: places
               where the picture, drawn as written, may not read as meant.
@@ -33,6 +36,11 @@ const USAGE = `reladraw — draw a diagram from stated placement
               folder up.
               --init writes a .reladraw-format here, every setting at its
               default with what it does.
+  install-skill
+              install the agent skill that came with this version of
+              reladraw, so it teaches what this tool accepts. It runs
+              npx skills add with --copy, and passes on what follows:
+              -g for every project, -a claude-code for one agent.
 
   -o, --out   where render writes the SVG. Defaults to the input path with
               its extension replaced by .svg. Use - for standard output.
@@ -53,10 +61,38 @@ const USAGE = `reladraw — draw a diagram from stated placement
   -h, --help  print this.
 `;
 
-const COMMANDS = ['render', 'check', 'format'] as const;
+const COMMANDS = ['render', 'check', 'format', 'install-skill'] as const;
+
+// The version of skills this was tried with, so a change there can't break it.
+const SKILLS_PACKAGE = 'skills@1.7.6';
+
+// The skill ships in the package beside dist/, as the one in the repository.
+// skills does the work of knowing where each agent keeps its skills; --copy
+// because an npx run leaves the package in a cache, where a link would break.
+function installSkill(args: string[]): number {
+  const skills = fileURLToPath(new URL('../.claude/skills/', import.meta.url));
+  if (!existsSync(skills)) {
+    process.stderr.write(`reladraw: the skill isn't in this install of reladraw (looked in ${skills})\n`);
+    return 1;
+  }
+  const windows = process.platform === 'win32';
+  const command = [SKILLS_PACKAGE, 'add', skills, '--copy', ...args];
+  // On Windows npx is a .cmd, which Node runs only through a shell.
+  const result = spawnSync(windows ? 'npx.cmd' : 'npx', windows ? command.map((a) => `"${a}"`) : command, {
+    stdio: 'inherit',
+    shell: windows,
+  });
+  if (result.error) {
+    process.stderr.write(`reladraw: couldn't run npx to install the skill: ${result.error.message}\n`);
+    return 1;
+  }
+  return result.status ?? 1;
+}
 type Command = (typeof COMMANDS)[number];
 
 async function main(argv: string[]): Promise<number> {
+  // Everything after install-skill is for skills, -h and -v included.
+  if (argv[0] === 'install-skill') return installSkill(argv.slice(1));
   if (argv.length === 0 || argv.includes('-h') || argv.includes('--help')) {
     process.stdout.write(USAGE);
     return argv.length === 0 ? 1 : 0;

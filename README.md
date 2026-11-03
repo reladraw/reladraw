@@ -75,16 +75,18 @@ Each `<reladraw-diagram>` is replaced by its SVG. Indent the source however suit
 To install a skill to let your agent know how to use reladraw:
 
 ```
-npx skills add reladraw/reladraw -g
+reladraw install-skill -g
 ```
 
-That installs it for every agent you use (Claude Code, Codex, Cursor, Copilot and others), each in its own skills directory. Leave off `-g` to install it into the current project only. To install it for just one agent, name it with `-a`:
+That installs the skill that came with your copy of reladraw, so it teaches what your reladraw accepts, for every agent you use (Claude Code, Codex, Cursor, Copilot and others), each in its own skills directory. It hands the work to [skills](https://www.npmjs.com/package/skills), and passes on whatever you write after `install-skill`. Leave off `-g` to install it into the current project only. To install it for just one agent, name it with `-a`:
 
 ```
-npx skills add reladraw/reladraw -g -a claude-code
+reladraw install-skill -g -a claude-code
 ```
 
-That gets you a copy of the skill at the time you run it, so you'll need to re-run that command to get the latest skill when there is a new release.
+The skill is a copy, so after upgrading reladraw, run the command again to bring the skill up to date with it.
+
+To install the skill from the main branch instead, which can run ahead of the release on npm, run `npx skills add reladraw/reladraw -g`.
 
 ## Status
 

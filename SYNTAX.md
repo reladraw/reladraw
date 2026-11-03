@@ -1186,6 +1186,8 @@ reladraw check diagram.reladraw
 | `--no-checks` | print no findings; errors still print |
 | `-v`, `--version` | print the version |
 
+`reladraw install-skill` installs the agent skill that came with this version of reladraw, by running `npx skills add` on it with `--copy`. What follows it goes to `skills`: `-g` to install for every project, `-a claude-code` for one agent.
+
 The output is a standalone SVG: every picture is drawn into it as path data, never from a font or a linked file. A web page can draw a diagram in place with `<reladraw-diagram>`; see "In a web page" in the README.
 
 ### A page for looking at a diagram
@@ -1314,6 +1316,11 @@ Designed and absent from the code.
 ## Changelog
 
 Pre-1.0, so the minor number is where a breaking change goes. Every removal is refused by name with the replacement quoted, rather than dropped in silence: an older file stops with an error saying what to write instead.
+
+**Unreleased**
+
+- **The agent skill opens each diagram it draws as a page in the default browser**, with `reladraw render --page` as the last step of every drawing rather than only when asked to show it. It doesn't open one when there is no display, or when the user has said not to.
+- **`reladraw install-skill`** installs the agent skill that came with your reladraw, so it teaches what your copy accepts rather than what the main branch does. It hands the work to `skills`, passing on `-g`, `-a` and the rest. The npm package now carries the skill.
 
 **0.21.0**
 

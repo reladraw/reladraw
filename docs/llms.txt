@@ -26,7 +26,7 @@ edge app.api -> store  "queries"
 
 - [Full documentation](https://reladraw.github.io/reladraw/llms-full.txt): the guide to writing reladraw followed by the complete syntax reference, in one file. Read this one.
 - [Syntax reference](https://raw.githubusercontent.com/reladraw/reladraw/main/SYNTAX.md): the complete syntax reference on its own, with the changelog.
-- [Agent skill](https://raw.githubusercontent.com/reladraw/reladraw/main/.claude/skills/reladraw/SKILL.md): the guide to writing reladraw on its own. Installable into agents that support skills with `npx skills add reladraw/reladraw`.
+- [Agent skill](https://raw.githubusercontent.com/reladraw/reladraw/main/.claude/skills/reladraw/SKILL.md): the guide to writing reladraw on its own. Installable into agents that support skills with `reladraw install-skill`, which installs the skill matching the installed tool, or `npx skills add reladraw/reladraw` for the main branch's.
 
 ## Tools
 

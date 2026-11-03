@@ -18,6 +18,8 @@ Every other diagram language hands the arrangement to a layout engine, so where 
 
 That matters here specifically. You can't see the SVG you produced. With auto-layout that leaves you guessing; with reladraw the arrangement is in the sentences you just wrote, and where the picture may not read as meant, the tool tells you in words.
 
+**Show every diagram as its page.** Whenever the user is to see a diagram, whether one you drew, one you changed, or an existing file they asked to look at, render it with `--page` and open it in the default browser, as step 7 of the loop says. The bare SVG is for putting into something else, such as a README or a document, not for showing.
+
 ## Check it is installed, and the same version as this skill
 
 This skill teaches reladraw 0.21.0. Once per session, before the first render, run:
@@ -28,7 +30,7 @@ reladraw --version
 
 - **The same:** say nothing.
 - **Older, or `--version` isn't recognized** (it arrived in 0.17.1): the tool is older than this page and will refuse some of what it teaches. Tell the user, and give them `npm install -g reladraw@latest`.
-- **Newer:** this skill is out of date. Tell the user, and give them `npx skills add reladraw/reladraw -g` to refresh it. Carry on meanwhile; where an error names a replacement spelling, trust the error over this page.
+- **Newer:** this skill is out of date. Tell the user, and give them `reladraw install-skill -g`, which replaces it with the skill that came with their reladraw. Carry on meanwhile; where an error names a replacement spelling, trust the error over this page.
 
 If `reladraw` isn't installed, `npx reladraw` works without installing, and `npm install -g reladraw` installs it.
 
@@ -46,7 +48,7 @@ diagram.reladraw:9: warning(edge-node-overlap): line api -> db crosses node cach
 
 5. Fix each finding in the source, by placing something differently or saying where a line goes, and re-run until there are none. `reladraw check diagram.reladraw` prints the findings without writing the SVG.
 6. `reladraw format diagram.reladraw` before handing the file over. It lines statements up in columns and evens out spacing, by the project's `.reladraw-format` if there is one, and changes nothing about what the file draws. A file you wrote then reads like one the user's project already has.
-7. To show the user the picture, `reladraw render diagram.reladraw --page` writes `diagram.html`: a page in the diagram's own colors that pans, zooms, goes full screen and saves an SVG or PNG. Open that rather than the bare SVG, and don't build a page of your own around it. Give the diagram a title first with `diagram  title: "…"`, which heads the page.
+7. Finish by showing the user the picture. Give the diagram a title with `diagram  title: "…"`, which heads the page, then run `reladraw render diagram.reladraw --page`. It writes `diagram.html`, a page in the diagram's own colors that pans, zooms, goes full screen and saves an SVG or PNG. Open it in the default browser: `xdg-open diagram.html` on Linux, `open diagram.html` on macOS, `start diagram.html` on Windows. Show the page rather than the bare SVG, and don't build a page of your own around it. Open it once per diagram; after later edits, render the page again and tell the user to reload it. Don't open it when there is no display to open it on, as in a remote or headless session, or when the user has said not to; give them the page's path instead.
 
 A file with no errors and no findings has nothing on top of anything. That is still not the same as a good picture: re-read your source to confirm the arrangement says what you meant, and for a large diagram tell the user you have checked the findings but not seen the render.
 
@@ -1382,6 +1384,8 @@ reladraw check diagram.reladraw
 | `--no-checks` | print no findings; errors still print |
 | `-v`, `--version` | print the version |
 
+`reladraw install-skill` installs the agent skill that came with this version of reladraw, by running `npx skills add` on it with `--copy`. What follows it goes to `skills`: `-g` to install for every project, `-a claude-code` for one agent.
+
 The output is a standalone SVG: every picture is drawn into it as path data, never from a font or a linked file. A web page can draw a diagram in place with `<reladraw-diagram>`; see "In a web page" in the README.
 
 ### A page for looking at a diagram
@@ -1510,6 +1514,11 @@ Designed and absent from the code.
 ## Changelog
 
 Pre-1.0, so the minor number is where a breaking change goes. Every removal is refused by name with the replacement quoted, rather than dropped in silence: an older file stops with an error saying what to write instead.
+
+**Unreleased**
+
+- **The agent skill opens each diagram it draws as a page in the default browser**, with `reladraw render --page` as the last step of every drawing rather than only when asked to show it. It doesn't open one when there is no display, or when the user has said not to.
+- **`reladraw install-skill`** installs the agent skill that came with your reladraw, so it teaches what your copy accepts rather than what the main branch does. It hands the work to `skills`, passing on `-g`, `-a` and the rest. The npm package now carries the skill.
 
 **0.21.0**
 
