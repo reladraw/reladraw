@@ -1,4 +1,4 @@
-# Syntax reference — 0.21.0
+# Syntax reference — 0.22.0
 
 What the language accepts. The changelog at the end lists what changed in each published version; 0.17.0's changes are large, and its entry has a table of every old spelling and what to write instead.
 
@@ -1317,12 +1317,12 @@ Designed and absent from the code.
 
 Pre-1.0, so the minor number is where a breaking change goes. Every removal is refused by name with the replacement quoted, rather than dropped in silence: an older file stops with an error saying what to write instead.
 
-**Unreleased**
+**0.22.0**
 
-- **The agent skill opens each diagram it draws as a page in the default browser**, with `reladraw render --page` as the last step of every drawing rather than only when asked to show it. It doesn't open one when there is no display, or when the user has said not to.
 - **`reladraw install-skill`** installs the agent skill that came with your reladraw, so it teaches what your copy accepts rather than what the main branch does. It hands the work to `skills`, passing on `-g`, `-a` and the rest. The npm package now carries the skill.
+- **The agent skill opens each diagram it draws as a page in the default browser**, with `reladraw render --page` as the last step of every drawing rather than only when asked to show it. It doesn't open one when there is no display, or when the user has said not to.
 - **The page says when it is showing the whole diagram**: its zoom reads "Fit · 62%" while fitted, and just the number once you zoom or pan. The Actual size button is now 100%, which is what it always did. Save SVG and Save PNG are under an Export button, which can also copy the SVG.
-- **The playground pans and zooms as the page does**: − and +, Fit, 100%, the wheel, a pinch, a drag, a double-click, and the keys + - 0 1, with the zoom shown beside the Diagram heading. Its one Actual size button, whose label named the view you would go to rather than the one you were in, is gone. The view stays where you left it as you type. Copy SVG, Save SVG and Save PNG are now under one Export button, so the row of controls fits.
+- **The playground pans and zooms as the page does**: − and +, Fit, 100%, the wheel, a pinch, a drag, a double-click, and the keys + - 0 1, with the zoom shown between − and +. Its one Actual size button, whose label named the view you would go to rather than the one you were in, is gone. The view stays where you left it as you type. Copy SVG, Save SVG and Save PNG are now under one Export button, so the row of controls fits.
 
 **0.21.0**
 
