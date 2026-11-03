@@ -149,9 +149,60 @@
         cursor: pointer;
       }
 
+      /* Sized for the usual names, not the longest, so the diagram's row of
+         controls fits; the open list still shows every name in full. */
+      #theme {
+        width: 22ch;
+        text-overflow: ellipsis;
+      }
+
       select:hover {
         color: var(--ink);
         border-color: var(--muted);
+      }
+
+      /* Copy SVG, Save SVG and Save PNG under one button, so the row of
+         controls fits. The list stays open after a choice, so "Copied" can be
+         read, and closes on a click elsewhere or Escape. */
+      .menu {
+        position: relative;
+      }
+
+      .menu-list {
+        position: absolute;
+        right: 0;
+        top: calc(100% + 4px);
+        z-index: 5;
+        flex-direction: column;
+        gap: 4px;
+        padding: 6px;
+        background: var(--panel);
+        border: 1px solid var(--edge);
+        border-radius: 3px;
+      }
+
+      .menu-list:not([hidden]) {
+        display: flex;
+      }
+
+      /* The zoom's controls stay together, in the page's order, when the
+         row wraps. */
+      .zoom {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      #scale {
+        min-width: 9ch;
+        text-align: center;
+        font: 12px/1 var(--mono);
+        color: var(--muted);
+        white-space: nowrap;
+      }
+
+      #scale .fitted {
+        color: var(--syn-keyword);
       }
 
       button[aria-pressed='true'] {
@@ -403,32 +454,32 @@
         font-style: normal;
       }
 
+      /* Panned and zoomed as the page that --page writes is: the stage moves
+         inside the pane, and the drawing is resized, not scaled. */
       #diagram {
+        position: relative;
         flex: 1;
         min-height: 0;
-        overflow: auto;
-        padding: 18px;
+        overflow: hidden;
+        touch-action: none;
+        cursor: grab;
         background: var(--diagram);
-        display: flex;
         transition: opacity 120ms ease;
       }
 
-      /* Centered by auto margins, not by align-items/justify-content: those
-         push a drawing taller than the pane out past the top as well as the
-         bottom, where the scrollbar cannot reach it. Auto margins center when
-         there is room and fall to zero when there is not. */
-      #diagram svg {
-        max-width: 100%;
-        height: auto;
-        margin: auto;
+      #diagram.dragging {
+        cursor: grabbing;
       }
 
-      /* Actual size: the drawing keeps its own dimensions and the pane scrolls.
-         A diagram the size of the benchmark is a thumbnail otherwise. */
-      #diagram.actual svg {
-        max-width: none;
-        flex: none;
-        margin: 0;
+      #stage {
+        position: absolute;
+        left: 0;
+        top: 0;
+        transform-origin: 0 0;
+      }
+
+      #stage svg {
+        display: block;
       }
 
       #diagram.stale {
@@ -962,18 +1013,30 @@
               Check
             </button>
             <select id="theme" aria-label="Theme" title="Writes a diagram theme: line into the source"></select>
-            <button id="zoom" type="button" aria-pressed="false">Actual size</button>
-            <button id="copy" type="button">Copy SVG</button>
-            <button id="download" type="button" title="Save the picture as an SVG file">Save SVG</button>
-            <button id="download-png" type="button" title="Save the picture as a PNG, at twice its size">Save PNG</button>
+            <span class="zoom">
+              <button id="out" type="button" title="Zoom out (-)" aria-label="Zoom out">−</button>
+              <span id="scale" aria-live="polite"></span>
+              <button id="in" type="button" title="Zoom in (+)" aria-label="Zoom in">+</button>
+              <button id="fit" type="button" title="The whole diagram in view (0)">Fit</button>
+              <button id="actual" type="button" title="The drawing at its own scale (1)">100%</button>
+            </span>
+            <span class="menu">
+              <button id="export" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="export-list">Export ▾</button>
+              <span id="export-list" class="menu-list" hidden>
+                <button id="copy" type="button">Copy SVG</button>
+                <button id="download" type="button" title="Save the picture as an SVG file">Save SVG</button>
+                <button id="download-png" type="button" title="Save the picture as a PNG, at twice its size">Save PNG</button>
+              </span>
+            </span>
           </div>
         </div>
-        <div id="diagram"></div>
+        <div id="diagram"><div id="stage"></div></div>
         <div id="findings" role="status" aria-live="polite"></div>
       </section>
     </main>
 
     <!-- RELADRAW_EXAMPLES -->
+    <!-- RELADRAW_PANZOOM -->
     <!-- RELADRAW_BUNDLE -->
 
     <script>
@@ -1012,7 +1075,14 @@
         var preview = document.getElementById('preview');
         var about = document.getElementById('about');
         var choose = document.getElementById('choose');
-        var zoom = document.getElementById('zoom');
+        var scale = document.getElementById('scale');
+        var stage = document.getElementById('stage');
+        var zoom = panZoom(diagram, stage, scale, {
+          out: document.getElementById('out'),
+          in: document.getElementById('in'),
+          fit: document.getElementById('fit'),
+          actual: document.getElementById('actual'),
+        });
         var theme = document.getElementById('theme');
         var copy = document.getElementById('copy');
         var download = document.getElementById('download');
@@ -1276,8 +1346,9 @@
           }
           cost = performance.now() - started;
           drawn = svg;
-          diagram.innerHTML = svg;
+          stage.innerHTML = svg;
           diagram.style.background = pageColor(svg);
+          zoom.show();
           theme.value = themeOf(source.value) || reladraw.DEFAULT_THEME;
           show(null);
         }
@@ -1417,6 +1488,9 @@
         function load(text, name) {
           source.value = text;
           current = name;
+          // A different diagram opens as a fresh page would, not at the
+          // last one's zoom.
+          zoom.open();
           draw();
           stow();
         }
@@ -1519,6 +1593,25 @@
         });
 
         /* ---- getting the drawing out ---- */
+
+        var exportButton = document.getElementById('export');
+        var exportList = document.getElementById('export-list');
+        function showExport(open) {
+          exportList.hidden = !open;
+          exportButton.setAttribute('aria-expanded', String(open));
+        }
+        exportButton.addEventListener('click', function () {
+          showExport(exportList.hidden);
+        });
+        document.addEventListener('click', function (event) {
+          if (!exportList.hidden && !event.target.closest('.menu')) showExport(false);
+        });
+        document.addEventListener('keydown', function (event) {
+          if (event.key === 'Escape' && !exportList.hidden) {
+            showExport(false);
+            exportButton.focus();
+          }
+        });
 
         function flash(button, word) {
           var was = button.textContent;
@@ -1696,11 +1789,6 @@
           keep(text, fileName);
         }
 
-        zoom.addEventListener('click', function () {
-          var actual = diagram.classList.toggle('actual');
-          zoom.setAttribute('aria-pressed', String(actual));
-          zoom.textContent = actual ? 'Fit' : 'Actual size';
-        });
 
         /* ---- the error names a line, so clicking that goes there ---- */
 

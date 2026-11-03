@@ -15,7 +15,7 @@
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve as resolvePath } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = resolvePath(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = join(root, 'dist');
@@ -175,10 +175,14 @@ function fill(text, marker, replacement) {
 
 const catalogueScript = `globalThis.reladrawExamples = ${JSON.stringify(catalogue)};`;
 
+// The pan and zoom the page that --page writes uses, so the two look at a
+// diagram the same way. It defines panZoom() for the page's script to call.
+const { PAN_ZOOM } = await import(pathToFileURL(join(dist, 'viewer.js')).href);
+
 writeFileSync(
   target,
   fill(
-    fill(page, '<!-- RELADRAW_EXAMPLES -->', catalogueScript),
+    fill(fill(page, '<!-- RELADRAW_EXAMPLES -->', catalogueScript), '<!-- RELADRAW_PANZOOM -->', PAN_ZOOM),
     '<!-- RELADRAW_BUNDLE -->',
     bundle,
   ),

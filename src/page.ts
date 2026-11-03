@@ -5,6 +5,7 @@ import { blame, parse } from './parser.js';
 import { renderTagged, themeOf } from './render.js';
 import { resolve } from './resolve.js';
 import { luminance, type Theme } from './themes.js';
+import { PAN_ZOOM } from './viewer.js';
 
 /**
  * `reladraw render --page`: one diagram in one self-contained HTML page, made
@@ -55,7 +56,9 @@ function page({ title, name, svg, tagged, findings, theme }: PageParts): string 
     findings: findings.map((finding) => ({ kind: finding.kind, message: finding.message, line: finding.line })),
   };
   // Replaced by functions, so a `$` in a title or a drawing is taken as written.
-  return PAGE.replace('{{scheme}}', () => scheme)
+  // The zoom's code goes in first, so nothing a diagram says can be taken for its marker.
+  return PAGE.replace('{{panzoom}}', () => PAN_ZOOM)
+    .replace('{{scheme}}', () => scheme)
     .replace('{{title}}', () => escapeHtml(title))
     .replace('{{heading}}', () => escapeHtml(title))
     .replace('{{colors}}', () =>
@@ -116,7 +119,15 @@ const PAGE = `<!doctype html>
   button:disabled { opacity: 0.45; cursor: default; background: transparent; }
   button[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 25%, transparent); border-color: var(--accent); }
   button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-  #scale { min-width: 3.5em; text-align: center; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 13px; }
+  .menu { position: relative; }
+  .menu-list {
+    position: absolute; right: 0; top: calc(100% + 4px); z-index: 5;
+    flex-direction: column; gap: 4px; padding: 6px;
+    background: var(--page); border: 1px solid color-mix(in srgb, var(--rule) 70%, transparent); border-radius: 6px;
+  }
+  .menu-list:not([hidden]) { display: flex; }
+  #scale .fitted { color: var(--accent); }
+  #scale { min-width: 6em; text-align: center; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 13px; }
   main { position: relative; flex: 1; display: flex; min-height: 0; }
   #view { position: relative; flex: 1; overflow: hidden; touch-action: none; cursor: grab; }
   #view.dragging { cursor: grabbing; }
@@ -160,11 +171,17 @@ const PAGE = `<!doctype html>
     <span id="scale" aria-live="polite">100%</span>
     <button id="in" type="button" title="Zoom in (+)" aria-label="Zoom in">+</button>
     <button id="fit" type="button" title="The whole diagram in view (0)">Fit</button>
-    <button id="actual" type="button" title="One pixel of the drawing to one of the screen (1)">Actual size</button>
+    <button id="actual" type="button" title="The drawing at its own scale (1)">100%</button>
     <span class="gap"></span>
     <button id="full" type="button" title="Full screen (f)">Full screen</button>
-    <button id="save-svg" type="button">Save SVG</button>
-    <button id="save-png" type="button">Save PNG</button>
+    <span class="menu">
+      <button id="export" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="export-list">Export ▾</button>
+      <span id="export-list" class="menu-list" hidden>
+        <button id="copy-svg" type="button">Copy SVG</button>
+        <button id="save-svg" type="button" title="Save the picture as an SVG file">Save SVG</button>
+        <button id="save-png" type="button" title="Save the picture as a PNG, at twice its size">Save PNG</button>
+      </span>
+    </span>
     <button id="toggle-findings" type="button" aria-controls="findings"></button>
   </div>
 </header>
@@ -188,132 +205,13 @@ const PAGE = `<!doctype html>
   var svg = stage.querySelector('svg');
   var tip = document.getElementById('tip');
   var scaleLabel = document.getElementById('scale');
-  var box = svg.viewBox.baseVal;
-  var natural = { w: box.width, h: box.height };
-
-  // The drawing is resized rather than scaled with a transform, so the
-  // browser draws it afresh at every size and it stays sharp.
-  var at = { x: 0, y: 0, s: 1 };
-  // Until the reader pans or zooms, a change of window size redraws the view
-  // the way it was asked for: as it opened, or fitted.
-  var fitted = 'open';
-  var MIN = 0.05;
-  var MAX = 20;
-
-  function apply() {
-    svg.setAttribute('width', natural.w * at.s);
-    svg.setAttribute('height', natural.h * at.s);
-    stage.style.transform = 'translate(' + at.x + 'px,' + at.y + 'px)';
-    scaleLabel.textContent = Math.round(at.s * 100) + '%';
-  }
-
-  function size() {
-    return { w: view.clientWidth, h: view.clientHeight };
-  }
-
-  function center(s) {
-    var room = size();
-    at = { s: s, x: (room.w - natural.w * s) / 2, y: (room.h - natural.h * s) / 2 };
-    apply();
-  }
-
-  function fitScale() {
-    var room = size();
-    return Math.max(MIN, Math.min((room.w - 32) / natural.w, (room.h - 32) / natural.h));
-  }
-
-  function fit() {
-    fitted = 'fit';
-    center(fitScale());
-  }
-
-  // A diagram smaller than the window opens at its own size; a larger one
-  // opens fitted.
-  function open() {
-    fitted = 'open';
-    center(Math.min(1, fitScale()));
-  }
-
-  function refit() {
-    if (fitted === 'fit') fit();
-    else if (fitted === 'open') open();
-  }
-
-  // Zoom about a point of the view, which stays where it is on screen.
-  function zoomAt(factor, px, py) {
-    var s = Math.min(MAX, Math.max(MIN, at.s * factor));
-    var k = s / at.s;
-    at = { s: s, x: px - (px - at.x) * k, y: py - (py - at.y) * k };
-    fitted = false;
-    apply();
-  }
-
-  function zoomMiddle(factor) {
-    var room = size();
-    zoomAt(factor, room.w / 2, room.h / 2);
-  }
-
-  document.getElementById('in').onclick = function () { zoomMiddle(1.25); };
-  document.getElementById('out').onclick = function () { zoomMiddle(0.8); };
-  document.getElementById('fit').onclick = fit;
-  document.getElementById('actual').onclick = function () {
-    fitted = false;
-    center(1);
-  };
-
-  view.addEventListener('wheel', function (event) {
-    event.preventDefault();
-    var rect = view.getBoundingClientRect();
-    // A pinch on a trackpad arrives as a wheel with ctrl held, in small steps.
-    var step = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
-    zoomAt(Math.exp(-step * (event.ctrlKey ? 0.01 : 0.0015)), event.clientX - rect.left, event.clientY - rect.top);
-  }, { passive: false });
-
-  // Dragging pans; two fingers pinch.
-  var pointers = new Map();
-  var pinch = null;
-  view.addEventListener('pointerdown', function (event) {
-    if (event.button !== 0) return;
-    if (event.target.closest('a')) return;
-    view.setPointerCapture(event.pointerId);
-    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    if (pointers.size === 2) {
-      var two = Array.from(pointers.values());
-      pinch = Math.hypot(two[0].x - two[1].x, two[0].y - two[1].y);
-    }
-    view.classList.add('dragging');
+{{panzoom}}
+  var zoom = panZoom(view, stage, scaleLabel, {
+    out: document.getElementById('out'),
+    in: document.getElementById('in'),
+    fit: document.getElementById('fit'),
+    actual: document.getElementById('actual'),
   });
-  view.addEventListener('pointermove', function (event) {
-    var last = pointers.get(event.pointerId);
-    if (!last) return;
-    var now = { x: event.clientX, y: event.clientY };
-    pointers.set(event.pointerId, now);
-    if (pointers.size === 2 && pinch) {
-      var two = Array.from(pointers.values());
-      var apart = Math.hypot(two[0].x - two[1].x, two[0].y - two[1].y);
-      var rect = view.getBoundingClientRect();
-      zoomAt(apart / pinch, (two[0].x + two[1].x) / 2 - rect.left, (two[0].y + two[1].y) / 2 - rect.top);
-      pinch = apart;
-      return;
-    }
-    at.x += now.x - last.x;
-    at.y += now.y - last.y;
-    fitted = false;
-    apply();
-  });
-  function release(event) {
-    pointers.delete(event.pointerId);
-    if (pointers.size < 2) pinch = null;
-    if (pointers.size === 0) view.classList.remove('dragging');
-  }
-  view.addEventListener('pointerup', release);
-  view.addEventListener('pointercancel', release);
-  view.addEventListener('dblclick', function (event) {
-    var rect = view.getBoundingClientRect();
-    zoomAt(event.shiftKey ? 0.5 : 2, event.clientX - rect.left, event.clientY - rect.top);
-  });
-
-  window.addEventListener('resize', refit);
 
   /* ---- full screen ---- */
 
@@ -348,6 +246,39 @@ const PAGE = `<!doctype html>
     setTimeout(function () { button.textContent = was; }, 1200);
   }
 
+  // Copy SVG, Save SVG and Save PNG are under one Export button, as in the
+  // playground. The list stays open after a choice, so "Copied" can be read,
+  // and closes on a click elsewhere or Escape.
+  var exportButton = document.getElementById('export');
+  var exportList = document.getElementById('export-list');
+  function showExport(open) {
+    exportList.hidden = !open;
+    exportButton.setAttribute('aria-expanded', String(open));
+  }
+  exportButton.onclick = function () { showExport(exportList.hidden); };
+  document.addEventListener('click', function (event) {
+    if (!exportList.hidden && !event.target.closest('.menu')) showExport(false);
+  });
+
+  // The clipboard API needs a secure context; a page opened from disk may
+  // not count as one, so the old selection route is the fallback.
+  var copySvg = document.getElementById('copy-svg');
+  copySvg.onclick = function () {
+    function fallback() {
+      var area = document.createElement('textarea');
+      area.value = DATA.svg;
+      document.body.appendChild(area);
+      area.select();
+      var done = false;
+      try { done = document.execCommand('copy'); } catch (e) {}
+      area.remove();
+      flash(copySvg, done ? 'Copied' : 'Blocked');
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(DATA.svg).then(function () { flash(copySvg, 'Copied'); }, fallback);
+    } else fallback();
+  };
+
   document.getElementById('save-svg').onclick = function () {
     saveBlob(new Blob([DATA.svg], { type: 'image/svg+xml' }), DATA.name + '.svg');
   };
@@ -360,9 +291,10 @@ const PAGE = `<!doctype html>
   savePng.onclick = function () {
     var image = new Image();
     image.onload = function () {
+      var box = svg.viewBox.baseVal;
       var canvas = document.createElement('canvas');
-      canvas.width = natural.w * 2;
-      canvas.height = natural.h * 2;
+      canvas.width = box.width * 2;
+      canvas.height = box.height * 2;
       canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
       canvas.toBlob(function (blob) {
         blob ? saveBlob(blob, DATA.name + '.png') : flash(savePng, 'Failed');
@@ -415,7 +347,6 @@ const PAGE = `<!doctype html>
   function showPanel(open) {
     panel.hidden = !open;
     toggle.setAttribute('aria-pressed', String(open));
-    refit();
   }
   if (count === 0) {
     toggle.textContent = 'No findings';
@@ -458,10 +389,7 @@ const PAGE = `<!doctype html>
     });
     var inside = r.l >= room.left && r.r <= room.right && r.t >= room.top && r.b <= room.bottom;
     if (inside) return;
-    at.x += (room.left + room.width / 2) - (r.l + r.r) / 2;
-    at.y += (room.top + room.height / 2) - (r.t + r.b) / 2;
-    fitted = false;
-    apply();
+    zoom.pan((room.left + room.width / 2) - (r.l + r.r) / 2, (room.top + room.height / 2) - (r.t + r.b) / 2);
   }
 
   DATA.findings.forEach(function (finding) {
@@ -486,22 +414,18 @@ const PAGE = `<!doctype html>
     list.append(item);
   });
 
-  /* ---- keys ---- */
+  /* ---- keys, beyond the zoom's own ---- */
 
   document.addEventListener('keydown', function (event) {
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.target.closest && event.target.closest('input, textarea')) return;
-    if (event.key === '+' || event.key === '=') zoomMiddle(1.25);
-    else if (event.key === '-' || event.key === '_') zoomMiddle(0.8);
-    else if (event.key === '0') fit();
-    else if (event.key === '1') { fitted = false; center(1); }
-    else if (event.key === 'f' && !full.hidden) toggleFull();
-    else if (event.key === 'Escape') unlight();
+    if (event.key === 'f' && !full.hidden) toggleFull();
+    else if (event.key === 'Escape') { showExport(false); unlight(); }
     else return;
     event.preventDefault();
   });
 
-  open();
+  zoom.show();
 })();
 </script>
 </body>

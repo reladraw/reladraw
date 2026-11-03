@@ -1394,7 +1394,7 @@ The output is a standalone SVG: every picture is drawn into it as path data, nev
 reladraw render arch.reladraw --page
 ```
 
-`--page` writes `arch.html`: one self-contained file, for opening in a browser, attaching or committing, that needs nothing running and fetches nothing. The page is in the diagram's own colors, so a dark diagram doesn't sit on a white page, and it is headed with `diagram title:`, or the file's name when there is none. Drag to pan; scroll, pinch or double-click to zoom; Fit and Actual size reset the view, and there is a full-screen button. Save SVG and Save PNG save the drawing as `render` would. The findings are listed beside it in a panel that folds away, and clicking one lights up what its line drew. A box's or a line's name shows under the pointer. Keys: `+` and `-` zoom, `0` fits, `1` is actual size, `f` is full screen.
+`--page` writes `arch.html`: one self-contained file, for opening in a browser, attaching or committing, that needs nothing running and fetches nothing. The page is in the diagram's own colors, so a dark diagram doesn't sit on a white page, and it is headed with `diagram title:`, or the file's name when there is none. Drag to pan; scroll, pinch or double-click to zoom; Fit shows the whole diagram and 100% returns it to its own scale. The zoom is always shown, with "Fit" beside it while the whole diagram is in view. There is a full-screen button. The Export menu copies the SVG, or saves it or a PNG, as `render` would draw it. The findings are listed beside it in a panel that folds away, and clicking one lights up what its line drew. A box's or a line's name shows under the pointer. Keys: `+` and `-` zoom, `0` fits, `1` is actual size, `f` is full screen.
 
 ### Formatting
 
@@ -1519,6 +1519,8 @@ Pre-1.0, so the minor number is where a breaking change goes. Every removal is r
 
 - **The agent skill opens each diagram it draws as a page in the default browser**, with `reladraw render --page` as the last step of every drawing rather than only when asked to show it. It doesn't open one when there is no display, or when the user has said not to.
 - **`reladraw install-skill`** installs the agent skill that came with your reladraw, so it teaches what your copy accepts rather than what the main branch does. It hands the work to `skills`, passing on `-g`, `-a` and the rest. The npm package now carries the skill.
+- **The page says when it is showing the whole diagram**: its zoom reads "Fit · 62%" while fitted, and just the number once you zoom or pan. The Actual size button is now 100%, which is what it always did. Save SVG and Save PNG are under an Export button, which can also copy the SVG.
+- **The playground pans and zooms as the page does**: − and +, Fit, 100%, the wheel, a pinch, a drag, a double-click, and the keys + - 0 1, with the zoom shown beside the Diagram heading. Its one Actual size button, whose label named the view you would go to rather than the one you were in, is gone. The view stays where you left it as you type. Copy SVG, Save SVG and Save PNG are now under one Export button, so the row of controls fits.
 
 **0.21.0**
 

@@ -149,9 +149,60 @@
         cursor: pointer;
       }
 
+      /* Sized for the usual names, not the longest, so the diagram's row of
+         controls fits; the open list still shows every name in full. */
+      #theme {
+        width: 22ch;
+        text-overflow: ellipsis;
+      }
+
       select:hover {
         color: var(--ink);
         border-color: var(--muted);
+      }
+
+      /* Copy SVG, Save SVG and Save PNG under one button, so the row of
+         controls fits. The list stays open after a choice, so "Copied" can be
+         read, and closes on a click elsewhere or Escape. */
+      .menu {
+        position: relative;
+      }
+
+      .menu-list {
+        position: absolute;
+        right: 0;
+        top: calc(100% + 4px);
+        z-index: 5;
+        flex-direction: column;
+        gap: 4px;
+        padding: 6px;
+        background: var(--panel);
+        border: 1px solid var(--edge);
+        border-radius: 3px;
+      }
+
+      .menu-list:not([hidden]) {
+        display: flex;
+      }
+
+      /* The zoom's controls stay together, in the page's order, when the
+         row wraps. */
+      .zoom {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      #scale {
+        min-width: 9ch;
+        text-align: center;
+        font: 12px/1 var(--mono);
+        color: var(--muted);
+        white-space: nowrap;
+      }
+
+      #scale .fitted {
+        color: var(--syn-keyword);
       }
 
       button[aria-pressed='true'] {
@@ -403,32 +454,32 @@
         font-style: normal;
       }
 
+      /* Panned and zoomed as the page that --page writes is: the stage moves
+         inside the pane, and the drawing is resized, not scaled. */
       #diagram {
+        position: relative;
         flex: 1;
         min-height: 0;
-        overflow: auto;
-        padding: 18px;
+        overflow: hidden;
+        touch-action: none;
+        cursor: grab;
         background: var(--diagram);
-        display: flex;
         transition: opacity 120ms ease;
       }
 
-      /* Centered by auto margins, not by align-items/justify-content: those
-         push a drawing taller than the pane out past the top as well as the
-         bottom, where the scrollbar cannot reach it. Auto margins center when
-         there is room and fall to zero when there is not. */
-      #diagram svg {
-        max-width: 100%;
-        height: auto;
-        margin: auto;
+      #diagram.dragging {
+        cursor: grabbing;
       }
 
-      /* Actual size: the drawing keeps its own dimensions and the pane scrolls.
-         A diagram the size of the benchmark is a thumbnail otherwise. */
-      #diagram.actual svg {
-        max-width: none;
-        flex: none;
-        margin: 0;
+      #stage {
+        position: absolute;
+        left: 0;
+        top: 0;
+        transform-origin: 0 0;
+      }
+
+      #stage svg {
+        display: block;
       }
 
       #diagram.stale {
@@ -962,19 +1013,202 @@
               Check
             </button>
             <select id="theme" aria-label="Theme" title="Writes a diagram theme: line into the source"></select>
-            <button id="zoom" type="button" aria-pressed="false">Actual size</button>
-            <button id="copy" type="button">Copy SVG</button>
-            <button id="download" type="button" title="Save the picture as an SVG file">Save SVG</button>
-            <button id="download-png" type="button" title="Save the picture as a PNG, at twice its size">Save PNG</button>
+            <span class="zoom">
+              <button id="out" type="button" title="Zoom out (-)" aria-label="Zoom out">−</button>
+              <span id="scale" aria-live="polite"></span>
+              <button id="in" type="button" title="Zoom in (+)" aria-label="Zoom in">+</button>
+              <button id="fit" type="button" title="The whole diagram in view (0)">Fit</button>
+              <button id="actual" type="button" title="The drawing at its own scale (1)">100%</button>
+            </span>
+            <span class="menu">
+              <button id="export" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="export-list">Export ▾</button>
+              <span id="export-list" class="menu-list" hidden>
+                <button id="copy" type="button">Copy SVG</button>
+                <button id="download" type="button" title="Save the picture as an SVG file">Save SVG</button>
+                <button id="download-png" type="button" title="Save the picture as a PNG, at twice its size">Save PNG</button>
+              </span>
+            </span>
           </div>
         </div>
-        <div id="diagram"></div>
+        <div id="diagram"><div id="stage"></div></div>
         <div id="findings" role="status" aria-live="polite"></div>
       </section>
     </main>
 
     <script>
 globalThis.reladrawExamples = [{"name":"architecture","about":"A home network's file sync and backups, redrawn from a draw.io diagram.","source":"// Transcribed from a draw.io diagram.\n\n// --- Styles -----------------------------------------------------------------\nstyle synced     fill: theme-primary-subtle  border: theme-primary  line: theme-primary\nstyle dim        text: (color: theme-muted)\nstyle backup     border: #d2904e  line: #d2904e\nstyle dump       fill: theme-secondary-subtle  border: theme-border  shape: document\n\n// The draw.io original draws every line as a curve.\ndefault edge  line: (path: curved)\n\n\n// --- The hub and its four machines ------------------------------------------\n// The cluster is wrapped in an invisible container so things outside it can be\n// placed against the whole cluster rather than against the hub alone. Each\n// machine's title and picture are its heading, in the top-left corner, and its\n// folder sits under them.\n\nnode cluster \"\"  shape: none\n\nnode cluster.hub \"Cloud sync\"  badge: package  style: synced\n\nnode cluster.desktop1       \"Desktop 1 / Linux\" (inside top, align: left)    above-left of cluster.hub (gap: tight)   badge: desktop\nnode cluster.desktop1.files \"shared folder / [dim]synced[/dim]\"  style: synced\n\nnode cluster.desktop2       \"Desktop 2 / Windows\" (inside top, align: left)  above-right of cluster.hub (gap: tight)  badge: desktop\nnode cluster.desktop2.files \"shared folder / [dim]synced[/dim]\"  style: synced\n\nnode cluster.laptop1        \"Laptop 1 / macOS\" (inside top, align: left)     below-left of cluster.hub (gap: tight)   badge: laptop\nnode cluster.laptop1.files  \"shared folder / [dim]synced[/dim]\"  style: synced\n\nnode cluster.laptop2        \"Laptop 2 / macOS\" (inside top, align: left)     below-right of cluster.hub (gap: tight)  badge: laptop\nnode cluster.laptop2.files  \"shared folder / [dim]synced[/dim]\"  style: synced\n\nedge cluster.desktop1.files <-> cluster.hub  style: synced  from: right  to: top\nedge cluster.desktop2.files <-> cluster.hub  style: synced  from: left   to: top\nedge cluster.laptop1.files  <-> cluster.hub  style: synced  from: right  to: bottom\nedge cluster.laptop2.files  <-> cluster.hub  style: synced  from: left   to: bottom\n\n\n// --- The database dumps -----------------------------------------------------\n// The dumps sit a wide gap left of the machines, level with the Docker cubes,\n// and the server a gap left of the dumps.\n\nnode dumps \"\"  left of cluster (gap: wide)  even with server.docker  shape: none  layout: column\nnode dumps.db1 \"db dump / (app 1)\"  style: dump\nnode dumps.db2 \"db dump / (app 2)\"  style: dump\n\nnode dumps_note \"Written by nightly cron job.\" (wrap: 30)  below dumps (gap: tight)  shape: none\n\n\n// --- The server -------------------------------------------------------------\n\nnode server         \"Home Server\" (inside top, align: left)  left of dumps  even with cluster  badge: desktop\nnode server.mirror  \"shared folder / mirror\"  style: backup  width: server.docker\nnode server.deploy  \"deploy dir\"  below server.mirror  width: server.docker\n\n// The cubes are nodes rather than ornament: two of them are where the dump\n// arrows start. The lower pair is centered under the upper three by naming two\n// targets and nothing else.\nnode server.docker  \"Docker\" (inside bottom)  below server.deploy (gap: wide)\nnode server.docker.a  icon: cube\nnode server.docker.b  right of server.docker.a (gap: tight)  icon: cube\nnode server.docker.db1  right of server.docker.b (gap: tight)  icon: cube\nnode server.docker.c  below server.docker.a and server.docker.b (gap: tight)  icon: cube\nnode server.docker.db2  below server.docker.b and server.docker.db1 (gap: tight)  icon: cube\n\nedge server.deploy -> server.docker  \"compose up\"\n\nedge server.docker.db1 -> dumps.db1  from: right  to: left\nedge server.docker.db2 -> dumps.db2  from: right  to: left\n\n// The rclone lines travel together through the channel between the two\n// left-hand machines, so the dumps arrive through the middle of the cluster\n// rather than across one. Each rises from its dump into the bundle and runs\n// level beside the other into the hub. Their texts sit one above the other,\n// where a way straight down from Desktop 1 meets each.\nguide region channel  between cluster.desktop1 and cluster.laptop1\nbundle rclone  via: through channel horizontal  order: one, two\nedge one dumps.db1 -> cluster.hub  \"rclone\" (straight down from cluster.desktop1)  from: right  to: left  via: rclone\nedge two dumps.db2 -> cluster.hub  \"rclone\" (straight down from cluster.desktop1)  from: right  to: left  via: rclone\n\nedge cluster.desktop1.files -> server.mirror  \"backup script\"  style: backup  from: left  to: right\nedge cluster.desktop1.files -> server.deploy  \"deploy script\"                 from: left  to: right\n\n\n// --- The backup drive -------------------------------------------------------\n\nnode drive          \"External HD\" (inside top, align: left)  left of server  top even with server  badge: disk  layout: column (widths: match)\nnode drive.mirror   \"shared folder / backup\"  style: backup\nnode drive.archive  \"archive\"\n\nedge server.mirror -> drive.mirror  style: backup  from: left  to: right\n\nnode drive_note \"Swapped with a second drive weekly.\" (wrap: 22)  left of drive.mirror (gap: tight)  shape: none\n"},{"name":"beside a group","about":"A node placed against several others at once.","source":"// Naming several targets places a node against the region that bounds them all.\n\nnode one    \"first\"\nnode two    \"second\"                 below one\nnode three  \"third with a longer label\"  below two\n\n// A direction clears the furthest of them. This one says nothing about its own\n// vertical position, so it centers on the region, as a lone direction does.\nnode spans  \"even with all three, and clear of the widest\" (wrap: 24)  right of one and three (gap: wide)  shape: none\n\n// An alignment uses the region as a position. \"top\" is its top edge, not its middle.\nnode tops   \"top even with the second box\" (wrap: 20)                  right of two (gap: tight)  top even with two  shape: none\n\nnode beside  \"centered on the top two\"  right of spans (gap: wide)  even with one and two\n"},{"name":"points and regions","about":"Places said in words and worked out from named things; tick Guides to see how.","source":"// Points and regions: a place said in words, worked out from named things, so\n// moving them moves it. Render with --guides to see the construction.\n\nnode gw \"Gateway\"  height: 12\n\n// A fraction of the way along the side the direction faces.\nnode users  \"Users\"   right of gw 1/4 down (gap: wide)\nnode orders \"Orders\"  right of gw 3/4 down (gap: wide)\n\n// A named point, with a text of its own: above the dot unless it says which way.\npoint split \"by path\" (below)  between gw and orders\n\n// Part against part: centers exactly 5 apart, as on a timeline.\nnode v1 \"v1\"  center 5 below gw bottom-center\nnode v2 \"v2\"  center 5 right of v1 center\nnode v3 \"v3\"  center 5 right of v2 center\n\n// Where a line straight down from one thing meets one straight right from another.\nnode tag \"latest\"  shape: none  on down from orders and right from v3\n\n// A region is drawn in front of the boxes it doesn't name and behind the ones it does.\n// Its text takes a title's words, and inside, the region makes room for it.\nregion services \"services\" (inside top, align: left)  users top-left to orders bottom-right  padding: 1\n\n// A guide does everything but draw: a rail the versions hang from, and a line\n// shown only while working.\nguide region rail  v1 top-left to v3 top-right\nguide edge gw -> users\n"},{"name":"gap sizes","about":"Tight, wide and no gap, each on its own placement; a node has none of its own.","source":"// Gaps belong to placements. Each says exactly how far, and a node has none of\n// its own.\n\nstyle plain  fill: theme-fill  border: theme-border\n\nnode left_wall  \"Left wall\"   style: plain\n\n// Different distances on each side, each on its own placement.\nnode wedge \"Tight left, wide right\"  right of left_wall (gap: tight)  style: plain\nnode right_wall \"Right wall\"  right of wedge (gap: wide)  style: plain\n\n// Two placements, two gaps: wide below, tight from the wall.\nnode stack \"Wide below the wedge\"  below wedge (gap: wide)  right of left_wall (gap: tight)  style: plain\n\n// `none` is contact, and the other placement still keeps its distance.\nnode shelf \"Flat on the stack\"  below stack (gap: none)  right of left_wall (gap: tight)  style: plain\n\nedge left_wall -> wedge  from: right  to: left\nedge wedge -> right_wall  from: right  to: left\n\n// A gap is written where the relationship is: each neighbor says how far it\n// sits from the island, and the island says nothing about them.\nnode island \"Says nothing about its neighbors\"  below shelf  style: plain\nnode east   \"Wide from the island\"    right of island (gap: wide)  style: plain\nnode west   \"Tight from the island\"   left of island (gap: tight)  style: plain\n"},{"name":"exactly as far","about":"A gap is the distance asked for, not a minimum.","source":"// A node sits exactly where its placements say: a gap is the distance asked\n// for, not a minimum.\n\nnode anchor \"anchor\"\nnode far    \"far\"   right of anchor\nnode near   \"near\"  right of far\n\nnode trailing \"one tight gap from near\"  left of near (gap: tight)  below anchor (gap: tight)  overlap: allow  shape: none\n"},{"name":"inside a container","about":"How children line up in a container wider than they are.","source":"// How a container's contents sit inside it, when the container is wider than\n// they are. A container is as wide as the wider of its title and its contents,\n// so a long title leaves spare room. Two words say two different things:\n//\n// `align-children:`, in the layout's bracket, lines the children up with each\n// other: their left edges even, their middles, or their right edges.\n// `gather-children:`, on the box, says where the group of them sits in the\n// spare room: against a side, or in the middle.\n//\n// Both default to the middle. Neither moves what the other says.\n\nstyle plain  fill: theme-fill  border: theme-border\n\n// Nothing said: the children centered on each other, in the middle of the room.\nnode ragged \"Ingestion and enrichment pipeline\"  layout: column\nnode ragged.one   \"parse\"  style: plain\nnode ragged.two   \"resolve and lay out\"  style: plain\nnode ragged.three \"draw\"  style: plain\n\n// Their left edges even, the group still in the middle.\nnode lined \"Ingestion and enrichment pipeline\"  right of ragged  layout: column (align-children: left)\nnode lined.one   \"parse\"  style: plain\nnode lined.two   \"resolve and lay out\"  style: plain\nnode lined.three \"draw\"  style: plain\n\n// The same column against the left of the room.\nnode left \"Ingestion and enrichment pipeline\"  right of lined  gather-children: left  layout: column (align-children: left)\nnode left.one   \"parse\"  style: plain\nnode left.two   \"resolve and lay out\"  style: plain\nnode left.three \"draw\"  style: plain\n\n// `widths: fill` takes the whole band, so there is no spare room left for\n// gather-children: to say anything about. Under a title this long that is\n// what `match` could not do.\nnode full \"Ingestion and enrichment pipeline\"  right of left  layout: column (widths: fill)\nnode full.one   \"parse\"  style: plain\nnode full.two   \"resolve and lay out\"  style: plain\nnode full.three \"draw\"  style: plain\n\n// Every child as wide as the widest, against the right of the room.\nnode block \"Ingestion and enrichment pipeline\"  below ragged  gather-children: right  layout: column (widths: match)\nnode block.one   \"parse\"  style: plain\nnode block.two   \"resolve and lay out\"  style: plain\nnode block.three \"draw\"  style: plain\n\n// A style may carry the layout and where the children gather.\nstyle boxed  gather-children: left  layout: column (widths: match)\n\nnode carried \"Ingestion and enrichment pipeline\"  right of block  style: boxed\nnode carried.one   \"parse\"  style: plain\nnode carried.two   \"resolve and lay out\"  style: plain\nnode carried.three \"draw\"  style: plain\n"},{"name":"shapes","about":"The outlines a node can be drawn with, and the pictures it can be drawn as.","source":"// What a node is drawn as. `shape:` is the outline it is drawn with; `icon:` is\n// a picture it is drawn as, with no box at all.\n\nstyle artifact  fill: theme-secondary-subtle  border: theme-border  shape: document\n\n// The fold is a fixed size rather than a fraction of the box, so it looks the\n// same on all three of these.\nnode narrow \"Report\"  style: artifact\nnode medium \"Nightly database dump\"        right of narrow (gap: tight)  style: artifact\nnode wide   \"A very much longer file name than either of the other two\"  right of medium (gap: tight)  style: artifact\n\n// A picture has no outline, no fill and no padding. The text goes underneath.\nnode services \"\"  below narrow  shape: none\nnode services.web    \"web\"                          icon: cube\nnode services.api    \"api\"     right of services.web (gap: tight)  icon: cube\nnode services.worker \"worker\"  right of services.api (gap: tight)  icon: cube\n\n// No text at all: a picture usually is the statement, so it gets no caption.\nnode bare1  below services  icon: cube\nnode bare2  below bare1 (gap: tight)  icon: cube\n\n// A picture body is an ordinary node, so it takes edges and sides like any\n// other. That is what it buys over a badge, which cannot be the end of an arrow.\nnode sink \"collector\"  right of bare1 and bare2 (gap: wide)\nedge bare1 -> sink  from: right  to: left\nedge bare2 -> sink  from: right  to: left\n\n// Any icon works as a body, not just the cube.\nnode store  below bare2  icon: database\nnode drive  right of store (gap: tight)  icon: disk\n\n// `(inside bottom)` puts the title under the contents, centered along that side.\n// The lower cube is centered under the upper pair by naming both of them and\n// nothing else.\nnode pool \"Worker pool\" (inside bottom)  right of store and drive (gap: wide)\nnode pool.one  icon: cube\nnode pool.two  right of pool.one (gap: tight)  icon: cube\nnode pool.three  below pool.one and pool.two (gap: tight)  icon: cube\n"},{"name":"icons","about":"The seven icons, and the ways to use one.","source":"// The seven icons, and the two ways to use one: badge: puts the picture beside\n// a node's text, and icon: draws the node as the picture, with no box.\n\n// A style can carry a badge, so every store in a diagram looks alike without\n// anyone typing the word twice.\nstyle store  fill: theme-primary-subtle  border: theme-primary  badge: database\n\n// badge: makes the picture part of the label, and is shorthand for a heading.\n// row1.disk below is the same as writing\n//   node row1.disk  heading: row1.disk.head\n//   node row1.disk.head  \"\"  shape: none\n//   node row1.disk.head.text  \"Spinning disk\" (size: normal)  shape: none\n//   node row1.disk.head.badge  icon: disk  1 right of row1.disk.head.text\nnode row1 \"\"  shape: none\nnode row1.disk     \"Spinning disk\"     badge: disk\nnode row1.desktop  \"Workstation\"       right of row1.disk (gap: tight)     badge: desktop\nnode row1.laptop   \"Portable\"          right of row1.desktop (gap: tight)  badge: laptop\n\nnode row2 \"\"  below row1 (gap: tight)  shape: none\nnode row2.package  \"Archive\"           badge: package\nnode row2.cubes    \"Service instances\" right of row2.package (gap: tight)  badge: cubes\nnode row2.db       \"Records\"           right of row2.cubes (gap: tight)    style: store\n\n// icon: the node is the picture itself, and has no text unless you give it one.\nnode row3 \"\"  below row2 (gap: tight)  shape: none\nnode row3.cube     icon: cube\nnode row3.db       icon: database    right of row3.cube (gap: tight)\nnode row3.laptop   \"Portable\"  icon: laptop  right of row3.db (gap: tight)\n\n// No text, so the node is just the badge and its padding.\nnode bare \"\"  below row3 (gap: tight)  badge: disk\n\n// A badge is two lines tall, so it shrinks and grows with the text beside it.\nnode small \"Small text / and a small badge\" (size: small)  right of bare (gap: tight)   badge: laptop\nnode large \"Large text / and a large badge\" (size: large)  right of small (gap: tight)  badge: laptop\n"},{"name":"sides and corners","about":"Nodes placed against part of another node: a side, a corner, or its text.","source":"// A placement's target may be a *part* of a node — its text, one of its four\n// sides, or one of its nine points — written as a separate word after the\n// node's name. Three direction words go with a part:\n//\n//   inside   wholly within, against that part\n//   outside  wholly beyond it\n//   on       centered on it, so a node on a corner straddles it\n//\n// `inside` and `outside` are shorthands whose expansion is derived rather than\n// listed: inside is the direction from the named part toward the box's center,\n// outside is away from it. `inside right` is `left of`, `inside top-right` is\n// `below-left of`, and nobody writes a table.\n\nstyle mark   shape: none  text: (color: theme-muted)\nstyle spacer  fill: none  border: none\nstyle link  shape: none  text: (color: #6fa8dc)\n\n// All nine points at once. The board is held open by six invisible children\n// with nothing in them, which is also the point being made: a box is sized by\n// what it *holds*, and the nine marks stamped on it are not held by anything.\nnode board \"\"  fill: theme-fill  border: theme-border\nnode board.nw \"\"  style: spacer\nnode board.n  \"\"  style: spacer  right of board.nw (gap: 10)\nnode board.ne \"\"  style: spacer  right of board.n (gap: 10)\nnode board.sw \"\"  style: spacer  below board.nw (gap: wide)\nnode board.s  \"\"  style: spacer  right of board.sw (gap: 10)  below board.n (gap: wide)\nnode board.se \"\"  style: spacer  right of board.s (gap: 10)   below board.ne (gap: wide)\n\nnode p1 \"top-left\"       inside board top-left       style: mark\nnode p2 \"top-center\"     inside board top-center     style: mark\nnode p3 \"top-right\"      inside board top-right      style: mark\nnode p4 \"left-center\"    inside board left-center    style: mark\nnode p5 \"center\"         on board center             style: mark\nnode p6 \"right-center\"   inside board right-center   style: mark\nnode p7 \"bottom-left\"    inside board bottom-left    style: mark\nnode p8 \"bottom-center\"  inside board bottom-center  style: mark\nnode p9 \"bottom-right\"   inside board bottom-right   style: mark\n\n// The case the design record names: an ordinary box with its text in the middle\n// and, centered at the bottom inside it, a small link.\nnode bob \"Bob the builder\"  below board\nnode bob.card \"\"  style: spacer\nnode bob_link \"bob.example.com\"  inside bob bottom-center  style: link  url: \"https://bob.example.com\"\n\n// The inset is a named gap on the placement, and `none` puts the node hard\n// against the edge, the same as the gap on any other placement.\nnode plate \"A wide plate to stamp on\"  right of bob (gap: wide)\nnode flush \"flush\"  inside plate top-right (gap: none)  style: mark\n\n// `on` is the thing the old dedicated overlay word could not say: the node's\n// center on the point, so it straddles the corner instead of tucking inside.\nnode dot \"A box with a dot on its corner\"  below plate (gap: wide)\nnode straddle \"*\"  on dot top-right  style: mark\n\n// A side is a segment rather than a point, so the axis it does not name is\n// left free — this sits against the right edge and centers down it. The box\n// is made wide enough that the mark clears the children.\nnode column \"A tall box\"  right of dot (gap: wide)  layout: column  width: 25\nnode column.one \"one\"\nnode column.two \"two\"\nnode column.three \"three\"\nnode column_mark \"inside right\"  inside column right  style: mark\n\n// `outside` is the same rule read the other way: wholly beyond the named\n// part, which is how a caption sits clear of one edge and no other.\nnode under \"outside bottom\"  outside column bottom  style: mark\n\n// A part target works on a picture as readily as on a box. The count is\n// bigger than the small picture, so it sits on the corner rather than inside.\nnode unit  icon: cube  right of plate\nnode tag \"x3\"  on unit bottom-right  style: mark\n\n// Saying `inside` or `on` says the overlap is meant, for that pair and nothing\n// else: anything else `flush` lands on is still reported.\nedge bob -> plate  from: right  to: left\n"},{"name":"on the parent's edge","about":"A child placed on its own container's side or corner.","source":"// A child may be placed against its parent's text, or against a side or corner\n// of its parent, with the same words used against anything else. Placed against\n// the text, it is content: the parent is the outline of its text and children,\n// and grows to hold it. Placed against a side or corner, it is put on the\n// finished box and never grows it.\n\nstyle mark  fill: #cdb96f  border: #8f7a3a  text: (color: #111111)\n\n// Four children in two rows, the title between the columns: placed right of\n// the left column and centered on its two rows, with the right column placed\n// right of the title, so the columns sit as far apart as the title needs.\nnode corners \"Deployment\" (right of corners.a (gap: 1), even with corners.a and corners.c)\nnode corners.a \"north-west\"\nnode corners.b \"north-east\"  right of corners text (gap: 1)  top even with corners.a\nnode corners.c \"south-west\"  below corners.a (gap: 1)\nnode corners.d \"south-east\"  below corners.b (gap: 1)\n\n// A title in the top-left corner over two rows, packed a unit apart.\nnode band \"Deployment\" (inside top, align: left)  right of corners (gap: wide)\nnode band.a \"north-west\"\nnode band.b \"north-east\"  right of band.a (gap: 1)\nnode band.c \"south-west\"  below band.a (gap: 1)\nnode band.d \"south-east\"  below band.b (gap: 1)\n\n// A title may be placed against the box's own children, with the words any\n// child uses: here in the top-right corner, beside north-west, with no row of\n// its own.\nnode ranged \"Deployment\" (right even with ranged.d, top even with ranged.a)  right of band (gap: wide)\nnode ranged.a \"north-west\"\nnode ranged.c \"south-west\"  below ranged.a (gap: 1)\nnode ranged.d \"south-east\"  right of ranged.c (gap: 1)\n\n// A list is a container: three marks in a column in the order written, beside\n// the title and the ordinary contents, its top even with the title's.\nnode column \"Payments service\" (inside top, align: left)  below corners (gap: wide)\nnode column.api \"api\"  below column text (gap: 1)  left even with column text\nnode column.db \"database\"  below column.api (gap: 1)  left even with column.api\nnode column.marks \"\"  right of column text and column.api and column.db (gap: 1)  top even with column text  shape: none  layout: column (gap: 1)\nnode column.marks.one \"one\"      style: mark\nnode column.marks.two \"two\"      style: mark\nnode column.marks.three \"three\"  style: mark\n\n// A child above the title, and the contents below it, their left sides even\n// with the title's.\nnode paused \"Queue worker\"  right of column (gap: wide)\nnode paused.flag \"PAUSED\"  above paused text (gap: 1)  style: mark\nnode paused.jobs \"jobs\"  below paused text (gap: 1)  left even with paused text\nnode paused.retry \"retries\"  below paused.jobs (gap: 1)  left even with paused.jobs\n\n// Beside one child, even with it.\nnode server \"Server\" (inside top, align: left)  right of paused (gap: wide)\nnode server.web \"web\"\nnode server.db \"database\"  below server.web (gap: 1)  left even with server.web\nnode server.cache \"cache\"  below server.db (gap: 1)  left even with server.db\nnode server.hot \"hot\"  right of server.db (gap: 1)  style: mark\n\n// Beside the text and joined to it, so the text and the mark are centered in\n// the box together.\nnode fresh \"Release notes\"  below column (gap: wide)\nnode fresh.tag \"new\"  right of fresh text (gap: 1)  join-with: fresh text  style: mark\n\n// On a corner rather than inside it: centered on the point, so it straddles\n// the edge. It takes no room in the box, so the box is stated wider, with the\n// text along its left, to keep the text clear of it.\nnode dot \"Inbox\" (inside left)  right of fresh (gap: wide)  width: 7\nnode dot.count \"3\"  on dot top-right  style: mark\n\n// Beyond the frame. The note is placed on the router's finished box and is no\n// part of its size, so the switch is placed right of the note, not the router.\nnode router \"Router\"  right of dot (gap: wide)\nnode router.note \"note\"  outside router right (gap: tight)  style: mark\nnode switch \"Switch\"  right of router.note\n\n// An edge between two children. Its text takes no room of its own, so the\n// gap is stated wide enough to hold it.\nnode pipe \"Pipeline\" (inside top, align: left)  below fresh (gap: wide)\nnode pipe.src \"source\"\nnode pipe.out \"artifact\"  15 right of pipe.src\nedge pipe.src -> pipe.out  \"build and test\"  from: right  to: left\n"},{"name":"room for labels","about":"A line's text takes no room of its own; the gap it sits in is stated.","source":"// An edge's text takes no room of its own: the gap it sits in is the one the\n// placements say, so a text that needs room is given it by stating the gap.\n\nstyle plain  fill: theme-fill  border: theme-border\n\n// A `normal` gap is sized for two nodes to breathe, not to hold a word, so a\n// word that needs more is given it by stating the gap, here in units.\nnode parser   \"Parser\"                           style: plain\nnode resolver \"Resolver\"  right of parser (gap: 10)  style: plain\nedge parser -> resolver  \"statements\"  from: right  to: left\n\n// Going downward the text is only a line deep, and it hangs out either side.\n//\n// Written with `<-`, which draws the same picture as `writer -> disk`. It just\n// puts the node the line is about first. `from:` is still the first name\n// written, so it names Disk's side.\nnode writer \"Writer\"  right of resolver (gap: wide)  style: plain\nnode disk   \"Disk\"    below writer (gap: wide)      style: plain\nedge disk <- writer  \"flushed to disk\"  from: top  to: bottom\n\n// Corner to corner, the text sits at the middle of the line, so the gap is\n// stated on both axes.\nnode high \"High\"  right of writer (gap: wide)  style: plain\nnode low  \"Low\"   below high (gap: wide)  right of high (gap: wide)  style: plain\nedge high -> low  \"diagonal\"\n\n\n// --- What the brackets after a text say ------------------------------------\n// A container's title says which side it sits against, and `align` where along\n// that side, which also ranges its lines against each other.\n\nstyle dim  text: (color: theme-muted)\n\nnode shelf \"Shelf\" (inside bottom, align: right)  below disk (gap: wide)  left even with parser  style: plain\nnode shelf.one \"first\"   style: plain\nnode shelf.two \"second\"  below shelf.one (gap: tight)  style: plain\n\n// A box is usually the size of its own text. A picture beside the text is two\n// lines tall, and lining the picture's top or bottom up with the text's puts\n// the text at the top or bottom of the box. Joined to the text, the picture and\n// the text are centered in the box together.\nnode tall \"Top\"     right of shelf (gap: wide)  style: plain\nnode tall.disk  icon: disk  1 right of tall text  top even with tall text  join-with: tall text\nnode deep \"Bottom\"  below tall (gap: tight)  style: plain\nnode deep.disk  icon: disk  1 right of deep text  bottom even with deep text  join-with: deep text\n\n// `size` and `wrap` are properties of the text too. The wrap is a count of\n// characters, not a distance: it says how much fits on a line and nothing\n// about where anything sits.\nnode aside \"A quiet remark that folds itself, with [dim]one word[/dim] quieter than the rest.\" (size: small, wrap: 28)  right of tall (gap: wide)  shape: none\n\n// A literal bracket is written \\[, since [ opens markup.\nnode literal \"sizes \\[small, normal, large]\"  below aside (gap: tight)  shape: none\n\n// An edge's text takes the same brackets. A size may be a multiple of normal,\n// such as 1.2, or pixels, such as 12px, as well as a name.\nedge tall -> aside  \"carried\" (color: theme-muted, size: 12px)  from: right  to: left\n\n// `reads: up` or `down` turns a text a quarter turn, so a title on a left or\n// right side takes a column one line wide rather than one word wide.\nnode rack \"Rack\" (inside left, reads: up)  right of aside (gap: wide)  top even with tall  layout: column (gap: tight)  style: plain\nnode rack.web \"web\"  style: plain\nnode rack.db  \"db\"   style: plain\n"},{"name":"side by side","about":"Lines between the same two sides fan out as copies, and copies never cross.","source":"// Several lines between the same two sides are copies of one line, and fan out\n// side by side instead of lying on top of each other. Copies never cross.\n\nstyle plain  fill: theme-fill  border: theme-border\n\n// A reciprocal pair around a corner. Each copy is shifted to the left of the\n// way it travels, so the order reverses between the two ends: further left\n// along Gateway's bottom is further down Queue's left.\nnode gateway \"Gateway\"  style: plain\nnode queue   \"Queue\"    5 below gateway  22 right of gateway  style: plain\nedge gateway -> queue  \"publishes\" (at: 2/3)  from: bottom  to: left  line: (path: square, corners: rounded)\nedge queue -> gateway  \"receives\" (at: 2/3)   from: left    to: bottom  line: (path: square, corners: rounded)\n\n// Two lines facing each other, where the order runs the same way at both ends.\nnode client \"Client\"  below queue (gap: wide)  left even with gateway  style: plain\nnode server \"Server\"  10 right of client  style: plain\nedge client -> server  \"request\" (below edge)   from: right  to: left\nedge server -> client  \"response\" (above edge)  from: left   to: right\n\n// Five copies down a vertical run, spread evenly along the two sides. The\n// texts read along their lines, since level they would be wider than a lane.\nnode fan  \"Fan of five, spread wide\"  below client (gap: wide)  left even with gateway  style: plain\nnode hub  \"Hub of the same five\"     below fan (gap: wide)  style: plain\nedge fan -> hub  \"one\" (reads: along)    from: bottom  to: top\nedge fan -> hub  \"two\" (reads: along)    from: bottom  to: top\nedge fan -> hub  \"three\" (reads: along)  from: bottom  to: top\nedge fan -> hub  \"four\" (reads: along)   from: bottom  to: top\nedge fan -> hub  \"five\" (reads: along)   from: bottom  to: top\n\n// Two lines pointing the same way. Nothing tells them apart, so the order they\n// are written in decides. Swap these two lines and the texts swap lanes.\nnode left_wall  \"Producer\"  below hub (gap: wide)  left even with gateway  style: plain\nnode right_wall \"Consumer\"  9 right of left_wall  style: plain\nedge left_wall -> right_wall  \"bulk\" (below edge)     from: right  to: left\nedge left_wall -> right_wall  \"control\" (above edge)  from: right  to: left\n\n// Sharing one side only doesn't make copies. The far ends differ, and their\n// order along the side decides which end is which.\nnode spoke \"Spoke\"  below left_wall (gap: 16)  left even with gateway  style: plain\nnode up    \"Up\"     above spoke  right of spoke (gap: wide)  style: plain\nnode down  \"Down\"   below spoke  right of spoke (gap: wide)  style: plain\nedge spoke -> up    from: right  to: left\nedge spoke -> down  from: right  to: left\n\n// Five copies need sides long enough to hold them. Nothing grows a box to\n// make room, so these two are given the height; at their own height the ends\n// would crowd together, drawn and reported.\nnode narrow \"Narrow\"  below down (gap: wide)  left even with gateway  height: 10  style: plain\nnode also   \"Also\"    9 right of narrow  height: 10  style: plain\nedge narrow -> also  \"first\"   from: right  to: left\nedge narrow -> also  \"second\"  from: right  to: left\nedge narrow -> also  \"third\"   from: right  to: left\nedge narrow -> also  \"fourth\"  from: right  to: left\nedge narrow -> also  \"fifth\"   from: right  to: left\n"},{"name":"parallel edges","about":"Several lines between the same two nodes: copies, or a bundle that bows them apart.","source":"// Several edges between the same two nodes. Left alone they are copies, and\n// run side by side a gap apart, straight from box to box, each end landing\n// where its own line meets the border. A bundle between the two nodes says\n// how they share the way instead: layout: fan bows them apart to a gap at\n// the middle while their ends stay close on a small side.\n\nstyle plain  fill: theme-fill  border: theme-border\n\n// Level nodes, fanned: the ends crowd one side, and the lines bow out so each\n// text has a lane of its own. The middle line stays straight.\nnode a \"A\"  style: plain\nnode b \"B\"  10 right of a  style: plain\nbundle ab  a -> b  layout: fan\nedge a -> b  \"first\"   via: ab\nedge a -> b  \"second\"  via: ab\nedge a -> b  \"third\"   via: ab\n\n// A perfect diagonal, where the single line would leave through the corner\n// exactly. The two copies run either side of it, one end on each of the\n// sides meeting there, written in either direction. Copies a gap apart have\n// no room for a text between them, so each text sits beside its own line.\nnode low  \"Low\"   16 below a  left of a  style: plain\nnode high \"High\"  above low (gap: wide)  right of low (gap: wide)  style: plain\nedge low -> high   \"up\" (left of edge)\nedge high -> low   \"down\" (right of edge)\n\n// A near diagonal, where the lines cross the border on one side, close to\n// the corner.\nnode near \"Near\"  below low (gap: wide)  style: plain\nnode far  \"Far\"   right of near (gap: wide)  above near (gap: wide)  style: plain\nedge near -> far  \"one\" (left of edge)\nedge near -> far  \"two\" (right of edge)\n\n// A lone edge has nothing to share the way with, and runs center to center.\nnode solo  \"Solo\"   below near (gap: wide)  style: plain\nnode alone \"Alone\"  12 right of solo  style: plain\nedge solo -> alone  \"by itself\"\n\n// Naming a side takes an edge out of the copies. Two ends on top, curved, so\n// the line leaves upward and comes back down rather than running along the\n// tops.\nnode named \"Named\"  below solo (gap: wide)  style: plain\nnode other \"Other\"  11 right of named  style: plain\nedge named -> other  \"free\"\nedge named -> other  \"free too\"\nedge named -> other  \"top\"  from: top  to: top  line: (path: curved)\n\n// More than the side can hold at a gap. The ends squeeze together and each\n// line bows out to its lane at the middle.\nnode many \"Many\"  below named (gap: wide)  style: plain\nnode one  \"One\"   10 right of many  style: plain\nbundle five  many -> one  layout: fan\nedge many -> one  \"first\"   via: five\nedge many -> one  \"second\"  via: five\nedge many -> one  \"third\"   via: five\nedge many -> one  \"fourth\"  via: five\nedge many -> one  \"fifth\"   via: five\n\n// The same on an upright way, where the texts sit side by side, so the gap\n// the bundle states is a whole text wide.\nnode top    \"Top\"     below many (gap: wide)  style: plain\nnode bottom \"Bottom\"  below top (gap: wide)  style: plain\nbundle abc  top -> bottom  layout: fan (gap: 5)\nedge top -> bottom  \"alpha\"  via: abc\nedge top -> bottom  \"beta\"   via: abc\nedge top -> bottom  \"gamma\"  via: abc\n"},{"name":"bundles","about":"Lines that travel together, each in its own lane, in one order across.","source":"// Lines that travel together. A bundle is a path with no ends of its own;\n// each line joins it with `via:` and runs its whole length in a lane of its\n// own. The lanes are in one order across the bundle, so the lines cross\n// before they reach it or not at all, never inside it.\n\nstyle plain  fill: theme-fill  border: theme-border\n\n// Three lines through one gap. They are written c's first, so in written\n// order c's line would take the top lane and cross the other two on the way\n// in and on the way out; the bundle's order puts them as the columns are.\nnode from \"Senders\"  layout: column  style: plain\nnode from.a \"a\"\nnode from.b \"b\"\nnode from.c \"c\"\nnode upper \"Upper\"  right of from (gap: wide)  6 above from  style: plain\nnode lower \"Lower\"  below upper (gap: wide)  style: plain\nregion slot  between upper and lower\nnode to \"Receivers\"  right of upper (gap: wide)  6 below upper  layout: column  style: plain\nnode to.x \"x\"\nnode to.y \"y\"\nnode to.z \"z\"\nbundle trunk  via: through slot horizontal  order: one, two, three\nedge three from.c -> to.z  via: trunk\nedge one from.a -> to.x  via: trunk\nedge two from.b -> to.y  via: trunk\n\n// A bus: a collapsed bundle is one thick line, drawn once. Each host taps it\n// with a line straight down or up to it, and one line rides it end to end.\nnode h1 \"Host 1\"  below from (gap: wide)  left even with from  style: plain\nnode h2 \"Host 2\"  right of h1 (gap: wide)  style: plain\nnode h3 \"Host 3\"  right of h2 (gap: wide)  style: plain\nnode s1 \"Store 1\"  6 below h1  style: plain\nnode s2 \"Store 2\"  6 below h2  style: plain\nnode s3 \"Store 3\"  6 below h3  style: plain\npoint west  between h1 and s1\npoint east  between h3 and s3\nbundle bus  via: west, east  layout: collapsed  line: (thickness: thick)  from-mark: dot  to-mark: dot\nedge h2 -- bus  straight down  to-mark: dot\nedge s2 -- bus  straight up  to-mark: dot\nedge h1 -> s3  from: bottom  to: top  via: bus  line: (path: square)\n\n// One line from each child, which stays true as children are added. They\n// meet at one point on Queue, so its side never runs out of room for them.\nnode pool \"Workers\"  below s1 (gap: wide)  layout: column  style: plain\nnode pool.w1 \"w1\"\nnode pool.w2 \"w2\"\nnode pool.w3 \"w3\"\nnode queue \"Queue\"  right of pool (gap: wide)  style: plain\nedge each child of pool -> queue  to: left-center\n"},{"name":"through a gap","about":"Lines sent through the point between two named nodes with via:.","source":"// `between a and b` is a point: the middle of the space between two things.\n// A line passes it with `via:`, and before and after goes wherever its ends\n// take it. `at 1/3` moves the point a third of the way across, measured from\n// the first thing named.\n\ndefault edge  line: (path: curved)\n\nstyle channel  fill: theme-page  border: theme-fill\n\n// North and South are apart vertically, so the point lies in the gap between\n// them. Both lines start to the left, pass through the gap and leave for East.\n// Two lines through one point would pinch there, so each passes its own:\n// a third and two thirds of the way down.\n\nnode west   \"West\"\nnode lower  \"Lower\"   below west (gap: tight)\nnode north  \"North\"   right of west (gap: wide)   style: channel\nnode south  \"South\"   below north (gap: wide)     style: channel\nnode east   \"East\"    right of north and south (gap: wide)  even with west\n\nedge west  -> east  \"over\"   from: right  to: left  via: between north and south at 1/3\nedge lower -> east  \"under\"  from: right  to: left  via: between north and south at 2/3\n\n// Port and Starboard are apart horizontally, so here the line runs down the\n// gap instead. This line names no sides, so it leaves Bow's bottom, the side\n// facing Stern.\n\nnode bow        \"Bow\"        below lower (gap: wide)\nnode port       \"Port\"       below bow (gap: wide)       style: channel\nnode starboard  \"Starboard\"  right of port (gap: wide)  style: channel\nnode stern      \"Stern\"      below port (gap: wide)\n\nedge bow -> stern  \"down\"  via: between port and starboard at 1/3\n\n// The same gap travelled the other way, through its own point.\n\nedge stern -> bow  from: top  to: bottom  via: between port and starboard at 2/3\n\n// High and Low sit diagonally, so the space between them is the rectangle\n// between their nearest corners, and the point is its middle: under High and\n// over Low at once.\n\nnode far   \"Far\"    below stern (gap: wide)\nnode high  \"High\"   right of far (gap: wide)  style: channel\nnode low   \"Low\"    below-right of high (gap: wide)  style: channel\nnode near  \"Near\"   right of low (gap: wide)  even with high\n\nedge far -> near  \"threaded\"  via: between high and low\n"},{"name":"saying where a line goes","about":"Sides and points a line passes, named with via:.","source":"// Saying where a line passes, with via:. A side is a run along it, just\n// outside, from the end nearer the line; a point is one spot the line goes\n// through. Between the stops it names, a curved line takes one sweep.\n\ndefault edge  line: (path: curved)\n\n// A row, with the line sent underneath it: a run under each end box.\nnode parser \"Parser\"\nnode resolver \"Resolver\"  right of parser\nnode renderer \"Renderer\"  right of resolver\n\nedge parser -> renderer  \"underneath\"  from: left  to: right  via: parser bottom, renderer bottom\n\n// Two runs on opposite sides: down A's left, then down B's right, so the line\n// crosses over in the gap between.\nnode a \"A\"  below parser  (gap: 14)\nnode b \"B\"  below a  (gap: wide)\n\nedge a -> b  \"an S\"  from: top  to: bottom  via: a left, b right\n\n// Out of the top and round the left.\nnode p \"P\"  right of a  (gap: 18)\nnode q \"Q\"  below p  (gap: normal)\n\nedge p -> q  \"the left\"  from: top  to: top  via: p left (gap: normal)\n\n// One point, over the middle of Peak's top: the line rises to it and falls.\n// A curve swings in below the point on either side of it, so the point is\n// a normal gap up, clear of Peak's corners, rather than the default tight.\nnode t1 \"T1\"  below b  (gap: 16)\nnode t2 \"T2\"  right of t1  (gap: 13)\nnode peak \"Peak\"  right of t1  left of t2  above t1  (gap: tight)\n\nedge t1 -> t2  \"over a point\"  from: right  to: left  via: peak top-center (gap: normal)\n\n// Runs under both ends, so the line stays low past Peak2 between them.\nnode u1 \"U1\"  right of t2  (gap: wide)\nnode u2 \"U2\"  right of u1  (gap: 13)\nnode peak2 \"Peak2\"  right of u1  left of u2  above u1  (gap: tight)\n\nedge u1 -> u2  \"under both\"  from: left  to: right  via: u1 bottom, u2 bottom\n\n// An end naming no side leaves from the one facing the other box.\nnode x \"X\"  below t1  (gap: 12)\nnode z \"Z\"  right of x\nnode y \"Y\"  right of z\n\nedge x -> y  \"no sides named\"  via: z bottom\n\n// The point between two boxes: the line threads the gap between LN and LM.\nnode la \"LA\"  right of y  (gap: wide)\nnode ln \"LN\"  below la  (gap: wide)\nnode lm \"LM\"  right of ln  (gap: wide)\nnode lb \"LB\"  below lm  (gap: wide)\n\nedge la -> lb  \"between\"  from: bottom  to: top  via: between ln and lm\n"},{"name":"outside the nodes","about":"Lines that run past the nodes, and the page grows to hold them.","source":"// Lines that leave the area the nodes cover. The page grows to hold them, on\n// every side a line goes past.\n\ndefault edge  line: (path: square, corners: rounded)\n\nstyle plain  fill: theme-fill  border: theme-border\n\nnode a \"A\"                            style: plain\nnode b \"B\"  right of a  (gap: wide)  width: 5  style: plain\nnode c \"C\"  right of b                style: plain\n\nnode d \"D\"  below a and c             style: plain\n\n// A long arch over everything, with the text at the top of it.\nedge a -> b  \"over the top\"  from: top  to: top\n\n// The same shape across a narrow gap.\nedge b -> c  from: top  to: top\n\n// Out the left and back into the left, so the loop hangs off the left edge.\nedge d -> a  \"round the side\" (at: 1/4)  from: left  to: left\n\n// Out the right and round into the bottom, under the bottom row.\nedge c -> d  \"under\" (at: 2/3)  from: right  to: bottom\n"},{"name":"going round boxes","about":"Every routing bug reported so far, each line now stating its course.","source":"// Every routing bug reported so far, one row each, the line's text saying\n// where it was reported. Each of these was drawn through a box, on top of\n// another line, or hard against a box's edge. Lines no longer find their own\n// way round anything: each row states its course, and the line follows it.\n\ndefault edge  line: (path: square, corners: rounded)\n\n// Hacker News, 2026-09-26: ends facing away across a row. The line ran\n// straight through the middle node, its text sitting on it. It now runs along\n// the tops of the two end boxes, so it passes over the row.\nnode parser \"Parser\"\nnode resolver \"Resolver\"  right of parser\nnode renderer \"Renderer\"  right of resolver\nedge parser -> renderer  \"Hacker News\"  from: left  to: right  via: parser top, renderer top\n\n// GitHub issue #2: stacked, sides at right angles. The line came straight up\n// through the lower node. Leaving the bottom and arriving at the left, it now\n// steps out and comes round.\nnode p \"P\"  below parser  (gap: wide)\nnode q \"Q\"  below p  (gap: 7)\nedge p -> q  \"issue #2\" (at: 5/8, left of edge)  from: bottom  to: left\n\n// GitHub issue #2: both ends on the same side, one node behind the other. The\n// line went straight through the node behind.\nnode r \"R\"  right of p  (gap: wide)\nnode s \"S\"  right of r  (gap: 19)\nedge r -> s  \"issue #2, same side\" (above edge)  from: left  to: left  via: r top\n\nnode v \"V\"  right of s  (gap: wide)\nnode w \"W\"  below v\nedge v -> w  from: bottom  to: bottom  via: w right\n\n// A fan of three, 2026-09-27. The lines to the top and bottom nodes ran level\n// with the middle one, straight through it, out past the column and back.\n// All three now leave from one point and fan out, written as one statement so\n// the stretch they share is said rather than happened on.\nnode a \"A\"  below q  (gap: wide)\nnode c \"C\"  right of a  (gap: wide)\nnode b \"B\"  above c  (gap: 1)\nnode d \"D\"  below c  (gap: 1)\nedge a -> b, c, d  \"fan\" (at: start, above edge)  from: right-center  to: left\n\n// The Cache case, 2026-09-27. The curved line dipped through Cache, while the\n// same line drawn square happened to clear it. It now runs under Cache.\nnode web \"Web\"  right of c  (gap: wide)\nnode api \"API\"  right of web\nnode db \"Postgres\"  right of api\nnode cache \"Cache\"  below api\nedge web -> db  \"cache case\"  from: bottom  to: bottom  via: cache bottom\n\n// A line back round the side of a row, 2026-09-26: it crossed the node it\n// was going round.\nnode e \"E\"  below a  (gap: 22)\nnode f \"F\"  right of e  (gap: 16)\nnode g \"G\"  below e and f\nedge g -> e  \"round the side\" (at: 1/4)  from: left  to: left\n\n// Two lines into one box, 2026-09-27. The longer one's curve swung across\n// the other's twice. The longer one now comes in from above.\nnode x1 \"X\"  right of z  (gap: wide)\nnode a1 \"A\"  below x1\nnode b1 \"B\"  right of a1  (gap: normal)  below a1  (gap: tight)\nedge a1 -> b1  from: right  to: left\nedge x1 -> b1  from: right  to: top\n\n// No side named, with a box in the way. The line used to be straight from\n// center to center, through whatever lay between.\nnode x \"X\"  right of f  (gap: wide)\nnode y \"Y\"  right of x\nnode z \"Z\"  right of y\nedge x -> z  \"no sides named\" (above edge)  via: y top\n\n// Three lines told the same thing, 2026-09-27. They were drawn on one path,\n// so the three read as one line with three arrowheads. Copies of one line now\n// fan out, nested so that none crosses another.\nnode ra \"A\"  below g  (gap: wide)  width: 6\nnode rb \"B\"  right of ra  width: 6\nedge ra -> rb  from: bottom  to: bottom\nedge ra -> rb  from: bottom  to: bottom\nedge ra -> rb  from: bottom  to: bottom\n\n// Through a named gap, 2026-09-28. The line ran about 2px from Lower, then\n// came into Lowest's right side down Lowest's own edge. It now passes the\n// point between the two and comes into the side from outside.\nnode west \"West\"  right of rb  (gap: wide)\nnode lower \"Lower\"  below west  (gap: tight)\nnode lowest \"Lowest\"  below lower  (gap: normal)\nedge west -> lowest  \"between\"  from: left  to: right  via: between lower and lowest\n"},{"name":"line styles","about":"Straight, square and curved lines, dashes, and how crossings are drawn.","source":"// Everything about how a line is drawn, in its bracket: line: (…). A line is\n// straight unless the bracket says otherwise. A shape is the rule for joining\n// what the file fixed — where the line leaves and which way it heads, where it\n// arrives, and any sides it passes.\n\n// Out of A's top and into B's left, three ways.\nnode a1 \"A\"\nnode b1 \"B\"  right of a1  above a1  (gap: wide)\nedge a1 -> b1  \"curved\"  from: top  to: left  line: (path: curved)\n\nnode a2 \"A\"  right of a1  (gap: 18)\nnode b2 \"B\"  right of a2  above a2  (gap: wide)\nedge a2 -> b2  \"square\"  from: top  to: left  line: (path: square)\n\nnode a3 \"A\"  right of a2  (gap: 18)\nnode b3 \"B\"  right of a3  above a3  (gap: wide)\nedge a3 -> b3  \"straight\"  from: top  to: left  line: (path: straight)\n\n// Rounded corners, and a square line naming no sides: across first, then down.\nnode c1 \"C\"  below a1  (gap: 8)\nnode d1 \"D\"  right of c1  below c1  (gap: wide)\nedge c1 -> d1  \"rounded\"  from: bottom  to: left  line: (path: square, corners: rounded)\n\nnode c2 \"C\"  right of c1  (gap: 18)\nnode d2 \"D\"  right of c2  below c2  (gap: wide)\nedge c2 -> d2  \"no sides\" (at: 1/5, right of edge)  line: (path: square)\n\n// A stop: the line runs along Middle's bottom. Square turns where its shape\n// says; straight joins the stop's two ends to its own with straight pieces.\n// Both run a normal gap under Middle, twice the default, to leave the text room.\nnode p1 \"P\"  below c1  (gap: 18)\nnode q1 \"Q\"  right of p1  (gap: 18)\nnode m1 \"Middle\"  right of p1  left of q1  even with p1\nedge p1 -> q1  \"square\"  from: right  to: left  via: m1 bottom (gap: normal)  line: (path: square)\n\nnode p2 \"P\"  below p1  (gap: 8)\nnode q2 \"Q\"  right of p2  (gap: 18)\nnode m2 \"Middle\"  right of p2  left of q2  even with p2\nedge p2 -> q2  \"straight\"  from: right  to: left  via: m2 bottom (gap: normal)  line: (path: straight, corners: rounded)\n\n// Patterns and thicknesses.\nnode f1 \"F\"  below p2  (gap: 8)\nnode g1 \"G\"  right of f1  (gap: 18)\nedge f1 -> g1  \"dashed\"  line: (pattern: dashed)\nnode f2 \"F\"  below f1  (gap: normal)\nnode g2 \"G\"  right of f2  (gap: 18)\nedge f2 -> g2  \"dotted\"  line: (pattern: dotted)\nnode f3 \"F\"  below f2  (gap: normal)\nnode g3 \"G\"  right of f3  (gap: 18)\nedge f3 -> g3  \"dash-dot\"  line: (pattern: dash-dot)\nnode h1 \"H\"  right of g1  (gap: 12)\nnode k1 \"K\"  right of h1  (gap: 18)\nedge h1 -> k1  \"thin\"  line: (thickness: thin)\nnode h2 \"H\"  below h1  (gap: normal)\nnode k2 \"K\"  right of h2  (gap: 18)\nedge h2 -> k2  \"thick\"  line: (thickness: thick, color: #d2904e)\nnode h3 \"H\"  below h2  (gap: normal)\nnode k3 \"K\"  right of h3  (gap: 18)\nedge h3 -> k3  \"4px, dashed\"  line: (thickness: 4px, pattern: dashed)\n\n// Crossings: the later line jumps the earlier one.\nnode w \"W\"  below f3  (gap: 12)\nnode e \"E\"  right of w  (gap: 35)\nnode n1 \"N1\"  below g3  (gap: 8)\nnode n2 \"N2\"  right of n1  (gap: 2.5)\nnode n3 \"N3\"  right of n2  (gap: 2.5)\nnode s1 \"S1\"  below n1  (gap: 13)\nnode s2 \"S2\"  right of s1  (gap: 2.5)\nnode s3 \"S3\"  right of s2  (gap: 2.5)\nedge w -> e\nedge n1 -> s1  \"arc\"  line: (crossing: arc)\nedge n2 -> s2  \"square\"  line: (crossing: square)\nedge n3 -> s3  \"gap\"  line: (crossing: gap)\n"},{"name":"texts on lines","about":"Where a line's text sits: the middle, a fraction along, beside, or a gap from an end.","source":"// Texts on lines. With nothing said a text sits at the middle of its line,\n// on it, and several spread evenly. Its bracket says where else: a fraction\n// along the line, along one named leg or along its longest level piece, a gap from either end, where a way\n// straight out from a box meets the line, a gap off a box, or beside the\n// line on a stated side. The line is drawn first and never moves for a text.\n\nstyle plain  fill: theme-fill  border: theme-border\n\n// Near each end, clear of the arrowhead, above the line; one in the middle.\nnode customer \"Customer\"  style: plain\nnode order \"Order\"  right of customer (gap: 20)  style: plain\nedge customer -> order  \"1\" (at: start, above edge)  \"places\"  \"0..*\" (at: end, above edge)\n\n// On a named leg, level with a box: the text goes where a way straight right\n// from Confirm meets the climb into Broker, then right of it.\nnode accept \"Accept order\"  below customer (gap: wide)  style: plain\nnode broker \"Broker\"  right of accept (gap: 12)  style: plain\nnode confirm \"Confirm\"  below accept (gap: tight)  left of accept (gap: wide)  style: plain\nedge accept -> broker  \"publish message\" (on: climb, straight right from confirm, right of edge)\n     from: bottom  to: bottom  line: (corners: rounded)\n     via: 7 below accept bottom, 7 below broker bottom, leg climb\n\n// Resting on a box: the text's bottom a gap above Service, left of the\n// line coming down into it.\nnode service \"Service\"  below confirm (gap: 16)  style: plain\nnode queue \"Queue\"  right of service (gap: 10)  6 above service  style: plain\nedge queue -> service  \"ack\" (above service, on the line, left of edge)  from: left  to: top  line: (path: square)\n\n// Which way a text reads: turned up beside a tall line, and along a slope.\nnode top \"Top\"  right of queue (gap: wide)  style: plain\nnode bottom \"Bottom\"  below top (gap: 10)  style: plain\nedge top -> bottom  \"ten units\" (left of edge, reads: up)\nnode low \"Low\"  right of top (gap: wide)  8 below top  style: plain\nnode high \"High\"  right of low (gap: 12)  above low (gap: 4)  style: plain\nedge low -> high  \"climbing\" (reads: along)\n\n// On the longest level piece: the middle of this line would land by the\n// corner, where the text would stand off in open space.\nnode ask \"Ask\"  below service (gap: 12)  style: plain\nnode answer \"Answer\"  below ask (gap: tight)  right of ask (gap: 10)  style: plain\nedge answer -> ask  \"retry\" (on: longest level)  from: left  to: left  line: (path: square, corners: rounded)\n"},{"name":"line ends","about":"Arrowheads, dots, diamonds and bars at either end of a line, or none.","source":"// What can be drawn at each end of a line. The arrow is a mark, a line, a mark:\n// a word or a glyph at either end of one or two dashes, either end left off.\n\nstyle label  text: (color: theme-muted)\n\nnode plain   \"plain\"\nnode plain2  \"a -- b\"      right of plain (gap: wide)  style: label\nedge plain -- plain2\n\nnode arrows  \"arrows\"      below plain\nnode arrows2 \"a <-> b\"     right of arrows (gap: wide)  style: label\nedge arrows <-> arrows2\n\nnode uml     \"inherits\"    below arrows\nnode uml2    \"a --|> b\"    right of uml (gap: wide)  style: label\nedge uml --|> uml2\n\nnode whole   \"composed\"    below uml\nnode whole2  \"a diamond--> b\"  right of whole (gap: wide)  style: label\nedge whole diamond--> whole2\n\nnode part    \"aggregates\"  below whole\nnode part2   \"a odiamond-- b\"  right of part (gap: wide)  style: label\nedge part odiamond-- part2\n\nnode dots    \"dots\"        below part\nnode dots2   \"a *--o b\"    right of dots (gap: wide)  style: label\nedge dots *--o dots2\n\nnode bars    \"bars\"        below dots\nnode bars2   \"a |--| b\"    right of bars (gap: wide)  style: label\nedge bars |--| bars2\n\n// A style can carry marks too. It fills only the ends the arrow leaves blank,\n// so here the arrow's own head stays and the style adds a dot at the start.\nstyle tracked  from-mark: dot  to-mark: oarrow\nnode styled  \"styled\"      below bars\nnode styled2 \"a --> b, with a style\"  right of styled (gap: wide)  style: label\nedge styled --> styled2  style: tracked\n"}];
+</script>
+    <script>
+
+function panZoom(view, stage, label, buttons) {
+  var MIN = 0.05;
+  var MAX = 20;
+  var svg = null;
+  var natural = { w: 1, h: 1 };
+  // The drawing is resized rather than scaled with a transform, so the
+  // browser draws it afresh at every size and it stays sharp.
+  var at = { x: 0, y: 0, s: 1 };
+  // Until the reader pans or zooms, a change of size redraws the view the way
+  // it was asked for: as it opened, or fitted.
+  var fitted = 'open';
+
+  function apply() {
+    if (!svg) {
+      label.textContent = '';
+      return;
+    }
+    svg.setAttribute('width', natural.w * at.s);
+    svg.setAttribute('height', natural.h * at.s);
+    stage.style.transform = 'translate(' + at.x + 'px,' + at.y + 'px)';
+    // The zoom always shows. Fitted, it says so too, since 62% alone doesn't
+    // say whether that is the whole diagram or a zoom that happens to be 62%.
+    // A large diagram opens fitted; a small one opens at 100%, not fitted.
+    var isFit = fitted === 'fit' || (fitted === 'open' && at.s < 1);
+    label.innerHTML = (isFit ? '<span class="fitted">Fit</span> · ' : '') + Math.round(at.s * 100) + '%';
+  }
+
+  function size() {
+    return { w: view.clientWidth, h: view.clientHeight };
+  }
+
+  function center(s) {
+    var room = size();
+    at = { s: s, x: (room.w - natural.w * s) / 2, y: (room.h - natural.h * s) / 2 };
+    apply();
+  }
+
+  function fitScale() {
+    var room = size();
+    return Math.max(MIN, Math.min((room.w - 32) / natural.w, (room.h - 32) / natural.h));
+  }
+
+  function fit() {
+    fitted = 'fit';
+    center(fitScale());
+  }
+
+  function actual() {
+    fitted = false;
+    center(1);
+  }
+
+  // A diagram smaller than the view opens at its own size; a larger one
+  // opens fitted.
+  function open() {
+    fitted = 'open';
+    center(Math.min(1, fitScale()));
+  }
+
+  function refit() {
+    if (!svg) return;
+    if (fitted === 'fit') fit();
+    else if (fitted === 'open') open();
+    else apply();
+  }
+
+  // Zoom about a point of the view, which stays where it is on screen.
+  function zoomAt(factor, px, py) {
+    if (!svg) return;
+    var s = Math.min(MAX, Math.max(MIN, at.s * factor));
+    var k = s / at.s;
+    at = { s: s, x: px - (px - at.x) * k, y: py - (py - at.y) * k };
+    fitted = false;
+    apply();
+  }
+
+  function zoomMiddle(factor) {
+    var room = size();
+    zoomAt(factor, room.w / 2, room.h / 2);
+  }
+
+  function pan(dx, dy) {
+    at.x += dx;
+    at.y += dy;
+    fitted = false;
+    apply();
+  }
+
+  // A new drawing in the stage. The view stays as the reader left it: fitted
+  // stays fitted to the new drawing, and a zoom keeps its scale and place.
+  function show() {
+    svg = stage.querySelector('svg');
+    if (!svg) return apply();
+    var box = svg.viewBox.baseVal;
+    natural = box && box.width ? { w: box.width, h: box.height } : { w: parseFloat(svg.getAttribute('width')) || 1, h: parseFloat(svg.getAttribute('height')) || 1 };
+    refit();
+  }
+
+  if (buttons.out) buttons.out.onclick = function () { zoomMiddle(0.8); };
+  if (buttons.in) buttons.in.onclick = function () { zoomMiddle(1.25); };
+  if (buttons.fit) buttons.fit.onclick = fit;
+  if (buttons.actual) buttons.actual.onclick = actual;
+
+  view.addEventListener('wheel', function (event) {
+    event.preventDefault();
+    var rect = view.getBoundingClientRect();
+    // A pinch on a trackpad arrives as a wheel with ctrl held, in small steps.
+    var step = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
+    zoomAt(Math.exp(-step * (event.ctrlKey ? 0.01 : 0.0015)), event.clientX - rect.left, event.clientY - rect.top);
+  }, { passive: false });
+
+  // Dragging pans; two fingers pinch.
+  var pointers = new Map();
+  var pinch = null;
+  view.addEventListener('pointerdown', function (event) {
+    if (event.button !== 0) return;
+    if (event.target.closest('a')) return;
+    view.setPointerCapture(event.pointerId);
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pointers.size === 2) {
+      var two = Array.from(pointers.values());
+      pinch = Math.hypot(two[0].x - two[1].x, two[0].y - two[1].y);
+    }
+    view.classList.add('dragging');
+  });
+  view.addEventListener('pointermove', function (event) {
+    var last = pointers.get(event.pointerId);
+    if (!last) return;
+    var now = { x: event.clientX, y: event.clientY };
+    pointers.set(event.pointerId, now);
+    if (pointers.size === 2 && pinch) {
+      var two = Array.from(pointers.values());
+      var apart = Math.hypot(two[0].x - two[1].x, two[0].y - two[1].y);
+      var rect = view.getBoundingClientRect();
+      zoomAt(apart / pinch, (two[0].x + two[1].x) / 2 - rect.left, (two[0].y + two[1].y) / 2 - rect.top);
+      pinch = apart;
+      return;
+    }
+    pan(now.x - last.x, now.y - last.y);
+  });
+  function release(event) {
+    pointers.delete(event.pointerId);
+    if (pointers.size < 2) pinch = null;
+    if (pointers.size === 0) view.classList.remove('dragging');
+  }
+  view.addEventListener('pointerup', release);
+  view.addEventListener('pointercancel', release);
+  view.addEventListener('dblclick', function (event) {
+    var rect = view.getBoundingClientRect();
+    zoomAt(event.shiftKey ? 0.5 : 2, event.clientX - rect.left, event.clientY - rect.top);
+  });
+
+  // The view's own size, not the window's: a dragged divider changes it too.
+  new ResizeObserver(refit).observe(view);
+
+  document.addEventListener('keydown', function (event) {
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.target.closest && event.target.closest('input, textarea, select, [contenteditable]')) return;
+    if (event.key === '+' || event.key === '=') zoomMiddle(1.25);
+    else if (event.key === '-' || event.key === '_') zoomMiddle(0.8);
+    else if (event.key === '0') fit();
+    else if (event.key === '1') actual();
+    else return;
+    event.preventDefault();
+  });
+
+  return { show: show, open: open, fit: fit, pan: pan };
+}
+
 </script>
     <script>
 (function () {
@@ -16934,7 +17168,14 @@ globalThis.reladraw = { compile, draw, SourceError, highlightLine, THEMES, THEME
         var preview = document.getElementById('preview');
         var about = document.getElementById('about');
         var choose = document.getElementById('choose');
-        var zoom = document.getElementById('zoom');
+        var scale = document.getElementById('scale');
+        var stage = document.getElementById('stage');
+        var zoom = panZoom(diagram, stage, scale, {
+          out: document.getElementById('out'),
+          in: document.getElementById('in'),
+          fit: document.getElementById('fit'),
+          actual: document.getElementById('actual'),
+        });
         var theme = document.getElementById('theme');
         var copy = document.getElementById('copy');
         var download = document.getElementById('download');
@@ -17198,8 +17439,9 @@ globalThis.reladraw = { compile, draw, SourceError, highlightLine, THEMES, THEME
           }
           cost = performance.now() - started;
           drawn = svg;
-          diagram.innerHTML = svg;
+          stage.innerHTML = svg;
           diagram.style.background = pageColor(svg);
+          zoom.show();
           theme.value = themeOf(source.value) || reladraw.DEFAULT_THEME;
           show(null);
         }
@@ -17339,6 +17581,9 @@ globalThis.reladraw = { compile, draw, SourceError, highlightLine, THEMES, THEME
         function load(text, name) {
           source.value = text;
           current = name;
+          // A different diagram opens as a fresh page would, not at the
+          // last one's zoom.
+          zoom.open();
           draw();
           stow();
         }
@@ -17441,6 +17686,25 @@ globalThis.reladraw = { compile, draw, SourceError, highlightLine, THEMES, THEME
         });
 
         /* ---- getting the drawing out ---- */
+
+        var exportButton = document.getElementById('export');
+        var exportList = document.getElementById('export-list');
+        function showExport(open) {
+          exportList.hidden = !open;
+          exportButton.setAttribute('aria-expanded', String(open));
+        }
+        exportButton.addEventListener('click', function () {
+          showExport(exportList.hidden);
+        });
+        document.addEventListener('click', function (event) {
+          if (!exportList.hidden && !event.target.closest('.menu')) showExport(false);
+        });
+        document.addEventListener('keydown', function (event) {
+          if (event.key === 'Escape' && !exportList.hidden) {
+            showExport(false);
+            exportButton.focus();
+          }
+        });
 
         function flash(button, word) {
           var was = button.textContent;
@@ -17618,11 +17882,6 @@ globalThis.reladraw = { compile, draw, SourceError, highlightLine, THEMES, THEME
           keep(text, fileName);
         }
 
-        zoom.addEventListener('click', function () {
-          var actual = diagram.classList.toggle('actual');
-          zoom.setAttribute('aria-pressed', String(actual));
-          zoom.textContent = actual ? 'Fit' : 'Actual size';
-        });
 
         /* ---- the error names a line, so clicking that goes there ---- */
 
