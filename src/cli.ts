@@ -46,9 +46,9 @@ const USAGE = `reladraw — draw a diagram from stated placement
               its extension replaced by .svg. Use - for standard output.
   --page      render writes a page for looking at the diagram instead: one
               HTML file in the diagram's colors, headed with its title, that
-              pans, zooms, goes full screen, saves the SVG or a PNG, lists the
-              findings and names what is under the pointer. Defaults to the
-              input path with .html.
+              pans, zooms, goes full screen, saves itself, its source, the SVG
+              or a PNG, lists the findings and names what is under the
+              pointer. Defaults to the input path with .html.
   --theme     render in this theme, whatever the file's \`diagram theme:\`
               says. One of ${THEME_NAMES.join(', ')}.
   --guides    draw the guides: everything written with \`guide\` in front,
@@ -221,7 +221,7 @@ async function main(argv: string[]): Promise<number> {
   let drawn: { text: string; findings: Finding[] };
   try {
     if (page) {
-      const made = drawPage(source, basename(input).replace(/\.[^.]+$/, ''), options);
+      const made = drawPage(source, basename(input), options);
       drawn = { text: made.html, findings: made.findings };
     } else {
       const made = draw(source, options);

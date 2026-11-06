@@ -1196,7 +1196,7 @@ The output is a standalone SVG: every picture is drawn into it as path data, nev
 reladraw render arch.reladraw --page
 ```
 
-`--page` writes `arch.html`: one self-contained file, for opening in a browser, attaching or committing, that needs nothing running and fetches nothing. The page is in the diagram's own colors, so a dark diagram doesn't sit on a white page, and it is headed with `diagram title:`, or the file's name when there is none. Drag to pan; scroll, pinch or double-click to zoom; Fit shows the whole diagram and 100% returns it to its own scale. The zoom is always shown, with "Fit" beside it while the whole diagram is in view. There is a full-screen button. The Export menu copies the SVG, or saves it or a PNG, as `render` would draw it. The findings are listed beside it in a panel that folds away, and clicking one lights up what its line drew. A box's or a line's name shows under the pointer. Keys: `+` and `-` zoom, `0` fits, `1` is actual size, `f` is full screen.
+`--page` writes `arch.html`: one self-contained file, for opening in a browser, attaching or committing, that needs nothing running and fetches nothing. The page is in the diagram's own colors, so a dark diagram doesn't sit on a white page, and it is headed with `diagram title:`, or the file's name when there is none. Under the title it says which file it was drawn from and when, such as "drawn from arch.reladraw, 2026-11-05 14:32": the page is a snapshot of the file, and is behind it once the file is edited, until it is rendered again. Drag to pan; scroll, pinch or double-click to zoom; Fit shows the whole diagram and 100% returns it to its own scale. The zoom is always shown, with "Fit" beside it while the whole diagram is in view. There is a full-screen button. The Save menu saves the page itself, as it was written rather than at its current zoom; the `.reladraw` source it was drawn from; or the picture as an SVG or a PNG, as `render` would draw it; or copies the SVG. Each is named after the source file: `arch.html`, `arch.reladraw`, `arch.svg`, `arch.png`. In Chrome and Edge it asks where to save; other browsers put the file with their downloads. The findings are listed beside it in a panel that folds away, and clicking one lights up what its line drew. A box's or a line's name shows under the pointer. Keys: `+` and `-` zoom, `0` fits, `1` is actual size, `f` is full screen.
 
 ### Formatting
 
@@ -1316,6 +1316,11 @@ Designed and absent from the code.
 ## Changelog
 
 Pre-1.0, so the minor number is where a breaking change goes. Every removal is refused by name with the replacement quoted, rather than dropped in silence: an older file stops with an error saying what to write instead.
+
+**Unreleased**
+
+- **The page can save its own source, and itself.** A page made with `render --page` now carries the `.reladraw` file it was drawn from, so whoever is handed the page can get the source back. Its Export menu is now a Save menu: This page, .reladraw source, SVG, PNG and Copy SVG, and in Chrome and Edge each save asks where the file goes. Under its title the page says which file it was drawn from and when, so you can tell whether it is behind the file.
+- **The agent skill keeps throwaway diagrams out of your project.** A diagram drawn only to show you something now goes in a folder outside the project, such as `~/.cache/reladraw/`, and a project's own diagram gets its page there too. While fixing findings it runs `reladraw check`, so no stray SVG is left beside the source.
 
 **0.22.1**
 

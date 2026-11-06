@@ -10,19 +10,32 @@ import { PAN_ZOOM } from './viewer.js';
 /**
  * `reladraw render --page`: one diagram in one self-contained HTML page, made
  * for looking at rather than embedding. The page is the diagram's own colors,
- * headed with its title, and it pans, zooms, goes full screen, saves the SVG
- * or a PNG, lists the findings, and names a box under the pointer. It needs
- * nothing running and fetches nothing, so it can be attached, mailed or
- * committed. `name` is the file's name, the title when the file states none.
+ * headed with its title, and it pans, zooms, goes full screen, saves itself,
+ * its source, the SVG or a PNG, lists the findings, and names a box under the
+ * pointer. It needs nothing running and fetches nothing, so it can be
+ * attached, mailed or committed. `file` is the source file's name, such as
+ * `flow.reladraw`; without its extension it is the title when the file states
+ * none, and the name everything saved from the page is given. The page is a
+ * snapshot of the file at `at`, and says so under its title.
  */
-export function drawPage(source: string, name: string, options: DrawOptions = {}): { html: string; findings: Finding[] } {
+export function drawPage(
+  source: string,
+  file: string,
+  options: DrawOptions = {},
+  at: Date = new Date(),
+): { html: string; findings: Finding[] } {
+  const name = file.replace(/\.[^.]+$/, '') || file;
+  const drawn = `drawn from ${file}, ${stamp(at)}`;
   const run = (text: string) => {
     const layout = resolve(parse(text), options);
     const { svg, tagged } = renderTagged(layout, options);
     const found =
       options.checks === false ? [] : findings(layout, options.checks ? options.checks(fileChecks(layout)) : fileChecks(layout));
     const title = layout.diagram['title'] ?? name;
-    return { html: page({ title, name, svg, tagged, findings: found, theme: themeOf(layout, options) }), findings: found };
+    return {
+      html: page({ title, name, drawn, source, svg, tagged, findings: found, theme: themeOf(layout, options) }),
+      findings: found,
+    };
   };
   try {
     return run(source);
@@ -35,6 +48,10 @@ interface PageParts {
   title: string;
   /** What a saved file is called, before its extension. */
   name: string;
+  /** The line under the title saying which file the page was drawn from, and when. */
+  drawn: string;
+  /** The `.reladraw` text the page was drawn from, which Save gives back. */
+  source: string;
   /** The SVG as `render` writes it, which is what Save SVG and Save PNG save. */
   svg: string;
   /** The same drawing with each thing grouped and named, which is what is shown. */
@@ -43,7 +60,13 @@ interface PageParts {
   theme: Theme;
 }
 
-function page({ title, name, svg, tagged, findings, theme }: PageParts): string {
+/** A local time as `2026-11-05 14:32`, which sorts and reads the same everywhere. */
+function stamp(at: Date): string {
+  const two = (n: number) => String(n).padStart(2, '0');
+  return `${at.getFullYear()}-${two(at.getMonth() + 1)}-${two(at.getDate())} ${two(at.getHours())}:${two(at.getMinutes())}`;
+}
+
+function page({ title, name, drawn, source, svg, tagged, findings, theme }: PageParts): string {
   const hex = (color: string) => /^#[0-9a-f]{6}$/i.test(color);
   // The browser's own controls (scroll bars, focus rings) follow the page, so
   // a dark diagram doesn't get a light one's. A color written by hand in a
@@ -53,6 +76,7 @@ function page({ title, name, svg, tagged, findings, theme }: PageParts): string 
   const data = {
     svg,
     name,
+    source,
     findings: findings.map((finding) => ({ kind: finding.kind, message: finding.message, line: finding.line })),
   };
   // Replaced by functions, so a `$` in a title or a drawing is taken as written.
@@ -61,6 +85,7 @@ function page({ title, name, svg, tagged, findings, theme }: PageParts): string 
     .replace('{{scheme}}', () => scheme)
     .replace('{{title}}', () => escapeHtml(title))
     .replace('{{heading}}', () => escapeHtml(title))
+    .replace('{{drawn}}', () => escapeHtml(drawn))
     .replace('{{colors}}', () =>
       [
         `--page: ${theme.background};`,
@@ -76,7 +101,8 @@ function page({ title, name, svg, tagged, findings, theme }: PageParts): string 
 }
 
 function escapeHtml(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  // `{` too, so a title or file name can't be taken for a later marker.
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/\{/g, '&#123;');
 }
 
 /** JSON that can sit inside a `<script>` without ending it. */
@@ -107,7 +133,10 @@ const PAGE = `<!doctype html>
     padding: 10px 16px;
     border-bottom: 1px solid color-mix(in srgb, var(--rule) 45%, transparent);
   }
-  h1 { flex: 1 1 16rem; margin: 0; font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
+  .heading { flex: 1 1 16rem; min-width: 0; }
+  h1 { margin: 0; font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
+  .drawn { margin: 0; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+  .menu-list hr { width: 100%; margin: 2px 0; border: 0; border-top: 1px solid color-mix(in srgb, var(--rule) 45%, transparent); }
   .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
   .tools .gap { width: 8px; }
   button {
@@ -165,7 +194,10 @@ const PAGE = `<!doctype html>
 </head>
 <body>
 <header>
-  <h1>{{heading}}</h1>
+  <div class="heading">
+    <h1>{{heading}}</h1>
+    <p class="drawn">{{drawn}}</p>
+  </div>
   <div class="tools">
     <button id="out" type="button" title="Zoom out (-)" aria-label="Zoom out">−</button>
     <span id="scale" aria-live="polite">100%</span>
@@ -175,11 +207,14 @@ const PAGE = `<!doctype html>
     <span class="gap"></span>
     <button id="full" type="button" title="Full screen (f)">Full screen</button>
     <span class="menu">
-      <button id="export" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="export-list">Export ▾</button>
-      <span id="export-list" class="menu-list" hidden>
-        <button id="copy-svg" type="button">Copy SVG</button>
-        <button id="save-svg" type="button" title="Save the picture as an SVG file">Save SVG</button>
-        <button id="save-png" type="button" title="Save the picture as a PNG, at twice its size">Save PNG</button>
+      <button id="save" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="save-list">Save ▾</button>
+      <span id="save-list" class="menu-list" hidden>
+        <button id="save-page" type="button" title="Save this page as one HTML file, to keep or send">This page</button>
+        <button id="save-source" type="button" title="Save the .reladraw file this page was drawn from">.reladraw source</button>
+        <hr>
+        <button id="save-svg" type="button" title="Save the picture as an SVG file">SVG</button>
+        <button id="save-png" type="button" title="Save the picture as a PNG, at twice its size">PNG</button>
+        <button id="copy-svg" type="button" title="Copy the picture's SVG to the clipboard">Copy SVG</button>
       </span>
     </span>
     <button id="toggle-findings" type="button" aria-controls="findings"></button>
@@ -199,6 +234,9 @@ const PAGE = `<!doctype html>
 </main>
 <script>
 (function () {
+  // The page as written, taken before anything below changes it, so This
+  // page saves what reladraw wrote rather than the current zoom and highlights.
+  var written = '<!doctype html>\\n' + document.documentElement.outerHTML + '\\n';
   var DATA = {{data}};
   var view = document.getElementById('view');
   var stage = document.getElementById('stage');
@@ -246,19 +284,67 @@ const PAGE = `<!doctype html>
     setTimeout(function () { button.textContent = was; }, 1200);
   }
 
-  // Copy SVG, Save SVG and Save PNG are under one Export button, as in the
-  // playground. The list stays open after a choice, so "Copied" can be read,
-  // and closes on a click elsewhere or Escape.
-  var exportButton = document.getElementById('export');
-  var exportList = document.getElementById('export-list');
-  function showExport(open) {
-    exportList.hidden = !open;
-    exportButton.setAttribute('aria-expanded', String(open));
+  // Chrome and Edge ask where to save and under what name, as the
+  // playground's Save… does; elsewhere the file goes where the browser puts
+  // downloads. The dialog opens before the file is made, because it must
+  // open while the click still counts and a PNG takes a moment to draw.
+  // \`make\` gives a promise of the blob.
+  function saveFile(button, name, description, type, make) {
+    function download() {
+      make().then(function (blob) { saveBlob(blob, name); }, function () { flash(button, 'Failed'); });
+    }
+    if (!window.showSaveFilePicker) return download();
+    var accept = {};
+    accept[type] = [name.slice(name.lastIndexOf('.'))];
+    // A page can't start the dialog in its own folder; the \`id\` makes it
+    // start in the folder last saved to from any reladraw page instead.
+    window.showSaveFilePicker({ id: 'reladraw-page', suggestedName: name, types: [{ description: description, accept: accept }] }).then(
+      function (handle) {
+        return make().then(function (blob) {
+          return handle.createWritable().then(function (out) {
+            return out.write(blob).then(function () { return out.close(); });
+          });
+        }).then(function () { flash(button, 'Saved'); }, function () { flash(button, 'Failed'); });
+      },
+      function (e) {
+        if (e && e.name === 'AbortError') return;
+        // Refused outright, as inside a cross-origin frame.
+        download();
+      },
+    );
   }
-  exportButton.onclick = function () { showExport(exportList.hidden); };
+
+  function ready(blob) {
+    return Promise.resolve(blob);
+  }
+
+  // Every way out of the page is under one Save button: the page, its
+  // source, and the picture. The list stays open after a choice, so "Copied"
+  // can be read, and closes on a click elsewhere or Escape.
+  var saveButton = document.getElementById('save');
+  var saveList = document.getElementById('save-list');
+  function showSave(open) {
+    saveList.hidden = !open;
+    saveButton.setAttribute('aria-expanded', String(open));
+  }
+  saveButton.onclick = function () { showSave(saveList.hidden); };
   document.addEventListener('click', function (event) {
-    if (!exportList.hidden && !event.target.closest('.menu')) showExport(false);
+    if (!saveList.hidden && !event.target.closest('.menu')) showSave(false);
   });
+
+  var savePage = document.getElementById('save-page');
+  savePage.onclick = function () {
+    saveFile(savePage, DATA.name + '.html', 'Web page', 'text/html', function () {
+      return ready(new Blob([written], { type: 'text/html' }));
+    });
+  };
+
+  var saveSource = document.getElementById('save-source');
+  saveSource.onclick = function () {
+    saveFile(saveSource, DATA.name + '.reladraw', 'reladraw source', 'text/plain', function () {
+      return ready(new Blob([DATA.source], { type: 'text/plain' }));
+    });
+  };
 
   // The clipboard API needs a secure context; a page opened from disk may
   // not count as one, so the old selection route is the fallback.
@@ -279,8 +365,11 @@ const PAGE = `<!doctype html>
     } else fallback();
   };
 
-  document.getElementById('save-svg').onclick = function () {
-    saveBlob(new Blob([DATA.svg], { type: 'image/svg+xml' }), DATA.name + '.svg');
+  var saveSvg = document.getElementById('save-svg');
+  saveSvg.onclick = function () {
+    saveFile(saveSvg, DATA.name + '.svg', 'SVG image', 'image/svg+xml', function () {
+      return ready(new Blob([DATA.svg], { type: 'image/svg+xml' }));
+    });
   };
 
   // The browser draws the SVG onto a canvas with the fonts the page shows it
@@ -288,20 +377,23 @@ const PAGE = `<!doctype html>
   // rather than a blob one, which some browsers count as foreign and refuse
   // to let the canvas be read back.
   var savePng = document.getElementById('save-png');
+  function drawPng() {
+    return new Promise(function (done, fail) {
+      var image = new Image();
+      image.onload = function () {
+        var box = svg.viewBox.baseVal;
+        var canvas = document.createElement('canvas');
+        canvas.width = box.width * 2;
+        canvas.height = box.height * 2;
+        canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(function (blob) { blob ? done(blob) : fail(); }, 'image/png');
+      };
+      image.onerror = fail;
+      image.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(DATA.svg);
+    });
+  }
   savePng.onclick = function () {
-    var image = new Image();
-    image.onload = function () {
-      var box = svg.viewBox.baseVal;
-      var canvas = document.createElement('canvas');
-      canvas.width = box.width * 2;
-      canvas.height = box.height * 2;
-      canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
-      canvas.toBlob(function (blob) {
-        blob ? saveBlob(blob, DATA.name + '.png') : flash(savePng, 'Failed');
-      }, 'image/png');
-    };
-    image.onerror = function () { flash(savePng, 'Failed'); };
-    image.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(DATA.svg);
+    saveFile(savePng, DATA.name + '.png', 'PNG image', 'image/png', drawPng);
   };
 
   /* ---- a thing's name under the pointer ---- */
@@ -420,7 +512,7 @@ const PAGE = `<!doctype html>
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.target.closest && event.target.closest('input, textarea')) return;
     if (event.key === 'f' && !full.hidden) toggleFull();
-    else if (event.key === 'Escape') { showExport(false); unlight(); }
+    else if (event.key === 'Escape') { showSave(false); unlight(); }
     else return;
     event.preventDefault();
   });

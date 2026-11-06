@@ -29,8 +29,8 @@ If `reladraw` isn't installed, `npx reladraw` works without installing, and `npm
 
 ## The loop
 
-1. Write a `.reladraw` file.
-2. `reladraw render diagram.reladraw -o diagram.svg`. (`-o -` writes to stdout; the default is the input path with `.svg`.)
+1. Write a `.reladraw` file. Where it goes depends on what it is for. A diagram that belongs to the project, one the user asked to keep or that a README or document will show, goes where they say, or beside what it describes. A diagram drawn only to show the user something, such as an explanation or a sketch of a change, goes in a folder of its own outside the project, such as `~/.cache/reladraw/` or the system's temporary folder, named after what it shows, so the project isn't littered. Nothing is lost if that folder is cleared: the page in step 7 carries its source and saves it.
+2. `reladraw check diagram.reladraw`. It prints errors and findings and writes nothing.
 3. If it fails, the **error** names the line and what to write instead. Fix and re-run.
 4. If it succeeds, read the **findings** it printed. Each is one line saying what may not read as meant, where, and how much:
 
@@ -39,9 +39,9 @@ diagram.reladraw:12: warning(text-overlap): text "statements" covers the top-lef
 diagram.reladraw:9: warning(edge-node-overlap): line api -> db crosses node cache, in and out of its top
 ```
 
-5. Fix each finding in the source, by placing something differently or saying where a line goes, and re-run until there are none. `reladraw check diagram.reladraw` prints the findings without writing the SVG.
+5. Fix each finding in the source, by placing something differently or saying where a line goes, and re-run until there are none.
 6. `reladraw format diagram.reladraw` before handing the file over. It lines statements up in columns and evens out spacing, by the project's `.reladraw-format` if there is one, and changes nothing about what the file draws. A file you wrote then reads like one the user's project already has.
-7. Finish by showing the user the picture. Give the diagram a title with `diagram  title: "…"`, which heads the page, then run `reladraw render diagram.reladraw --page`. It writes `diagram.html`, a page in the diagram's own colors that pans, zooms, goes full screen and saves an SVG or PNG. Open it in the default browser: `xdg-open diagram.html` on Linux, `open diagram.html` on macOS, `start diagram.html` on Windows. Show the page rather than the bare SVG, and don't build a page of your own around it. Open it once per diagram; after later edits, render the page again and tell the user to reload it. Don't open it when there is no display to open it on, as in a remote or headless session, or when the user has said not to; give them the page's path instead.
+7. Finish by showing the user the picture. Give the diagram a title with `diagram  title: "…"`, which heads the page, then run `reladraw render diagram.reladraw --page`. It writes `diagram.html` beside the source, a page in the diagram's own colors that pans, zooms, goes full screen, and saves itself, its source, an SVG or a PNG. For a diagram kept in the project, put the page in the outside folder of step 1 instead, with `-o ~/.cache/reladraw/diagram.html`, so it isn't committed by mistake. Write an SVG only when something will use it, such as a README picture: `reladraw render diagram.reladraw` writes `diagram.svg` beside the source. Open the page in the default browser: `xdg-open diagram.html` on Linux, `open diagram.html` on macOS, `start diagram.html` on Windows. Show the page rather than the bare SVG, and don't build a page of your own around it. Open it once per diagram; after later edits, render the page again and tell the user to reload it. Don't open it when there is no display to open it on, as in a remote or headless session, or when the user has said not to; give them the page's path instead.
 
 A file with no errors and no findings has nothing on top of anything. That is still not the same as a good picture: re-read your source to confirm the arrangement says what you meant, and for a large diagram tell the user you have checked the findings but not seen the render.
 
