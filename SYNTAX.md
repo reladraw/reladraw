@@ -1320,6 +1320,7 @@ Pre-1.0, so the minor number is where a breaking change goes. Every removal is r
 **Unreleased**
 
 - **`reladraw format` keeps to `wrap-at` once the columns are lined up.** A statement's length used to be measured on its own, before it was lined up with its neighbors, so a short one like `node  api  "API"  layout: column` stayed on one line and was then padded out by a long neighbor's name to nearly twice the width. It is now measured as printed and breaks like any other long statement; `clause-per-line-at` is measured the same way.
+- **Output sent to another program is no longer cut off.** `reladraw format -` and `reladraw render -o -` stopped after the first 64 KB when their output went into a pipe rather than a file, and still reported success, so an editor formatting a large diagram could replace it with a shortened copy. All of it now comes through.
 
 **0.22.0**
 

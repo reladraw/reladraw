@@ -410,10 +410,16 @@ function nearestSettings(
   return result;
 }
 
+// The exit code is set, not exited with: process.exit ends the process at
+// once, and a write to a pipe that hasn't drained yet is lost, which cut
+// `format -` and `render -o -` off at 64 KB. Node exits on its own once the
+// output is written. `./dev.sh pipe` checks it.
 main(process.argv.slice(2)).then(
-  (code) => process.exit(code),
+  (code) => {
+    process.exitCode = code;
+  },
   (error: unknown) => {
     process.stderr.write(`reladraw: ${error instanceof Error ? error.message : String(error)}\n`);
-    process.exit(1);
+    process.exitCode = 1;
   },
 );

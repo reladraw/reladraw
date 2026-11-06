@@ -91,6 +91,9 @@ Commands:
                                  itself refuses a result that draws differently,
                                  so a clean run means no example's picture moved.
                                  Prints where the copies are, to read them.
+  pipe                           Check that output past 64 KB survives a pipe:
+                                 format - and render -o - on a large generated
+                                 diagram, piped and written to a file, must match.
   snippets [file.md ...]        Parse every reladraw snippet in the hand-written
                                  docs and name the ones the parser now refuses.
                                  Defaults to README.md, SYNTAX.md, CONTRIBUTING.md,
@@ -646,6 +649,41 @@ case "$cmd" in
     out="$(node dist/cli.js format "$dir"/*.reladraw 2>&1)" || { echo "$out" | grep -v '^formatted '; exit 1; }
     node dist/cli.js format --check "$dir"/*.reladraw || exit 1
     echo "$(ls "$dir"/*.reladraw | wc -l | tr -d ' ') examples formatted, a second pass changes nothing: $dir"
+    ;;
+  pipe)
+    # A pipe holds 64 KB at a time; output past that used to be lost when the
+    # CLI ended with process.exit before the write had drained. So each command
+    # that prints its result is run on a diagram whose output is well past
+    # 64 KB, once into a pipe and once into a file, and the two must match.
+    [ -f dist/cli.js ] || compile
+    dir="$(mktemp -d "${TMPDIR:-/tmp}/reladraw-pipe.XXXXXX")"
+    big="$dir/big.reladraw"
+    {
+      echo 'node  n1  "Node 1 with a fairly long label"'
+      for i in $(seq 2 1500); do echo "node  n$i  \"Node $i with a fairly long label\"  below n$((i - 1))"; done
+    } > "$big"
+    small="$dir/render.reladraw"
+    head -n 400 "$big" > "$small"
+    failed=0
+    # Each run reads its own copy of the input: the first would use it up.
+    pipe_check() {
+      local name="$1" input="$2"; shift 2
+      "$@" < "$input" > "$dir/$name.file"
+      "$@" < "$input" | cat > "$dir/$name.piped"
+      local want got
+      want="$(wc -c < "$dir/$name.file" | tr -d ' ')"
+      got="$(wc -c < "$dir/$name.piped" | tr -d ' ')"
+      if [ "$want" -lt 70000 ]; then
+        echo "  ??    $name: only $want bytes, too small to test a pipe"; failed=1
+      elif cmp -s "$dir/$name.file" "$dir/$name.piped"; then
+        echo "  ok    $name: $got bytes through a pipe"
+      else
+        echo "  FAIL  $name: $want bytes to a file, $got through a pipe"; failed=1
+      fi
+    }
+    pipe_check format "$big" node dist/cli.js format -
+    pipe_check render /dev/null node dist/cli.js render "$small" -o -
+    exit "$failed"
     ;;
   snippets)
     [ -f dist/index.js ] || compile
