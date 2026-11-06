@@ -143,7 +143,7 @@ edge [<name>] <from> -> <to> ["<text>" [(<placement>)]] [attributes]
 
 ```
 node bob      "Bob the builder" (inside top)  height: 7
-node bob_link "bob.example.com" (size: small)  inside bob bottom-center  shape: none
+node bob_role "builder" (size: small)  inside bob bottom-center  shape: none
 node count    "3"  on bob top-right  shape: circle
 ```
 
@@ -159,6 +159,27 @@ node records "Records"  style: store
 ```
 
 `fill` is a box's area, `border` its outline, `line` an edge's line, and a text's color goes in its bracket. `corners: sharp` squares a box's rounded corners, and `border: (color: theme-primary, thickness: thick)` thickens its outline, the box growing to keep its padding. Prefer theme colors, which read in light and dark themes alike: `theme-primary` and `theme-secondary` are the accents, `-subtle` is an accent softened toward the page (the one to fill a box with), `theme-muted` is quieter text. A hex or CSS color stays fixed in every theme.
+
+### Links
+
+```
+node docs  "Documentation"  url: "https://example.com/docs"
+edge api -> db  "SQL"  url: "https://example.com/schema"
+```
+
+**A link goes on the thing it is about, never in a text of its own.** Give the node a `url:`, or give it to a line's text when the link is about the connection. The whole box, or the line's text, becomes clickable. When asked to add links to a diagram, put `url:` on the nodes and lines already there. Don't add nodes to hold links: no column of link texts beside the diagram, and no caption with an address under each box. Add one only when the user asks to see the addresses written out.
+
+```
+// Wrong: a new text beside the thing the link belongs to
+node api_link "github.com/acme/api"  shape: none  right of api
+
+// Right: the link is on the thing itself
+node api "API server"  url: "https://github.com/acme/api"
+```
+
+The address is never drawn; a reader follows it by clicking. A line with no text can't carry one, and neither can a style. Quote the value, since an unquoted `//` starts a comment.
+
+**Offer links; don't add them unasked.** When the things in a diagram have real web addresses, such as the files of a pull request on GitHub, end your reply with one line offering to link each node to its file. Never guess an address, and don't link to files on the local machine.
 
 ## A complete small file
 
