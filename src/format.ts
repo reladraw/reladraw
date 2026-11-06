@@ -320,16 +320,15 @@ function textWidth(text: string): number {
 const TAB_WIDTH = 4;
 
 /**
- * Whether a statement goes past `wrap-at` or `clause-per-line-at`, and if so
- * where its first line ends. Its length is measured on its own, unaligned, so
- * whether one statement breaks never depends on its neighbors. The first line
- * holds the keyword and name, and the texts after them if `first-line` says
- * so, and shares columns with its neighbors like a one-line statement; the
- * clauses after it are laid out by `continuedLines`.
+ * Whether a statement `length` characters long goes past `wrap-at` or
+ * `clause-per-line-at`, and if so where its first line ends. The length is
+ * the line as it would be printed, lined up with its neighbors (see
+ * `layOutItems`). The first line holds the keyword and name, and the texts
+ * after them if `first-line` says so, and shares columns with its neighbors
+ * like a one-line statement; the clauses after it are laid out by
+ * `continuedLines`.
  */
-function breakStatement(item: Extract<Item, { kind: 'statement' }>, settings: FormatSettings, gap: string): Item {
-  const texts = item.cells.map((cell) => cell.text);
-  const length = textWidth(texts.filter((text, at) => text !== '' || at === 0).join(gap));
+function breakStatement(item: Extract<Item, { kind: 'statement' }>, settings: FormatSettings, length: number): Item {
   const perLine = settings['clause-per-line-at'];
   const wrap = settings['wrap-at'];
   const oneEach = perLine === 'always' || (typeof perLine === 'number' && length > perLine);
@@ -375,7 +374,8 @@ function continuedLines(item: Extract<Item, { kind: 'broken' }>, indent: string,
 function layOutItems(written: Item[], settings: FormatSettings): string[] {
   const gap = settings['clause-gap'] === 'tab' ? '\t' : ' '.repeat(settings['clause-gap']);
   const gapWidth = settings['clause-gap'] === 'tab' ? 1 : settings['clause-gap'];
-  const items = written.map((item) => (item.kind === 'statement' ? breakStatement(item, settings, gap) : item));
+  // Which statements break is decided further down, once the columns are known.
+  const items = [...written];
   // What lines up in columns: a one-line statement whole, a broken one's first line.
   const aligned = (item: Item): Cell[] | undefined =>
     item.kind === 'statement' ? item.cells : item.kind === 'broken' ? item.first : undefined;
@@ -410,16 +410,19 @@ function layOutItems(written: Item[], settings: FormatSettings): string[] {
   });
 
   // Each group's column widths, and the column its trailing comments start at.
-  const widths = new Map<number, number[]>();
+  let widths = new Map<number, number[]>();
   const commentAt = new Map<number, number>();
-  items.forEach((item, index) => {
-    const cells = aligned(item);
-    if (cells === undefined) return;
-    const id = group.get(index)!;
-    const own = widths.get(id) ?? [];
-    cells.forEach((cell, at) => (own[at] = Math.max(own[at] ?? 0, textWidth(cell.text))));
-    widths.set(id, own);
-  });
+  const measureColumns = () => {
+    widths = new Map();
+    items.forEach((item, index) => {
+      const cells = aligned(item);
+      if (cells === undefined) return;
+      const id = group.get(index)!;
+      const own = widths.get(id) ?? [];
+      cells.forEach((cell, at) => (own[at] = Math.max(own[at] ?? 0, textWidth(cell.text))));
+      widths.set(id, own);
+    });
+  };
   // Each cell's text, and where on the line it starts.
   const placed = (cells: Cell[], id: number): { text: string; at: number }[] => {
     const own = widths.get(id)!;
@@ -441,6 +444,46 @@ function layOutItems(written: Item[], settings: FormatSettings): string[] {
     for (const one of placed(cells, id)) line += ' '.repeat(one.at - textWidth(line)) + one.text;
     return line;
   };
+
+  // Which statements break. A statement is measured as it would be printed,
+  // lined up with its neighbors, so a short statement padded out past
+  // `wrap-at` by a long neighbor's columns breaks too. Breaking one takes its
+  // later clauses out of the columns, which can only narrow them and shorten
+  // the rest, so they are broken one at a time, the longest on its own first:
+  // that is the one most likely to be widening a column the others are past
+  // only because of. A statement whose break is settled by its unaligned
+  // length alone, since lining it up can only lengthen it, breaks before the
+  // first measure: one past `clause-per-line-at`, or past `wrap-at` with no
+  // `clause-per-line-at` above it to reach.
+  const ownLength = (item: Extract<Item, { kind: 'statement' }>) =>
+    textWidth(item.cells.map((cell) => cell.text).filter((text, at) => text !== '' || at === 0).join(gap));
+  const breakAt = (index: number, length: number): boolean => {
+    const item = items[index]!;
+    if (item.kind !== 'statement') return false;
+    const broken = breakStatement(item, settings, length);
+    items[index] = broken;
+    return broken !== item;
+  };
+  const perLine = settings['clause-per-line-at'];
+  const settled = (length: number) => typeof perLine !== 'number' || length > perLine;
+  items.forEach((item, index) => {
+    if (item.kind !== 'statement') return;
+    const own = ownLength(item);
+    if (settled(own)) breakAt(index, own);
+  });
+  for (;;) {
+    measureColumns();
+    let longest: { index: number; own: number; printed: number } | undefined;
+    items.forEach((item, index) => {
+      if (item.kind !== 'statement') return;
+      const printed = textWidth(lineOf(item.cells, group.get(index)!));
+      if (breakStatement(item, settings, printed) === item) return;
+      const own = ownLength(item);
+      if (longest === undefined || own > longest.own) longest = { index, own, printed };
+    });
+    if (longest === undefined || !breakAt(longest.index, longest.printed)) break;
+  }
+
   items.forEach((item, index) => {
     if (item.kind !== 'statement') return;
     const id = group.get(index)!;
