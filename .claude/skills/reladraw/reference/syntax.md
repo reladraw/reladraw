@@ -1145,9 +1145,9 @@ A thing can have several links, written one after another, each with a name and 
 
 ```
 node api "Orders API"
-  url: "https://app.datadoghq.com/…" (name: "Datadog", icon: "D" (fill: #632ca6, text: white))
+  url: "https://docs.example.com/orders" (name: "Docs", icon: "D" (fill: #3a6ea5, text: white))
        "https://github.com/…" (name: "GitHub", icon: gh)
-       "https://app.shortcut.com/…" (name: "Shortcut")
+       "https://wiki.example.com/orders" (name: "Wiki")
 ```
 
 - **`name:`** is what a reader is shown, in quotes. A link with none shows its site, such as `github.com`.
@@ -1340,7 +1340,7 @@ Pre-1.0, so the minor number is where a breaking change goes. Every removal is r
 
 **0.23.0**
 
-- **A box or a line can have several links**, each with a name and a badge: `url: "https://github.com/…" (name: "GitHub", icon: "GH")  "https://app.datadoghq.com/…" (name: "Datadog")`. In an SVG a click follows the first and the tooltip lists them all. See [Destinations](#destinations).
+- **A box or a line can have several links**, each with a name and a badge: `url: "https://github.com/…" (name: "GitHub", icon: "GH")  "https://docs.example.com/…" (name: "Docs")`. In an SVG a click follows the first and the tooltip lists them all. See [Destinations](#destinations).
 - **A click on the page selects a box or a line.** The page made with `render --page` lights what feeds it in green and what it feeds in red, and a panel beside the drawing lists its links and the boxes at either end. A click no longer follows a link on the page; the panel does. See [A page for looking at a diagram](#a-page-for-looking-at-a-diagram).
 - **A line with no text can have a link.** It used to be refused as too thin to click; an unseen wider copy of the line now takes the click.
 - **A letter icon**: `icon gh  letters: "GH"  fill: #24292f  text: white` is a few letters in a circle, usable anywhere an icon is. See [Your own icons](#your-own-icons).
