@@ -1473,9 +1473,14 @@
           theme.appendChild(optgroup);
         });
 
+        // A new theme is the same diagram in other colors, so the view stays
+        // where the reader left it, as it does when the source is typed.
         theme.addEventListener('change', function () {
           var text = withTheme(source.value, theme.value);
-          load(text, named(text));
+          source.value = text;
+          current = named(text);
+          draw();
+          stow();
         });
 
         function named(text) {
