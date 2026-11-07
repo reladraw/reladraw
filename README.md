@@ -1,5 +1,7 @@
 # reladraw
 
+<a href="https://news.ycombinator.com/item?id=49858513"><img src="https://hackergit.org/badge/reladraw/reladraw.svg" alt="Hacker News" height="20"></a>
+
 reladraw is a text language for diagrams where you say where things go.
 
 > The language is changing frequently. The playground always runs the newest syntax, so a diagram that draws there today may need a small edit later. An installed copy from npm changes only when you upgrade it.
