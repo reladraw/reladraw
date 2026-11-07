@@ -22,7 +22,7 @@ That matters here specifically. You can't see the SVG you produced. With auto-la
 
 ## Check it is installed, and the same version as this skill
 
-This skill teaches reladraw 0.22.1. Once per session, before the first render, run:
+This skill teaches reladraw 0.23.0. Once per session, before the first render, run:
 
 ```
 reladraw --version
@@ -217,7 +217,7 @@ node aside "The worker shares the database / but takes no HTTP traffic." (wrap: 
 
 # Part 2 — the syntax reference
 
-# Syntax reference — 0.22.1
+# Syntax reference — 0.23.0
 
 What the language accepts. The changelog at the end lists what changed in each published version; 0.17.0's changes are large, and its entry has a table of every old spelling and what to write instead.
 
@@ -1557,7 +1557,7 @@ Designed and absent from the code.
 
 Pre-1.0, so the minor number is where a breaking change goes. Every removal is refused by name with the replacement quoted, rather than dropped in silence: an older file stops with an error saying what to write instead.
 
-**Unreleased**
+**0.23.0**
 
 - **A box or a line can have several links**, each with a name and a badge: `url: "https://github.com/…" (name: "GitHub", icon: "GH")  "https://app.datadoghq.com/…" (name: "Datadog")`. In an SVG a click follows the first and the tooltip lists them all. See [Destinations](#destinations).
 - **A click on the page selects a box or a line.** The page made with `render --page` lights what feeds it in green and what it feeds in red, and a panel beside the drawing lists its links and the boxes at either end. A click no longer follows a link on the page; the panel does. See [A page for looking at a diagram](#a-page-for-looking-at-a-diagram).
