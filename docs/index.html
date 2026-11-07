@@ -9385,6 +9385,42 @@ function highlight(source) {
     return source.split(/\r?\n/).map(highlightLine);
 }
 
+// ---- links.js ----
+/**
+ * A node's or a line's links. `url:` takes one address or several, each with
+ * an optional name and badge: `url: "https://github.com/…" (name: "GitHub",
+ * icon: "GH" (fill: #24292f, text: white))`. The parser keeps the first
+ * address under `url`, so everything that follows a single link follows the
+ * first of several, and the whole list under `url.links` when there is more
+ * to say than one bare address.
+ */
+const LINKS_KEY = 'url.links';
+/** Every link a thing carries, in the order the source writes them. */
+function linksOf(attrs) {
+    const listed = attrs[LINKS_KEY];
+    if (listed !== undefined)
+        return JSON.parse(listed);
+    const url = attrs['url'];
+    return url === undefined ? undefined : [{ href: url }];
+}
+/**
+ * What a reader is shown for a link: its name, or its site's address without
+ * the path. Two unnamed links to one site would read the same, so among
+ * `others` that share its site a link shows its whole address after the scheme.
+ */
+function linkLabel(link, others = []) {
+    if (link.name !== undefined)
+        return link.name;
+    const host = hostOf(link.href);
+    if (host === undefined)
+        return link.href;
+    const shared = others.some((other) => other !== link && other.name === undefined && hostOf(other.href) === host);
+    return shared ? link.href.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '') : host;
+}
+function hostOf(href) {
+    return href.match(/^[a-z][a-z0-9+.-]*:\/\/([^/?#]+)/i)?.[1];
+}
+
 // ---- themes.js ----
 /** How much of an accent survives in its subtle form; the rest is the page. */
 const SUBTLE = 0.25;
@@ -10426,17 +10462,16 @@ function readAttr(tokens, at, attrs, line, subject) {
         return read.next;
     }
     if (key === 'url') {
-        // `url: https://example.com` loses everything from the `//` onwards, because
-        // `//` opens a comment — so the value is either missing entirely or is the
-        // bare scheme, which reads as another attribute key. Neither report says
-        // what is wrong, and the remedy is punctuation rather than a missing word.
-        const value = tokens[at + 1];
-        if (!value || !value.quoted) {
-            throw new SourceError(`${subject}: a url is written in quotes — \`url: "https://example.com"\`. Without them ` +
-                'everything from the `//` onwards is read as a comment', line);
+        // Several links are several addresses after the one key, as `cards:` lists
+        // its cards, each named in a bracket after it. The first stays under `url`,
+        // so whatever follows one link follows the first of several; the whole
+        // list is kept beside it only when there is more than a bare address.
+        const read = readLinks(tokens, at + 1, subject, line);
+        setOnce(attrs, key, read.links[0].href, subject, line, { key, value: quoteOf });
+        if (read.links.length > 1 || read.links.some((link) => link.name !== undefined || link.icon !== undefined)) {
+            attrs[LINKS_KEY] = JSON.stringify(read.links);
         }
-        setOnce(attrs, key, value.text, subject, line, { key, value: quoteOf });
-        return at + 2;
+        return read.next;
     }
     if (key === 'title') {
         // A title is a text, and every text is quoted. Unquoted, its first word
@@ -11634,6 +11669,42 @@ function parseStyle(head, line) {
     return { kind: 'style', name, attrs, line };
 }
 /**
+ * `icon gh  letters: "GH"  fill: #24292f  text: white`. The characters have a
+ * key of their own because a quoted string after an icon's name is a file to
+ * read, and `text:` is the letters' color, as it is a node's.
+ */
+function readLetterIcon(head, start, name, line) {
+    const read = {};
+    const subject = `icon "${name}"`;
+    for (let i = start; i < head.length; i += 2) {
+        const keyToken = head[i];
+        clauseStarts?.add(keyToken);
+        const key = keyToken.text.slice(0, -1);
+        if (!isAttrKey(keyToken) || (key !== 'letters' && key !== 'fill' && key !== 'text')) {
+            throw new SourceError(`${subject}: a letter icon takes letters, fill and text, found "${keyToken.text}"`, line);
+        }
+        if (read[key] !== undefined)
+            throw new SourceError(`${subject}: "${key}" is written twice — keep one`, line);
+        const value = head[i + 1];
+        if (value === undefined || isAttrKey(value))
+            throw new SourceError(`${subject}: "${key}" has no value`, line);
+        if (key === 'letters') {
+            if (!value.quoted)
+                throw new SourceError(`${subject}: letters are a text, written in quotes — \`letters: "${value.text}"\``, line);
+            if (value.text.trim() === '')
+                throw new SourceError(`${subject}: \`letters:\` is empty — write the letters to show, such as \`letters: "GH"\``, line);
+            read.letters = value.text;
+        }
+        else {
+            if (value.quoted)
+                throw new SourceError(`${subject}: a color is written without quotes — \`${key}: ${value.text}\``, line);
+            checkColorWord(value.text, subject, line);
+            read[key] = value.text;
+        }
+    }
+    return { letters: read.letters, ...(read.fill === undefined ? {} : { fill: read.fill }), ...(read.text === undefined ? {} : { text: read.text }) };
+}
+/**
  * `icon <name> "<svg>…</svg>"`, or `icon <name> ./file.svg`. What the picture
  * is — pasted markup or a file to read — is worked out when the diagram is
  * resolved, since only the caller knows whether files can be read at all.
@@ -11641,6 +11712,12 @@ function parseStyle(head, line) {
 function parseIcon(head, line) {
     const name = requireName(head[1], 'icon', line);
     const picture = head[2];
+    if (picture !== undefined && isAttrKey(picture) && picture.text === 'letters:') {
+        return { kind: 'icon', name, source: '', pasted: false, letters: readLetterIcon(head, 2, name, line), line };
+    }
+    if (picture !== undefined && isAttrKey(picture) && (picture.text === 'fill:' || picture.text === 'text:')) {
+        throw new SourceError(`icon "${name}" has colors and no letters — a letter icon starts \`icon ${name}  letters: "GH"\``, line);
+    }
     if (picture === undefined || isAttrKey(picture)) {
         throw new SourceError(`icon "${name}" needs its picture: the SVG itself between """ marks, or the name of an .svg file`, line);
     }
@@ -12174,6 +12251,113 @@ function checkColorWord(value, subject, line) {
         const fix = /\d/.test(value) ? 'a hex color is written' : 'if it is a hex color, write';
         throw new SourceError(`${subject}: \`${value}\` is not a color — ${fix} \`#${value}\``, line);
     }
+}
+const URL_QUOTES = 'a url is written in quotes — `url: "https://example.com"`. Without them everything from the `//` onwards is read as a comment';
+/**
+ * `url: "https://a" (name: "A", icon: "A" (fill: red))  "https://b"`: one or
+ * more quoted addresses, each with an optional bracket after it. The values in
+ * a link's bracket are a name (a text, so quoted) and a badge, which is quoted
+ * letters or the unquoted name of a picture. `readBracket` takes only unquoted
+ * values and no bracket inside a bracket, so links are read here.
+ */
+function readLinks(tokens, start, subject, line) {
+    // `url: https://example.com` loses everything from the `//` onwards, because
+    // `//` opens a comment — so the value is either missing entirely or is the
+    // bare scheme, which reads as another attribute key. Neither report says
+    // what is wrong, and the remedy is punctuation rather than a missing word.
+    if (!tokens[start]?.quoted)
+        throw new SourceError(`${subject}: ${URL_QUOTES}`, line);
+    const links = [];
+    let i = start;
+    while (tokens[i]?.quoted) {
+        const link = { href: tokens[i].text };
+        i += 1;
+        if (follows(tokens, i, '(')) {
+            const read = readLinkBracket(tokens, i, link.href, subject, line);
+            Object.assign(link, read.link);
+            i = read.next;
+        }
+        if (links.some((had) => had.href === link.href)) {
+            throw new SourceError(`${subject}: "${link.href}" is linked twice in one \`url:\` — keep one`, line);
+        }
+        links.push(link);
+    }
+    return { links, next: i };
+}
+function readLinkBracket(tokens, start, href, subject, line) {
+    const link = {};
+    const what = `the link "${href}"`;
+    let i = start + 1;
+    for (;;) {
+        if (follows(tokens, i, ',')) {
+            i += 1;
+            continue;
+        }
+        if (follows(tokens, i, ')'))
+            break;
+        const keyToken = tokens[i];
+        if (!keyToken)
+            throw new SourceError(`${subject}: ${what} opens a "(" and never closes it`, line);
+        if (!isAttrKey(keyToken)) {
+            throw new SourceError(`${subject}: ${what} takes \`name:\` and \`icon:\` in its brackets, found "${keyToken.text}"`, line);
+        }
+        const key = keyToken.text.slice(0, -1);
+        if (key !== 'name' && key !== 'icon') {
+            throw new SourceError(`a link has no "${key}" — it takes name and icon`, line);
+        }
+        if (link[key] !== undefined) {
+            throw new SourceError(`${subject}: "${key}" is written twice in the brackets after ${what} — keep one`, line);
+        }
+        const value = tokens[i + 1];
+        if (!value || isAttrKey(value) || (!value.quoted && (value.text === ')' || value.text === '('))) {
+            throw new SourceError(`${subject}: "${key}" has no value`, line);
+        }
+        if (key === 'name') {
+            if (!value.quoted) {
+                throw new SourceError(`${subject}: a link's name is a text, written in quotes — \`name: "${value.text.replace(/,$/, '')}"\``, line);
+            }
+            link.name = value.text;
+            i += 2;
+            continue;
+        }
+        // A badge: quoted letters, which may take their colors in a bracket of
+        // their own, or the name of a picture, which keeps the colors it has.
+        if (value.quoted) {
+            if (value.text.trim() === '')
+                throw new SourceError(`${subject}: a link's letter badge has no letters — write \`icon: "GH"\``, line);
+            const icon = { letters: value.text };
+            i += 2;
+            if (follows(tokens, i, '(')) {
+                const read = readBracket(tokens, i, ['fill', 'text'], {
+                    subject,
+                    what: `the badge "${value.text}"`,
+                    kind: 'a letter badge',
+                    example: 'fill: #24292f',
+                    line,
+                });
+                if (Object.keys(read.values).length === 0) {
+                    throw new SourceError(`${subject}: the badge "${value.text}" opens empty brackets`, line);
+                }
+                for (const [color, set] of Object.entries(read.values)) {
+                    checkColorWord(set, subject, line);
+                    icon[color] = set;
+                }
+                i = read.next;
+            }
+            link.icon = icon;
+            continue;
+        }
+        const picture = value.text.replace(/,$/, '');
+        i += 2;
+        if (follows(tokens, i, '(')) {
+            throw new SourceError(`${subject}: the picture "${picture}" keeps its own colors, so it takes no bracket — ` +
+                `letters do: \`icon: "${picture.slice(0, 2).toUpperCase()}" (fill: …)\``, line);
+        }
+        link.icon = { picture };
+    }
+    if (Object.keys(link).length === 0)
+        throw new SourceError(`${subject}: ${what} opens empty brackets`, line);
+    return { link, next: i + 1 };
 }
 function follows(tokens, at, word) {
     const token = tokens[at];
@@ -13259,7 +13443,10 @@ function drawing(layout, options) {
                 edge.ink = union(edge.ink, grow(extentOfPoints([crossing.at]), crossing.reach + edge.edge.look.thickness));
             }
         }
-        lines.push({ key: keyOf(edge), svg: linked(parts.join('\n'), edge.edge.attrs['url']) });
+        const links = linksOf(edge.edge.attrs);
+        if (links !== undefined && edge.edge.texts.length === 0)
+            parts.push(lineTarget(edge.line));
+        lines.push({ key: keyOf(edge), svg: linked(parts.join('\n'), links) });
         ink = union(ink, grow(edge.ink, layout.margin));
     }
     const lineSvg = new Map(lines.map((line) => [line.key, line.svg]));
@@ -13351,7 +13538,13 @@ function tag(layout, item, svg) {
             return svg;
         ({ name, line } = mark);
     }
-    return `<g data-name="${escapeXml(name).replace(/"/g, '&quot;')}" data-line="${line}">\n${svg}\n</g>`;
+    // What the page selects: a node by its name, a line by its place in the list.
+    const what = item.node ? ` data-node="${escapeXml(item.node.name).replace(/"/g, '&quot;')}"` : item.key.startsWith('edge ') ? ` data-edge="${item.key.slice('edge '.length)}"` : '';
+    return `<g data-name="${escapeXml(name).replace(/"/g, '&quot;')}" data-line="${line}"${what}>\n${svg}\n</g>`;
+}
+/** An icon on its own, as a small SVG of `side` pixels: what the page puts beside a link. */
+function iconSvg(icon, side, theme) {
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${side}" height="${side}" viewBox="0 0 ${side} ${side}" font-family="system-ui, sans-serif">\n${drawIcon(icon, 0, 0, side, theme)}\n</svg>`;
 }
 /**
  * Gives every id in a drawing a prefix of its own, taken from a hash of the
@@ -13409,12 +13602,28 @@ function ownIds(svg) {
  * have given — the container catches every click its children do not — reached
  * by repeating the destination rather than by wrapping.
  */
-function linked(svg, url) {
-    if (url === undefined || svg.length === 0)
+function linked(svg, links) {
+    const first = links?.[0];
+    if (first === undefined || svg.length === 0)
         return svg;
+    // A plain SVG can follow one address, so a click follows the first; the
+    // tooltip names every link, so a reader learns there are others. A single
+    // bare address gets no tooltip, so a file written before several links
+    // draws exactly as it did.
+    const named = links.length > 1 || first.name !== undefined;
+    const title = named ? `\n    <title>${escapeXml(links.map((link) => linkLabel(link, links)).join('\n'))}</title>` : '';
     // An `&` between query parameters is ordinary in a url and illegal raw in an
     // attribute, so the value is escaped as markup rather than merely quoted.
-    return `  <a href=${quote(escapeXml(url))} target="_blank" rel="noopener">\n${svg}\n  </a>`;
+    return `  <a href=${quote(escapeXml(first.href))} target="_blank" rel="noopener">${title}\n${svg}\n  </a>`;
+}
+/**
+ * A line with a link and no text is its own target, and a line is too thin to
+ * hit, so an unseen wider copy of its path catches the click.
+ */
+function lineTarget(line) {
+    const straight = line.match(/ x1="([^"]*)" y1="([^"]*)" x2="([^"]*)" y2="([^"]*)"/);
+    const d = straight ? `M${straight[1]} ${straight[2]} L${straight[3]} ${straight[4]}` : line.match(/ d="([^"]*)"/)?.[1];
+    return d === undefined ? '' : `  <path d="${d}" fill="none" stroke="#000" stroke-opacity="0" stroke-width="12" pointer-events="stroke"/>`;
 }
 /** Whether a node holds anything besides its heading and what is joined to its text: what a theme draws as a container. */
 function holdsContents(node) {
@@ -13469,7 +13678,7 @@ const GUIDE_DASH = '4 3';
  * a destination never encloses a child's.
  */
 function drawNode(node, theme, measurer, fontSize, markup, guides, inherited) {
-    const url = node.attrs['url'] ?? inherited;
+    const url = linksOf(node.attrs) ?? inherited;
     let own = [];
     if (!node.guide) {
         own = nodeSvg(node, theme, measurer, fontSize, markup);
@@ -13538,9 +13747,9 @@ function drawVenn(node, theme, measurer, fontSize, markup, guides, url) {
     const leftFill = left.appearance['fill'] ?? 'theme-primary-subtle';
     const rightFill = right.appearance['fill'] ?? 'theme-secondary-subtle';
     const sharedFill = shared.appearance['fill'] ?? overlapFill(themeColor(leftFill, theme), theme);
-    const item = (part, key, svg, fills = []) => ({ key, node: part, svg: linked(svg.join('\n'), part.attrs['url'] ?? url), fills });
+    const item = (part, key, svg, fills = []) => ({ key, node: part, svg: linked(svg.join('\n'), linksOf(part.attrs) ?? url), fills });
     const filled = (part, fill) => item(part, part.name, nodeSvg(plain(part, fill), theme, measurer, fontSize, markup), nodeFills(plain(part, fill), theme));
-    const rest = (part) => part.children.flatMap((child) => drawNode(child, theme, measurer, fontSize, markup, guides, part.attrs['url'] ?? url));
+    const rest = (part) => part.children.flatMap((child) => drawNode(child, theme, measurer, fontSize, markup, guides, linksOf(part.attrs) ?? url));
     return [
         { key: node.name, node, svg: linked(own.join('\n'), url), fills: nodeFills(plain(node, node.appearance['fill'] ?? 'none'), theme) },
         filled(left, leftFill),
@@ -13936,8 +14145,31 @@ function outlineDetail(shape, x, y, w, h, look = {}) {
         return [];
     return shapeOf(shape, look, w, h).detail.map((d) => placePath(d, x, y));
 }
+/**
+ * A letter badge's circle and letters. Unsaid, the circle is one of the
+ * theme's two accents, picked from the letters so the same letters always get
+ * the same one, and the letters are that accent's own text color; a stated
+ * fill with no text color takes the theme's text color.
+ */
+function letterColors(icon, theme) {
+    const sum = [...icon.letters].reduce((total, char) => total + char.codePointAt(0), 0);
+    const accent = sum % 2 === 0 ? theme.primary : theme.secondary;
+    const fill = icon.fill === undefined ? accent.color : themeColor(icon.fill, theme);
+    const text = icon.text !== undefined ? themeColor(icon.text, theme) : icon.fill === undefined ? accent.on : theme.text;
+    return { fill, text };
+}
 /** One icon, scaled from its own grid onto a square of `side` at `x, y`. */
 function drawIcon(icon, x, y, side, theme) {
+    if ('letters' in icon) {
+        const colors = letterColors(icon, theme);
+        const r = side / 2;
+        // Letters shrink as there are more of them, so two or three still fit the circle.
+        const size = round(side * (icon.letters.length <= 1 ? 0.55 : icon.letters.length === 2 ? 0.42 : 0.32));
+        return [
+            `  <circle cx="${round(x + r)}" cy="${round(y + r)}" r="${round(r)}" fill="${colors.fill}"/>`,
+            `  <text x="${round(x + r)}" y="${round(y + r)}" text-anchor="middle" dominant-baseline="central" font-size="${size}px" font-weight="700" fill="${colors.text}">${escapeXml(icon.letters)}</text>`,
+        ].join('\n');
+    }
     if ('inner' in icon) {
         // Its own viewBox fits it to the square, centered and in proportion.
         // `color` is set only when the drawing does not set it, so `currentColor`
@@ -14798,6 +15030,18 @@ function resolve(doc, options = {}) {
     checkStyleKeys(doc.statements);
     const defaults = collectDefaults(doc.statements, styles);
     const icons = collectIcons(doc.statements, options.readIconFile);
+    // A link's badge may name a picture, which has to be one the file can draw.
+    // The page draws badges, so the pictures they name ride along in the layout.
+    const linkIcons = {};
+    for (const stmt of doc.statements) {
+        if (!('attrs' in stmt) || stmt.attrs === undefined)
+            continue;
+        for (const link of linksOf(stmt.attrs) ?? []) {
+            if (link.icon !== undefined && 'picture' in link.icon) {
+                linkIcons[link.icon.picture] = iconNamed(link.icon.picture, stmt.line, icons);
+            }
+        }
+    }
     const { nodes, byName, roots } = buildTree(writeOutCards(doc.statements), styles, defaults, icons);
     // From here on, `edge each child of a -> b` and `edge a -> b, c` are the lines they stand for.
     const statements = expandEach(doc.statements, byName);
@@ -14829,6 +15073,7 @@ function resolve(doc, options = {}) {
         roots,
         edges,
         markup: markupColors(nodes, edges, styles, marks),
+        linkIcons,
         diagram: collectDiagram(doc.statements),
         width: Math.ceil(extent.maxX + margin),
         height: Math.ceil(extent.maxY + margin),
@@ -15087,6 +15332,10 @@ function collectIcons(statements, readIconFile) {
             continue;
         if (icons.has(stmt.name)) {
             throw new SourceError(`icon "${stmt.name}" is declared twice`, stmt.line);
+        }
+        if (stmt.letters !== undefined) {
+            icons.set(stmt.name, stmt.letters);
+            continue;
         }
         let svg = stmt.source.trim();
         if (!stmt.pasted) {
@@ -15918,14 +16167,9 @@ function buildEdges(statements, byName, named, styles, defaults, measurer, fontS
         const what = `${stmt.from} ${stmt.arrow} ${stmt.to}`;
         checkAttrs('edge', what, stmt.attrs, stmt.line);
         checkStyleUse('edge', what, stmt.attrs, styles, stmt.line);
-        if (stmt.attrs['url'] !== undefined && stmt.texts.length === 0) {
-            // Wrapping the line works, and `LINE_WIDTH` is 1.5 — a destination that
-            // technically has a target and practically has none. That is the silent
-            // defect shape the language refuses everywhere else, so it is refused
-            // here rather than shipped and explained.
-            throw new SourceError(`edge ${what} has a url and no text. A destination needs something to click, and a line ` +
-                'is too thin to be it — give the edge a text, or put the url on one of the nodes', stmt.line);
-        }
+        // A line with a link and no text was once refused, as too thin to click.
+        // The render now gives it an unseen wider target along its path, and the
+        // page selects a line by the same, so it is accepted.
         const texts = stmt.texts.map(({ text, textAttrs: own, place }) => {
             const textAttrs = { ...bracketOf('text', appearance), ...own };
             const lines = linesFor(text, textAttrs, `edge ${what}`, stmt.line);

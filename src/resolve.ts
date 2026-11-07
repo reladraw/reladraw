@@ -35,7 +35,8 @@ import {
   widestLine,
 } from './constants.js';
 import { SourceError } from './errors.js';
-import { type Body, bodyFor, type Icon, pastedIcon } from './icons.js';
+import { type Body, bodyFor, type Icon, iconNamed, pastedIcon } from './icons.js';
+import { linksOf } from './links.js';
 import { monospaceMeasurer, type Measurer } from './measure.js';
 import { isBoxy, middleOf, sizeFor, SUBPROCESS_INSET } from './outline.js';
 import { markupStyles, parseMarkup, plain, splitRuns, wrapLine, type Line } from './text.js';
@@ -402,6 +403,17 @@ export function resolve(doc: Document, options: ResolveOptions = {}): Layout {
   checkStyleKeys(doc.statements);
   const defaults = collectDefaults(doc.statements, styles);
   const icons = collectIcons(doc.statements, options.readIconFile);
+  // A link's badge may name a picture, which has to be one the file can draw.
+  // The page draws badges, so the pictures they name ride along in the layout.
+  const linkIcons: Record<string, Icon> = {};
+  for (const stmt of doc.statements) {
+    if (!('attrs' in stmt) || stmt.attrs === undefined) continue;
+    for (const link of linksOf(stmt.attrs) ?? []) {
+      if (link.icon !== undefined && 'picture' in link.icon) {
+        linkIcons[link.icon.picture] = iconNamed(link.icon.picture, stmt.line, icons);
+      }
+    }
+  }
   const { nodes, byName, roots } = buildTree(writeOutCards(doc.statements), styles, defaults, icons);
   // From here on, `edge each child of a -> b` and `edge a -> b, c` are the lines they stand for.
   const statements = expandEach(doc.statements, byName);
@@ -437,6 +449,7 @@ export function resolve(doc: Document, options: ResolveOptions = {}): Layout {
     roots,
     edges,
     markup: markupColors(nodes, edges, styles, marks),
+    linkIcons,
     diagram: collectDiagram(doc.statements),
     width: Math.ceil(extent.maxX + margin),
     height: Math.ceil(extent.maxY + margin),
@@ -712,6 +725,10 @@ function collectIcons(statements: Stmt[], readIconFile: ((path: string) => strin
     if (stmt.kind !== 'icon') continue;
     if (icons.has(stmt.name)) {
       throw new SourceError(`icon "${stmt.name}" is declared twice`, stmt.line);
+    }
+    if (stmt.letters !== undefined) {
+      icons.set(stmt.name, stmt.letters);
+      continue;
     }
     let svg = stmt.source.trim();
     if (!stmt.pasted) {
@@ -1673,17 +1690,9 @@ function buildEdges(
     const what = `${stmt.from} ${stmt.arrow} ${stmt.to}`;
     checkAttrs('edge', what, stmt.attrs, stmt.line);
     checkStyleUse('edge', what, stmt.attrs, styles, stmt.line);
-    if (stmt.attrs['url'] !== undefined && stmt.texts.length === 0) {
-      // Wrapping the line works, and `LINE_WIDTH` is 1.5 — a destination that
-      // technically has a target and practically has none. That is the silent
-      // defect shape the language refuses everywhere else, so it is refused
-      // here rather than shipped and explained.
-      throw new SourceError(
-        `edge ${what} has a url and no text. A destination needs something to click, and a line ` +
-          'is too thin to be it — give the edge a text, or put the url on one of the nodes',
-        stmt.line,
-      );
-    }
+    // A line with a link and no text was once refused, as too thin to click.
+    // The render now gives it an unseen wider target along its path, and the
+    // page selects a line by the same, so it is accepted.
     const texts = stmt.texts.map(({ text, textAttrs: own, place }) => {
       const textAttrs = { ...bracketOf('text', appearance), ...own };
       const lines = linesFor(text, textAttrs, `edge ${what}`, stmt.line);

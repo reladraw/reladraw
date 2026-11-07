@@ -2,7 +2,10 @@ import { fileChecks, findings, type Finding } from './checks.js';
 import { SourceError } from './errors.js';
 import type { DrawOptions } from './index.js';
 import { blame, parse } from './parser.js';
-import { renderTagged, themeOf } from './render.js';
+import type { Icon } from './icons.js';
+import { linkLabel, linksOf, type Link } from './links.js';
+import type { Layout, LayoutNode } from './model.js';
+import { iconSvg, renderTagged, themeOf } from './render.js';
 import { resolve } from './resolve.js';
 import { luminance, type Theme } from './themes.js';
 import { PAN_ZOOM } from './viewer.js';
@@ -32,8 +35,9 @@ export function drawPage(
     const found =
       options.checks === false ? [] : findings(layout, options.checks ? options.checks(fileChecks(layout)) : fileChecks(layout));
     const title = layout.diagram['title'] ?? name;
+    const theme = themeOf(layout, options);
     return {
-      html: page({ title, name, drawn, source, svg, tagged, findings: found, theme: themeOf(layout, options) }),
+      html: page({ title, name, drawn, source, svg, tagged, findings: found, theme, graph: graphOf(layout, theme) }),
       findings: found,
     };
   };
@@ -58,6 +62,69 @@ interface PageParts {
   tagged: string;
   findings: Finding[];
   theme: Theme;
+  graph: Graph;
+}
+
+/** A link as the panel shows it: where it goes, what it is called, and its badge drawn. */
+interface LinkView {
+  href: string;
+  label: string;
+  badge: string;
+}
+
+/**
+ * What a click on the page selects, and what the panel says about it: every
+ * node with its text and links, and every line with its two ends, upstream
+ * first. A line's index is its place in the layout, which `data-edge` names.
+ */
+interface Graph {
+  nodes: Record<string, { label: string; links: LinkView[] }>;
+  edges: { up: string; down: string; label: string; links: LinkView[] }[];
+}
+
+const BADGE_SIDE = 20;
+
+function graphOf(layout: Layout, theme: Theme): Graph {
+  const views = (links: Link[] | undefined): LinkView[] =>
+    (links ?? []).map((link) => {
+      const label = linkLabel(link, links);
+      const icon: Icon =
+        link.icon === undefined
+          ? { letters: [...label.trim()][0]?.toUpperCase() ?? '?' }
+          : 'picture' in link.icon
+            ? layout.linkIcons[link.icon.picture]!
+            : link.icon;
+      return { href: link.href, label, badge: iconSvg(icon, BADGE_SIDE, theme) };
+    });
+  // A node with no links of its own has its container's, as a click on it in
+  // the SVG follows its container's.
+  const linksFor = (node: LayoutNode): Link[] | undefined => {
+    for (let at: LayoutNode | undefined = node; at; at = at.parent) {
+      const own = linksOf(at.attrs);
+      if (own !== undefined) return own;
+    }
+    return undefined;
+  };
+  const nodes: Graph['nodes'] = {};
+  for (const node of layout.nodes) {
+    const text = plainText(node.text);
+    nodes[node.name] = { label: text === '' ? node.name.split('.').pop()! : text, links: views(linksFor(node)) };
+  }
+  const edges = layout.edges.map((edge) => {
+    // The upstream end is the one a line runs from: the end without a mark
+    // when only the other has one, and otherwise the end written first.
+    const [, start = '', , end = ''] = edge.arrow.match(/^(.*?)(-{1,2})(.*)$/) ?? [];
+    const backwards = start !== '' && end === '';
+    const [up, down] = backwards ? [edge.to, edge.from] : [edge.from, edge.to];
+    const text = edge.texts.map((one) => plainText(one.text)).filter((one) => one !== '').join(' · ');
+    return { up: up.name, down: down.name, label: text, links: views(linksOf(edge.attrs)) };
+  });
+  return { nodes, edges };
+}
+
+/** A text as a reader sees it: markup such as `[dim]` taken out, its lines run together. */
+function plainText(text: string): string {
+  return text.replace(/\[\/?[a-z][a-z0-9-]*\]/gi, '').replace(/\s*\n\s*/g, ' ').trim();
 }
 
 /** A local time as `2026-11-05 14:32`, which sorts and reads the same everywhere. */
@@ -66,7 +133,7 @@ function stamp(at: Date): string {
   return `${at.getFullYear()}-${two(at.getMonth() + 1)}-${two(at.getDate())} ${two(at.getHours())}:${two(at.getMinutes())}`;
 }
 
-function page({ title, name, drawn, source, svg, tagged, findings, theme }: PageParts): string {
+function page({ title, name, drawn, source, svg, tagged, findings, theme, graph }: PageParts): string {
   const hex = (color: string) => /^#[0-9a-f]{6}$/i.test(color);
   // The browser's own controls (scroll bars, focus rings) follow the page, so
   // a dark diagram doesn't get a light one's. A color written by hand in a
@@ -78,6 +145,7 @@ function page({ title, name, drawn, source, svg, tagged, findings, theme }: Page
     name,
     source,
     findings: findings.map((finding) => ({ kind: finding.kind, message: finding.message, line: finding.line })),
+    graph,
   };
   // Replaced by functions, so a `$` in a title or a drawing is taken as written.
   // The zoom's code goes in first, so nothing a diagram says can be taken for its marker.
@@ -94,6 +162,7 @@ function page({ title, name, drawn, source, svg, tagged, findings, theme }: Page
         `--rule: ${theme.boxStroke};`,
         `--accent: ${theme.primary.color};`,
         `--on-accent: ${theme.primary.on};`,
+        '--sel: #e0b25a; --up: #22b98c; --down: #e5484d;',
       ].join(' '),
     )
     .replace('{{drawing}}', () => tagged)
@@ -170,11 +239,57 @@ const PAGE = `<!doctype html>
     padding: 2px 8px; border-radius: 4px; font-size: 12px; white-space: nowrap;
     background: var(--accent); color: var(--on-accent);
   }
-  aside {
-    width: min(26rem, 38vw); display: flex; flex-direction: column; min-height: 0;
+  #side {
+    width: min(24rem, 36vw); display: flex; flex-direction: column; min-height: 0;
     border-left: 1px solid color-mix(in srgb, var(--rule) 45%, transparent);
   }
+  aside { display: flex; flex-direction: column; min-height: 0; flex: 1;
+    border-top: 1px solid color-mix(in srgb, var(--rule) 45%, transparent); }
   aside[hidden] { display: none; }
+
+  /* ---- what is selected ---- */
+  #selected { padding: 10px 16px 12px; overflow: auto; flex: none; max-height: 60%; }
+  #selected .empty { margin: 0; color: var(--muted); font-size: 13px; }
+  #selected h2 { margin: 0 0 8px; font-size: 15px; font-weight: 600; color: var(--sel); overflow-wrap: anywhere; }
+  #selected h3 {
+    display: flex; align-items: center; gap: 8px; margin: 12px 0 4px;
+    font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+  }
+  #selected h3 svg { flex: none; }
+  #selected .none { color: var(--muted); font-size: 13px; }
+  #selected .link {
+    display: flex; align-items: center; gap: 9px; padding: 4px 6px; margin: 0 -6px;
+    border-radius: 5px; color: var(--ink); text-decoration: none;
+  }
+  #selected .link:hover { background: color-mix(in srgb, var(--ink) 10%, transparent); }
+  #selected .link:hover .label { text-decoration: underline; }
+  #selected .link svg { flex: none; }
+  #selected .ends button { border-color: transparent; padding: 1px 4px; margin: 0 2px 0 -4px; font-size: 14px; }
+  #selected .ends button:hover { text-decoration: underline; }
+  #selected .all { margin-top: 12px; font-size: 12px; }
+
+  /* A click selects a box or a line. It stays amber; what feeds it is green and
+     what it feeds is red, the lines dashed and running the way they go; the
+     rest dims. Fixed colors rather than the theme's, so they mean the same in
+     every theme, and chosen to stay apart for the commonest color blindness. */
+  #view g[data-node], #view g[data-edge] { cursor: pointer; }
+  #view g.has-links:hover text { text-decoration: underline; }
+  #view svg.selecting g[data-name]:not(.sel):not(.up):not(.down) { opacity: .3; }
+  #view g[data-node].sel { filter: drop-shadow(0 0 2px var(--sel)) drop-shadow(0 0 6px var(--sel)); }
+  #view g[data-node].up { filter: drop-shadow(0 0 2px var(--up)) drop-shadow(0 0 4px color-mix(in srgb, var(--up) 60%, transparent)); }
+  #view g[data-node].down { filter: drop-shadow(0 0 2px var(--down)) drop-shadow(0 0 4px color-mix(in srgb, var(--down) 60%, transparent)); }
+  #view g[data-node].sel > :is(rect, path, circle, ellipse, polygon)[stroke]:not([stroke="none"]),
+  #view g[data-node].sel > a > :is(rect, path, circle, ellipse, polygon)[stroke]:not([stroke="none"]) { stroke: var(--sel); stroke-width: 2.5; }
+  #view g[data-node].up > :is(rect, path, circle, ellipse, polygon)[stroke]:not([stroke="none"]),
+  #view g[data-node].up > a > :is(rect, path, circle, ellipse, polygon)[stroke]:not([stroke="none"]) { stroke: var(--up); stroke-width: 2; }
+  #view g[data-node].down > :is(rect, path, circle, ellipse, polygon)[stroke]:not([stroke="none"]),
+  #view g[data-node].down > a > :is(rect, path, circle, ellipse, polygon)[stroke]:not([stroke="none"]) { stroke: var(--down); stroke-width: 2; }
+  #view g[data-edge].sel :is(line, path[fill="none"], polyline):not(.target) { stroke: var(--sel); stroke-width: 2; }
+  #view g[data-edge].up :is(line, path[fill="none"], polyline):not(.target) { stroke: var(--up); stroke-dasharray: 8 5; animation: run .9s linear infinite; }
+  #view g[data-edge].down :is(line, path[fill="none"], polyline):not(.target) { stroke: var(--down); stroke-dasharray: 8 5; animation: run .9s linear infinite; }
+  #view g[data-edge] .target { stroke: #000 !important; stroke-opacity: 0; }
+  @keyframes run { to { stroke-dashoffset: -26; } }
+  @media (prefers-reduced-motion: reduce) { #view g[data-edge] :is(line, path, polyline) { animation: none !important; } }
   aside h2 { margin: 0; padding: 10px 16px 6px; font-size: 13px; font-weight: 600; }
   aside h2 .what { display: block; font-weight: 400; font-size: 12px; color: var(--muted); }
   aside ol { list-style: none; margin: 0; padding: 0 8px 12px; overflow: auto; }
@@ -188,7 +303,7 @@ const PAGE = `<!doctype html>
   .note { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
   @media (max-width: 700px) {
     main { flex-direction: column; }
-    aside { width: auto; max-height: 40%; border-left: 0; border-top: 1px solid color-mix(in srgb, var(--rule) 45%, transparent); }
+    #side { width: auto; max-height: 45%; border-left: 0; border-top: 1px solid color-mix(in srgb, var(--rule) 45%, transparent); }
   }
 </style>
 </head>
@@ -227,10 +342,15 @@ const PAGE = `<!doctype html>
     </div>
     <div id="tip"></div>
   </div>
-  <aside id="findings" aria-label="Findings">
-    <h2>Findings <span class="what">where the picture, drawn as written, may not read as meant</span></h2>
-    <ol id="finding-list"></ol>
-  </aside>
+  <div id="side">
+    <section id="selected" aria-label="Selected" aria-live="polite">
+      <p class="empty">Click a box or a line to see its links and what it connects to.</p>
+    </section>
+    <aside id="findings" aria-label="Findings">
+      <h2>Findings <span class="what">where the picture, drawn as written, may not read as meant</span></h2>
+      <ol id="finding-list"></ol>
+    </aside>
+  </div>
 </main>
 <script>
 (function () {
@@ -506,13 +626,197 @@ const PAGE = `<!doctype html>
     list.append(item);
   });
 
+  /* ---- selecting a box or a line ---- */
+
+  // A click selects and never follows a link: the links are in the panel,
+  // and a link is followed only from there. One line out lights by default;
+  // the panel's button lights everything upstream and downstream.
+  var graph = DATA.graph;
+  var selectedPanel = document.getElementById('selected');
+  var selection = null;
+  var everything = false;
+
+  function each(list, fn) { Array.prototype.forEach.call(list, fn); }
+  function nodeGroups(name) { return svg.querySelectorAll('g[data-node="' + CSS.escape(name) + '"]'); }
+  function edgeGroups(index) { return svg.querySelectorAll('g[data-edge="' + index + '"]'); }
+
+  // A line is too thin to hit, so each gets an unseen wider copy along it.
+  each(svg.querySelectorAll('g[data-edge]'), function (group) {
+    each(group.querySelectorAll('line, path[fill="none"], polyline'), function (stroke) {
+      if (stroke.getAttribute('stroke-opacity') === '0') { stroke.classList.add('target'); return; }
+      var wide = stroke.cloneNode(false);
+      ['marker-start', 'marker-end', 'mask', 'stroke-dasharray'].forEach(function (name) { wide.removeAttribute(name); });
+      wide.setAttribute('stroke-width', '12');
+      wide.setAttribute('pointer-events', 'stroke');
+      wide.classList.add('target');
+      stroke.parentNode.insertBefore(wide, stroke.nextSibling);
+    });
+  });
+  Object.keys(graph.nodes).forEach(function (name) {
+    if (graph.nodes[name].links.length > 0) each(nodeGroups(name), function (group) { group.classList.add('has-links'); });
+  });
+  graph.edges.forEach(function (edge, index) {
+    if (edge.links.length > 0) each(edgeGroups(index), function (group) { group.classList.add('has-links'); });
+  });
+
+  function clearMarks() {
+    svg.classList.remove('selecting');
+    each(svg.querySelectorAll('.sel, .up, .down'), function (group) { group.classList.remove('sel', 'up', 'down'); });
+  }
+
+  // What lights: the edges into and out of a node, and the nodes at their far
+  // ends; with \`everything\`, on through every line upstream and downstream.
+  function lightFrom(startUp, startDown) {
+    var up = {}, down = {}, upEdges = {}, downEdges = {};
+    function walk(names, seen, edges, toward) {
+      var queue = names.slice();
+      while (queue.length) {
+        var at = queue.shift();
+        graph.edges.forEach(function (edge, index) {
+          var near = toward === 'up' ? edge.down : edge.up;
+          var far = toward === 'up' ? edge.up : edge.down;
+          if (near !== at || edges[index]) return;
+          edges[index] = true;
+          if (!seen[far]) { seen[far] = true; if (everything) queue.push(far); }
+        });
+      }
+    }
+    walk(startUp, up, upEdges, 'up');
+    walk(startDown, down, downEdges, 'down');
+    return { up: up, down: down, upEdges: upEdges, downEdges: downEdges };
+  }
+
+  function select(next) {
+    selection = next;
+    clearMarks();
+    if (!next) { showSelected(); return; }
+    svg.classList.add('selecting');
+    var lit;
+    if (next.kind === 'node') {
+      each(nodeGroups(next.key), function (group) { group.classList.add('sel'); });
+      lit = lightFrom([next.key], [next.key]);
+    } else {
+      var edge = graph.edges[next.key];
+      each(edgeGroups(next.key), function (group) { group.classList.add('sel'); });
+      // One line out from a line is its two ends; everything goes on from them.
+      lit = everything ? lightFrom([edge.up], [edge.down]) : { up: {}, down: {}, upEdges: {}, downEdges: {} };
+      lit.up[edge.up] = true;
+      lit.down[edge.down] = true;
+      delete lit.upEdges[next.key];
+      delete lit.downEdges[next.key];
+    }
+    Object.keys(lit.upEdges).forEach(function (index) { each(edgeGroups(index), function (group) { group.classList.add('up'); }); });
+    Object.keys(lit.downEdges).forEach(function (index) { each(edgeGroups(index), function (group) { group.classList.add('down'); }); });
+    Object.keys(lit.up).forEach(function (name) { if (!(next.kind === 'node' && name === next.key)) each(nodeGroups(name), function (group) { group.classList.add('up'); }); });
+    Object.keys(lit.down).forEach(function (name) {
+      if (next.kind === 'node' && name === next.key) return;
+      each(nodeGroups(name), function (group) { if (!group.classList.contains('up')) group.classList.add('down'); });
+    });
+    showSelected();
+  }
+
+  function sample(color) {
+    return '<svg width="26" height="8" aria-hidden="true"><line x1="1" y1="4" x2="25" y2="4" stroke="' + color + '" stroke-width="2.4" stroke-dasharray="7 4"/></svg>';
+  }
+
+  function element(tag, className, text) {
+    var made = document.createElement(tag);
+    if (className) made.className = className;
+    if (text !== undefined) made.textContent = text;
+    return made;
+  }
+
+  function endsList(names) {
+    var holder = element('div', 'ends');
+    if (names.length === 0) { holder.append(element('span', 'none', 'nothing')); return holder; }
+    names.forEach(function (name) {
+      var button = element('button', '', graph.nodes[name] ? graph.nodes[name].label : name);
+      button.type = 'button';
+      button.onclick = function () { select({ kind: 'node', key: name }); };
+      holder.append(button);
+    });
+    return holder;
+  }
+
+  function showSelected() {
+    selectedPanel.textContent = '';
+    if (!selection) {
+      selectedPanel.append(element('p', 'empty', 'Click a box or a line to see its links and what it connects to.'));
+      return;
+    }
+    var heading, links, from, to;
+    if (selection.kind === 'node') {
+      var node = graph.nodes[selection.key];
+      heading = node ? node.label : selection.key;
+      links = node ? node.links : [];
+      from = []; to = [];
+      graph.edges.forEach(function (edge) {
+        if (edge.down === selection.key && from.indexOf(edge.up) < 0) from.push(edge.up);
+        if (edge.up === selection.key && to.indexOf(edge.down) < 0) to.push(edge.down);
+      });
+    } else {
+      var edge = graph.edges[selection.key];
+      var name = function (key) { return graph.nodes[key] ? graph.nodes[key].label : key; };
+      heading = edge.label || name(edge.up) + ' \\u2192 ' + name(edge.down);
+      links = edge.links;
+      from = [edge.up]; to = [edge.down];
+    }
+    selectedPanel.append(element('h2', '', heading));
+    selectedPanel.append(element('h3', '', 'Links'));
+    if (links.length === 0) selectedPanel.append(element('div', 'none', 'none'));
+    links.forEach(function (link) {
+      var row = element('a', 'link');
+      row.href = link.href;
+      row.target = '_blank';
+      row.rel = 'noopener';
+      row.title = link.href;
+      row.innerHTML = link.badge;
+      row.append(element('span', 'label', link.label));
+      selectedPanel.append(row);
+    });
+    var comes = element('h3', '', 'Comes from');
+    comes.insertAdjacentHTML('beforeend', sample('var(--up)'));
+    selectedPanel.append(comes, endsList(from));
+    var goes = element('h3', '', 'Goes to');
+    goes.insertAdjacentHTML('beforeend', sample('var(--down)'));
+    selectedPanel.append(goes, endsList(to));
+    var all = element('button', 'all', 'Light everything upstream and downstream');
+    all.type = 'button';
+    all.setAttribute('aria-pressed', String(everything));
+    all.onclick = function () { everything = !everything; select(selection); };
+    selectedPanel.append(all);
+  }
+
+  // The pan and zoom capture the pointer, so the click lands on the view; what
+  // was under the pointer is noted when it went down, and a drag selects nothing.
+  var pressed = null;
+  view.addEventListener('pointerdown', function (event) {
+    pressed = event.button === 0 ? { x: event.clientX, y: event.clientY, target: event.target } : null;
+  }, true);
+  view.addEventListener('pointerup', function (event) {
+    if (!pressed) return;
+    var moved = Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y) > 4;
+    var target = pressed.target;
+    pressed = null;
+    if (moved) return;
+    var group = target.closest && target.closest('g[data-node], g[data-edge]');
+    if (!group) select(null);
+    else if (group.hasAttribute('data-node')) select({ kind: 'node', key: group.getAttribute('data-node') });
+    else select({ kind: 'edge', key: Number(group.getAttribute('data-edge')) });
+  });
+  // A link in the drawing is followed from the panel, not by clicking the drawing.
+  view.addEventListener('click', function (event) {
+    var link = event.target.closest && event.target.closest('a');
+    if (link && svg.contains(link)) event.preventDefault();
+  });
+
   /* ---- keys, beyond the zoom's own ---- */
 
   document.addEventListener('keydown', function (event) {
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.target.closest && event.target.closest('input, textarea')) return;
     if (event.key === 'f' && !full.hidden) toggleFull();
-    else if (event.key === 'Escape') { showSave(false); unlight(); }
+    else if (event.key === 'Escape') { showSave(false); unlight(); select(null); }
     else return;
     event.preventDefault();
   });

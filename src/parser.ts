@@ -72,6 +72,7 @@ import { CHECK_DEFAULTS, CHECK_KINDS, setCheck } from './checks.js';
 import { SourceError } from './errors.js';
 import { STATEMENT_KEYWORDS } from './grammar.js';
 import { isAttrKey, nameMark, OpenString, tokenizeLine, type Token } from './lexer.js';
+import { LINKS_KEY, type Link, type LinkIcon } from './links.js';
 import { SHAPE_SETTINGS } from './outline.js';
 import { checkOpacity } from './place.js';
 
@@ -834,20 +835,16 @@ function readAttr(
     return read.next;
   }
   if (key === 'url') {
-    // `url: https://example.com` loses everything from the `//` onwards, because
-    // `//` opens a comment — so the value is either missing entirely or is the
-    // bare scheme, which reads as another attribute key. Neither report says
-    // what is wrong, and the remedy is punctuation rather than a missing word.
-    const value = tokens[at + 1];
-    if (!value || !value.quoted) {
-      throw new SourceError(
-        `${subject}: a url is written in quotes — \`url: "https://example.com"\`. Without them ` +
-          'everything from the `//` onwards is read as a comment',
-        line,
-      );
+    // Several links are several addresses after the one key, as `cards:` lists
+    // its cards, each named in a bracket after it. The first stays under `url`,
+    // so whatever follows one link follows the first of several; the whole
+    // list is kept beside it only when there is more than a bare address.
+    const read = readLinks(tokens, at + 1, subject, line);
+    setOnce(attrs, key, read.links[0]!.href, subject, line, { key, value: quoteOf });
+    if (read.links.length > 1 || read.links.some((link) => link.name !== undefined || link.icon !== undefined)) {
+      attrs[LINKS_KEY] = JSON.stringify(read.links);
     }
-    setOnce(attrs, key, value.text, subject, line, { key, value: quoteOf });
-    return at + 2;
+    return read.next;
   }
   if (key === 'title') {
     // A title is a text, and every text is quoted. Unquoted, its first word
@@ -2171,6 +2168,37 @@ function parseStyle(head: Token[], line: number): StyleStmt {
 }
 
 /**
+ * `icon gh  letters: "GH"  fill: #24292f  text: white`. The characters have a
+ * key of their own because a quoted string after an icon's name is a file to
+ * read, and `text:` is the letters' color, as it is a node's.
+ */
+function readLetterIcon(head: Token[], start: number, name: string, line: number): { letters: string; fill?: string; text?: string } {
+  const read: { letters?: string; fill?: string; text?: string } = {};
+  const subject = `icon "${name}"`;
+  for (let i = start; i < head.length; i += 2) {
+    const keyToken = head[i]!;
+    clauseStarts?.add(keyToken);
+    const key = keyToken.text.slice(0, -1);
+    if (!isAttrKey(keyToken) || (key !== 'letters' && key !== 'fill' && key !== 'text')) {
+      throw new SourceError(`${subject}: a letter icon takes letters, fill and text, found "${keyToken.text}"`, line);
+    }
+    if (read[key] !== undefined) throw new SourceError(`${subject}: "${key}" is written twice — keep one`, line);
+    const value = head[i + 1];
+    if (value === undefined || isAttrKey(value)) throw new SourceError(`${subject}: "${key}" has no value`, line);
+    if (key === 'letters') {
+      if (!value.quoted) throw new SourceError(`${subject}: letters are a text, written in quotes — \`letters: "${value.text}"\``, line);
+      if (value.text.trim() === '') throw new SourceError(`${subject}: \`letters:\` is empty — write the letters to show, such as \`letters: "GH"\``, line);
+      read.letters = value.text;
+    } else {
+      if (value.quoted) throw new SourceError(`${subject}: a color is written without quotes — \`${key}: ${value.text}\``, line);
+      checkColorWord(value.text, subject, line);
+      read[key] = value.text;
+    }
+  }
+  return { letters: read.letters!, ...(read.fill === undefined ? {} : { fill: read.fill }), ...(read.text === undefined ? {} : { text: read.text }) };
+}
+
+/**
  * `icon <name> "<svg>…</svg>"`, or `icon <name> ./file.svg`. What the picture
  * is — pasted markup or a file to read — is worked out when the diagram is
  * resolved, since only the caller knows whether files can be read at all.
@@ -2178,6 +2206,12 @@ function parseStyle(head: Token[], line: number): StyleStmt {
 function parseIcon(head: Token[], line: number): IconStmt {
   const name = requireName(head[1], 'icon', line);
   const picture = head[2];
+  if (picture !== undefined && isAttrKey(picture) && picture.text === 'letters:') {
+    return { kind: 'icon', name, source: '', pasted: false, letters: readLetterIcon(head, 2, name, line), line };
+  }
+  if (picture !== undefined && isAttrKey(picture) && (picture.text === 'fill:' || picture.text === 'text:')) {
+    throw new SourceError(`icon "${name}" has colors and no letters — a letter icon starts \`icon ${name}  letters: "GH"\``, line);
+  }
   if (picture === undefined || isAttrKey(picture)) {
     throw new SourceError(
       `icon "${name}" needs its picture: the SVG itself between """ marks, or the name of an .svg file`,
@@ -2842,6 +2876,118 @@ function checkColorWord(value: string, subject: string, line: number): void {
     const fix = /\d/.test(value) ? 'a hex color is written' : 'if it is a hex color, write';
     throw new SourceError(`${subject}: \`${value}\` is not a color — ${fix} \`#${value}\``, line);
   }
+}
+
+const URL_QUOTES =
+  'a url is written in quotes — `url: "https://example.com"`. Without them everything from the `//` onwards is read as a comment';
+
+/**
+ * `url: "https://a" (name: "A", icon: "A" (fill: red))  "https://b"`: one or
+ * more quoted addresses, each with an optional bracket after it. The values in
+ * a link's bracket are a name (a text, so quoted) and a badge, which is quoted
+ * letters or the unquoted name of a picture. `readBracket` takes only unquoted
+ * values and no bracket inside a bracket, so links are read here.
+ */
+function readLinks(tokens: Token[], start: number, subject: string, line: number): { links: Link[]; next: number } {
+  // `url: https://example.com` loses everything from the `//` onwards, because
+  // `//` opens a comment — so the value is either missing entirely or is the
+  // bare scheme, which reads as another attribute key. Neither report says
+  // what is wrong, and the remedy is punctuation rather than a missing word.
+  if (!tokens[start]?.quoted) throw new SourceError(`${subject}: ${URL_QUOTES}`, line);
+  const links: Link[] = [];
+  let i = start;
+  while (tokens[i]?.quoted) {
+    const link: Link = { href: tokens[i]!.text };
+    i += 1;
+    if (follows(tokens, i, '(')) {
+      const read = readLinkBracket(tokens, i, link.href, subject, line);
+      Object.assign(link, read.link);
+      i = read.next;
+    }
+    if (links.some((had) => had.href === link.href)) {
+      throw new SourceError(`${subject}: "${link.href}" is linked twice in one \`url:\` — keep one`, line);
+    }
+    links.push(link);
+  }
+  return { links, next: i };
+}
+
+function readLinkBracket(
+  tokens: Token[],
+  start: number,
+  href: string,
+  subject: string,
+  line: number,
+): { link: Omit<Link, 'href'>; next: number } {
+  const link: Omit<Link, 'href'> = {};
+  const what = `the link "${href}"`;
+  let i = start + 1;
+  for (;;) {
+    if (follows(tokens, i, ',')) { i += 1; continue; }
+    if (follows(tokens, i, ')')) break;
+    const keyToken = tokens[i];
+    if (!keyToken) throw new SourceError(`${subject}: ${what} opens a "(" and never closes it`, line);
+    if (!isAttrKey(keyToken)) {
+      throw new SourceError(`${subject}: ${what} takes \`name:\` and \`icon:\` in its brackets, found "${keyToken.text}"`, line);
+    }
+    const key = keyToken.text.slice(0, -1);
+    if (key !== 'name' && key !== 'icon') {
+      throw new SourceError(`a link has no "${key}" — it takes name and icon`, line);
+    }
+    if (link[key] !== undefined) {
+      throw new SourceError(`${subject}: "${key}" is written twice in the brackets after ${what} — keep one`, line);
+    }
+    const value = tokens[i + 1];
+    if (!value || isAttrKey(value) || (!value.quoted && (value.text === ')' || value.text === '('))) {
+      throw new SourceError(`${subject}: "${key}" has no value`, line);
+    }
+    if (key === 'name') {
+      if (!value.quoted) {
+        throw new SourceError(`${subject}: a link's name is a text, written in quotes — \`name: "${value.text.replace(/,$/, '')}"\``, line);
+      }
+      link.name = value.text;
+      i += 2;
+      continue;
+    }
+    // A badge: quoted letters, which may take their colors in a bracket of
+    // their own, or the name of a picture, which keeps the colors it has.
+    if (value.quoted) {
+      if (value.text.trim() === '') throw new SourceError(`${subject}: a link's letter badge has no letters — write \`icon: "GH"\``, line);
+      const icon: LinkIcon = { letters: value.text };
+      i += 2;
+      if (follows(tokens, i, '(')) {
+        const read = readBracket(tokens, i, ['fill', 'text'], {
+          subject,
+          what: `the badge "${value.text}"`,
+          kind: 'a letter badge',
+          example: 'fill: #24292f',
+          line,
+        });
+        if (Object.keys(read.values).length === 0) {
+          throw new SourceError(`${subject}: the badge "${value.text}" opens empty brackets`, line);
+        }
+        for (const [color, set] of Object.entries(read.values)) {
+          checkColorWord(set, subject, line);
+          icon[color as 'fill' | 'text'] = set;
+        }
+        i = read.next;
+      }
+      link.icon = icon;
+      continue;
+    }
+    const picture = value.text.replace(/,$/, '');
+    i += 2;
+    if (follows(tokens, i, '(')) {
+      throw new SourceError(
+        `${subject}: the picture "${picture}" keeps its own colors, so it takes no bracket — ` +
+          `letters do: \`icon: "${picture.slice(0, 2).toUpperCase()}" (fill: …)\``,
+        line,
+      );
+    }
+    link.icon = { picture };
+  }
+  if (Object.keys(link).length === 0) throw new SourceError(`${subject}: ${what} opens empty brackets`, line);
+  return { link, next: i + 1 };
 }
 
 function follows(tokens: Token[], at: number, word: string): boolean {

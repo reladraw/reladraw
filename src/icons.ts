@@ -56,7 +56,18 @@ export interface PastedIcon {
   readonly inner: string;
 }
 
-export type Icon = DrawnIcon | PastedIcon;
+/**
+ * `icon gh  letters: "GH"  fill: #24292f  text: white`: letters in a circle.
+ * A color left unsaid is the theme's, chosen from the letters, so the same
+ * letters get the same color in a theme.
+ */
+export interface LetterIcon {
+  readonly letters: string;
+  readonly fill?: string;
+  readonly text?: string;
+}
+
+export type Icon = DrawnIcon | PastedIcon | LetterIcon;
 
 const GRID = 24;
 /** Line width on the 24-unit grid, scaled with everything else. */

@@ -1016,6 +1016,8 @@ export interface IconStmt {
    * starting with `<`. Otherwise it names a file.
    */
   pasted: boolean;
+  /** `icon gh  letters: "GH"  fill: …  text: …`: letters in a circle, in place of a picture. */
+  letters?: { letters: string; fill?: string; text?: string };
   line: number;
 }
 

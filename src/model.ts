@@ -8,7 +8,7 @@ export interface Rect {
   height: number;
 }
 import type { Line } from './text.js';
-import type { Body } from './icons.js';
+import type { Body, Icon } from './icons.js';
 
 /** A node with its geometry solved. Coordinates are absolute, origin top-left. */
 /** A distance past each side of a box. */
@@ -299,6 +299,8 @@ export interface Layout {
    * rather than stating one, and styles are otherwise merged away by here.
    */
   markup: Record<string, string>;
+  /** The pictures links' badges name, by name, for the page that draws the badges. */
+  linkIcons: Record<string, Icon>;
   /**
    * What the `diagram` statement said, as written. Nothing here affects
    * geometry; it rides along so the renderer sees the whole compiled document

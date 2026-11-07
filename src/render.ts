@@ -12,7 +12,7 @@ import {
 } from './constants.js';
 import type { Attrs, Mark, NodeCorners } from './ast.js';
 import { SourceError } from './errors.js';
-import { ICON_STROKE, type Icon, type IconTone, type Outline } from './icons.js';
+import { ICON_STROKE, type Icon, type IconTone, type LetterIcon, type Outline } from './icons.js';
 import { insideOutline,isBoxy, isRound, placePath, shapeOf, SUBPROCESS_INSET, type ShapeLook } from './outline.js';
 import { monospaceMeasurer, type Measurer } from './measure.js';
 import { joinedToText, outlineStated, type DepthStatement, type Layout, type LayoutEdge, type LayoutMark, type LayoutNode, type LineLook } from './model.js';
@@ -20,6 +20,7 @@ import { DARK_THEME, THEMES, overlapFill, regionTint, textOnFill, themeColor, ty
 import { crossingPoints, planLines, traceRoute, visibleRuns, type Point, type Route } from './lines.js';
 import { patchPadding, placeLineTexts } from './linetexts.js';
 import { plain, type Line, type Run } from './text.js';
+import { linkLabel, linksOf, type Link } from './links.js';
 
 export interface RenderOptions {
   measurer?: Measurer;
@@ -142,7 +143,9 @@ function drawing(layout: Layout, options: RenderOptions): (tagged: boolean) => s
         edge.ink = union(edge.ink, grow(extentOfPoints([crossing.at]), crossing.reach + edge.edge.look.thickness));
       }
     }
-    lines.push({ key: keyOf(edge), svg: linked(parts.join('\n'), edge.edge.attrs['url']) });
+    const links = linksOf(edge.edge.attrs);
+    if (links !== undefined && edge.edge.texts.length === 0) parts.push(lineTarget(edge.line));
+    lines.push({ key: keyOf(edge), svg: linked(parts.join('\n'), links) });
     ink = union(ink, grow(edge.ink, layout.margin));
   }
   const lineSvg = new Map(lines.map((line) => [line.key, line.svg]));
@@ -238,7 +241,14 @@ function tag(layout: Layout, item: Drawn, svg: string): string {
     if (!mark) return svg;
     ({ name, line } = mark);
   }
-  return `<g data-name="${escapeXml(name).replace(/"/g, '&quot;')}" data-line="${line}">\n${svg}\n</g>`;
+  // What the page selects: a node by its name, a line by its place in the list.
+  const what = item.node ? ` data-node="${escapeXml(item.node.name).replace(/"/g, '&quot;')}"` : item.key.startsWith('edge ') ? ` data-edge="${item.key.slice('edge '.length)}"` : '';
+  return `<g data-name="${escapeXml(name).replace(/"/g, '&quot;')}" data-line="${line}"${what}>\n${svg}\n</g>`;
+}
+
+/** An icon on its own, as a small SVG of `side` pixels: what the page puts beside a link. */
+export function iconSvg(icon: Icon, side: number, theme: Theme): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${side}" height="${side}" viewBox="0 0 ${side} ${side}" font-family="system-ui, sans-serif">\n${drawIcon(icon, 0, 0, side, theme)}\n</svg>`;
 }
 
 /**
@@ -299,11 +309,28 @@ function ownIds(svg: string): string {
  * have given — the container catches every click its children do not — reached
  * by repeating the destination rather than by wrapping.
  */
-function linked(svg: string, url: string | undefined): string {
-  if (url === undefined || svg.length === 0) return svg;
+function linked(svg: string, links: Link[] | undefined): string {
+  const first = links?.[0];
+  if (first === undefined || svg.length === 0) return svg;
+  // A plain SVG can follow one address, so a click follows the first; the
+  // tooltip names every link, so a reader learns there are others. A single
+  // bare address gets no tooltip, so a file written before several links
+  // draws exactly as it did.
+  const named = links!.length > 1 || first.name !== undefined;
+  const title = named ? `\n    <title>${escapeXml(links!.map((link) => linkLabel(link, links)).join('\n'))}</title>` : '';
   // An `&` between query parameters is ordinary in a url and illegal raw in an
   // attribute, so the value is escaped as markup rather than merely quoted.
-  return `  <a href=${quote(escapeXml(url))} target="_blank" rel="noopener">\n${svg}\n  </a>`;
+  return `  <a href=${quote(escapeXml(first.href))} target="_blank" rel="noopener">${title}\n${svg}\n  </a>`;
+}
+
+/**
+ * A line with a link and no text is its own target, and a line is too thin to
+ * hit, so an unseen wider copy of its path catches the click.
+ */
+function lineTarget(line: string): string {
+  const straight = line.match(/ x1="([^"]*)" y1="([^"]*)" x2="([^"]*)" y2="([^"]*)"/);
+  const d = straight ? `M${straight[1]} ${straight[2]} L${straight[3]} ${straight[4]}` : line.match(/ d="([^"]*)"/)?.[1];
+  return d === undefined ? '' : `  <path d="${d}" fill="none" stroke="#000" stroke-opacity="0" stroke-width="12" pointer-events="stroke"/>`;
 }
 
 /** Whether a node holds anything besides its heading and what is joined to its text: what a theme draws as a container. */
@@ -388,9 +415,9 @@ function drawNode(
   fontSize: number,
   markup: Record<string, string>,
   guides: Guides,
-  inherited?: string,
+  inherited?: Link[],
 ): Drawn[] {
-  const url = node.attrs['url'] ?? inherited;
+  const url = linksOf(node.attrs) ?? inherited;
   let own: string[] = [];
   if (!node.guide) {
     own = nodeSvg(node, theme, measurer, fontSize, markup);
@@ -428,7 +455,7 @@ function drawDeck(
   fontSize: number,
   markup: Record<string, string>,
   guides: Guides,
-  url: string | undefined,
+  url: Link[] | undefined,
 ): Drawn[] {
   const outlined = outlineStated(node.appearance);
   const drawn = outlined ? node : { ...node, appearance: { ...node.appearance, fill: 'none', border: 'none' } };
@@ -466,7 +493,7 @@ function drawVenn(
   fontSize: number,
   markup: Record<string, string>,
   guides: Guides,
-  url: string | undefined,
+  url: Link[] | undefined,
 ): Drawn[] {
   const plain = (part: LayoutNode, fill: string): LayoutNode => ({ ...part, appearance: { ...part.appearance, fill, border: 'none' } });
   const own = nodeSvg(plain(node, node.appearance['fill'] ?? 'none'), theme, measurer, fontSize, markup);
@@ -475,9 +502,9 @@ function drawVenn(
   const leftFill = left.appearance['fill'] ?? 'theme-primary-subtle';
   const rightFill = right.appearance['fill'] ?? 'theme-secondary-subtle';
   const sharedFill = shared.appearance['fill'] ?? overlapFill(themeColor(leftFill, theme), theme);
-  const item = (part: LayoutNode, key: string, svg: string[], fills: Fill[] = []): Drawn => ({ key, node: part, svg: linked(svg.join('\n'), part.attrs['url'] ?? url), fills });
+  const item = (part: LayoutNode, key: string, svg: string[], fills: Fill[] = []): Drawn => ({ key, node: part, svg: linked(svg.join('\n'), linksOf(part.attrs) ?? url), fills });
   const filled = (part: LayoutNode, fill: string) => item(part, part.name, nodeSvg(plain(part, fill), theme, measurer, fontSize, markup), nodeFills(plain(part, fill), theme));
-  const rest = (part: LayoutNode) => part.children.flatMap((child) => drawNode(child, theme, measurer, fontSize, markup, guides, part.attrs['url'] ?? url));
+  const rest = (part: LayoutNode) => part.children.flatMap((child) => drawNode(child, theme, measurer, fontSize, markup, guides, linksOf(part.attrs) ?? url));
   return [
     { key: node.name, node, svg: linked(own.join('\n'), url), fills: nodeFills(plain(node, node.appearance['fill'] ?? 'none'), theme) },
     filled(left, leftFill),
@@ -923,8 +950,32 @@ function outlineDetail(shape: Outline, x: number, y: number, w: number, h: numbe
   return shapeOf(shape, look, w, h).detail.map((d) => placePath(d, x, y));
 }
 
+/**
+ * A letter badge's circle and letters. Unsaid, the circle is one of the
+ * theme's two accents, picked from the letters so the same letters always get
+ * the same one, and the letters are that accent's own text color; a stated
+ * fill with no text color takes the theme's text color.
+ */
+export function letterColors(icon: LetterIcon, theme: Theme): { fill: string; text: string } {
+  const sum = [...icon.letters].reduce((total, char) => total + char.codePointAt(0)!, 0);
+  const accent = sum % 2 === 0 ? theme.primary : theme.secondary;
+  const fill = icon.fill === undefined ? accent.color : themeColor(icon.fill, theme);
+  const text = icon.text !== undefined ? themeColor(icon.text, theme) : icon.fill === undefined ? accent.on : theme.text;
+  return { fill, text };
+}
+
 /** One icon, scaled from its own grid onto a square of `side` at `x, y`. */
 function drawIcon(icon: Icon, x: number, y: number, side: number, theme: Theme): string {
+  if ('letters' in icon) {
+    const colors = letterColors(icon, theme);
+    const r = side / 2;
+    // Letters shrink as there are more of them, so two or three still fit the circle.
+    const size = round(side * (icon.letters.length <= 1 ? 0.55 : icon.letters.length === 2 ? 0.42 : 0.32));
+    return [
+      `  <circle cx="${round(x + r)}" cy="${round(y + r)}" r="${round(r)}" fill="${colors.fill}"/>`,
+      `  <text x="${round(x + r)}" y="${round(y + r)}" text-anchor="middle" dominant-baseline="central" font-size="${size}px" font-weight="700" fill="${colors.text}">${escapeXml(icon.letters)}</text>`,
+    ].join('\n');
+  }
   if ('inner' in icon) {
     // Its own viewBox fits it to the square, centered and in proportion.
     // `color` is set only when the drawing does not set it, so `currentColor`

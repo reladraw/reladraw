@@ -199,6 +199,8 @@ node more  icon: crate  right of store
 - **Its ids and class names are renamed**, so two icons that both call a gradient `a` don't collide.
 - **Script is refused**: a `<script>` element or an `on…` attribute.
 
+A letter icon is a few letters in a circle, with `letters:` and, if wanted, its colors: `icon gh  letters: "GH"  fill: #24292f  text: white`. A color left out is the theme's: the circle one of its two accents, picked from the letters so the same letters get the same one, and the letters that accent's own text color. It goes anywhere a picture does, as a node's `icon:`, a `badge:`, or a link's badge.
+
 A file (`icon rack "./rack.svg"`) is found relative to the diagram's own file. Only the command line can read one; in the playground or a web page, paste the SVG. A declared name replaces a built-in of the same name, and declaring one name twice is an error. Every picture is drawn into the output as path data, so the SVG stays standalone.
 
 ### Badges
@@ -1137,7 +1139,22 @@ node store "Store"  right of docs (gap: 12)
 edge docs -> store  "read first"  url: "https://example.com/order"
 ```
 
-`url:` makes a thing clickable in a viewer that follows links. The whole thing is the target: a node's box and everything in it, a line's text. The value is quoted, since an unquoted `//` starts a comment. Nothing about a destination is visible. A container's destination reaches children that name none. A line with no text is refused one, since a line is a target nobody can hit. A style may not carry one.
+`url:` makes a thing clickable in a viewer that follows links. The whole thing is the target: a node's box and everything in it, a line and its text. The value is quoted, since an unquoted `//` starts a comment. Nothing about a destination is visible. A container's destination reaches children that name none. A line with no text may have one; an unseen wider copy of the line takes the click. A style may not carry one.
+
+A thing can have several links, written one after another, each with a name and a badge in a bracket after it:
+
+```
+node api "Orders API"
+  url: "https://app.datadoghq.com/…" (name: "Datadog", icon: "D" (fill: #632ca6, text: white))
+       "https://github.com/…" (name: "GitHub", icon: gh)
+       "https://app.shortcut.com/…" (name: "Shortcut")
+```
+
+- **`name:`** is what a reader is shown, in quotes. A link with none shows its site, such as `github.com`.
+- **`icon:`** is its badge. Quoted, it is letters in a small circle, `icon: "GH"`, whose colors go in a bracket after it, `(fill: #24292f, text: white)`; left out, they are the theme's. Unquoted, it is a picture: a built-in icon, or one declared with `icon <name>` ([Your own icons](#your-own-icons)), which keeps its own colors. With no `icon:`, the badge is the first letter of the name.
+- **In an SVG**, a click follows the first link, and the browser's tooltip lists them all. **On a page** made with `--page`, a click selects the thing and the panel beside the drawing lists its links; a link is followed from there ([A page for looking at a diagram](#a-page-for-looking-at-a-diagram)).
+
+The same address twice in one `url:` is refused.
 
 ## Errors and findings
 
@@ -1196,7 +1213,11 @@ The output is a standalone SVG: every picture is drawn into it as path data, nev
 reladraw render arch.reladraw --page
 ```
 
-`--page` writes `arch.html`: one self-contained file, for opening in a browser, attaching or committing, that needs nothing running and fetches nothing. The page is in the diagram's own colors, so a dark diagram doesn't sit on a white page, and it is headed with `diagram title:`, or the file's name when there is none. Under the title it says which file it was drawn from and when, such as "drawn from arch.reladraw, 2026-11-05 14:32": the page is a snapshot of the file, and is behind it once the file is edited, until it is rendered again. Drag to pan; scroll, pinch or double-click to zoom; Fit shows the whole diagram and 100% returns it to its own scale. The zoom is always shown, with "Fit" beside it while the whole diagram is in view. There is a full-screen button. The Save menu saves the page itself, as it was written rather than at its current zoom; the `.reladraw` source it was drawn from; or the picture as an SVG or a PNG, as `render` would draw it; or copies the SVG. Each is named after the source file: `arch.html`, `arch.reladraw`, `arch.svg`, `arch.png`. In Chrome and Edge it asks where to save; other browsers put the file with their downloads. The findings are listed beside it in a panel that folds away, and clicking one lights up what its line drew. A box's or a line's name shows under the pointer. Keys: `+` and `-` zoom, `0` fits, `1` is actual size, `f` is full screen.
+`--page` writes `arch.html`: one self-contained file, for opening in a browser, attaching or committing, that needs nothing running and fetches nothing. The page is in the diagram's own colors, so a dark diagram doesn't sit on a white page, and it is headed with `diagram title:`, or the file's name when there is none. Under the title it says which file it was drawn from and when, such as "drawn from arch.reladraw, 2026-11-05 14:32": the page is a snapshot of the file, and is behind it once the file is edited, until it is rendered again. Drag to pan; scroll, pinch or double-click to zoom; Fit shows the whole diagram and 100% returns it to its own scale. The zoom is always shown, with "Fit" beside it while the whole diagram is in view. There is a full-screen button. The Save menu saves the page itself, as it was written rather than at its current zoom; the `.reladraw` source it was drawn from; or the picture as an SVG or a PNG, as `render` would draw it; or copies the SVG. Each is named after the source file: `arch.html`, `arch.reladraw`, `arch.svg`, `arch.png`. In Chrome and Edge it asks where to save; other browsers put the file with their downloads. The findings are listed beside it in a panel that folds away, and clicking one lights up what its line drew. A box's or a line's name shows under the pointer.
+
+**A click on a box or a line selects it**, and never follows a link. The selection is amber; what feeds it is green and what it feeds is red, the lines dashed and moving the way they run; the rest dims. A line runs from the end without an arrowhead when only one end has one, and otherwise from the end written first. The panel beside the drawing names the selection and lists its links, each with its badge, and the boxes it comes from and goes to; a link opens in a new tab, and a box selects it. One line out lights by default, and the panel's button lights everything upstream and downstream. A box with links underlines its text under the pointer. A click on the background or Escape clears the selection.
+
+Keys: `+` and `-` zoom, `0` fits, `1` is actual size, `f` is full screen, Escape clears the selection.
 
 ### Formatting
 
@@ -1319,6 +1340,10 @@ Pre-1.0, so the minor number is where a breaking change goes. Every removal is r
 
 **Unreleased**
 
+- **A box or a line can have several links**, each with a name and a badge: `url: "https://github.com/…" (name: "GitHub", icon: "GH")  "https://app.datadoghq.com/…" (name: "Datadog")`. In an SVG a click follows the first and the tooltip lists them all. See [Destinations](#destinations).
+- **A click on the page selects a box or a line.** The page made with `render --page` lights what feeds it in green and what it feeds in red, and a panel beside the drawing lists its links and the boxes at either end. A click no longer follows a link on the page; the panel does. See [A page for looking at a diagram](#a-page-for-looking-at-a-diagram).
+- **A line with no text can have a link.** It used to be refused as too thin to click; an unseen wider copy of the line now takes the click.
+- **A letter icon**: `icon gh  letters: "GH"  fill: #24292f  text: white` is a few letters in a circle, usable anywhere an icon is. See [Your own icons](#your-own-icons).
 - **The page can save its own source, and itself.** A page made with `render --page` now carries the `.reladraw` file it was drawn from, so whoever is handed the page can get the source back. Its Export menu is now a Save menu: This page, .reladraw source, SVG, PNG and Copy SVG, and in Chrome and Edge each save asks where the file goes. Under its title the page says which file it was drawn from and when, so you can tell whether it is behind the file.
 - **The agent skill keeps throwaway diagrams out of your project.** A diagram drawn only to show you something now goes in a folder outside the project, such as `~/.cache/reladraw/`, and a project's own diagram gets its page there too. While fixing findings it runs `reladraw check`, so no stray SVG is left beside the source.
 
