@@ -255,6 +255,17 @@ compile() {
   npx tsc && npx tsc -p tsconfig.element.json
 }
 
+# The node_modules this checkout uses: its own, or the nearest one above it,
+# as Node itself would find. A copy built in a scratch folder links to it.
+modules_dir() {
+  local dir="$PWD"
+  while [ "$dir" != "/" ]; do
+    if [ -d "$dir/node_modules" ]; then echo "$dir/node_modules"; return; fi
+    dir="$(dirname "$dir")"
+  done
+  echo "$PWD/node_modules"
+}
+
 # Two SVGs that differ only in their ids' per-drawing prefix. Any change to a
 # drawing changes its prefix, so this only tells a change to how ids are named
 # apart from a change to what is drawn.
@@ -868,7 +879,7 @@ PY
     trap 'rm -rf "$work"' EXIT
     mkdir -p "$work/base" "$work/head"
     git archive "$ref" | tar -x -C "$work/base"
-    ln -s "$PWD/node_modules" "$work/base/node_modules"
+    ln -s "$(modules_dir)" "$work/base/node_modules"
     (cd "$work/base" && npx tsc >/dev/null)
 
     compile
@@ -947,7 +958,7 @@ PY
     trap 'rm -rf "$work"' EXIT
     mkdir -p "$work/base" "$work/out"
     git archive "$ref" | tar -x -C "$work/base"
-    ln -s "$PWD/node_modules" "$work/base/node_modules"
+    ln -s "$(modules_dir)" "$work/base/node_modules"
     (cd "$work/base" && npx tsc >/dev/null)
 
     compile
@@ -988,7 +999,7 @@ PY
       work="$(mktemp -d -t reladraw-compare-XXXXXX)"
       trap 'rm -rf "$work"' EXIT
       git archive "$ref" | tar -x -C "$work"
-      ln -s "$PWD/node_modules" "$work/node_modules"
+      ln -s "$(modules_dir)" "$work/node_modules"
       (cd "$work" && npx tsc >/dev/null)
       for in in "$work"/examples/*.reladraw; do
         name="$(basename "$in" .reladraw)"
@@ -1019,7 +1030,7 @@ PY
     work="$(mktemp -d -t reladraw-before-XXXXXX)"
     trap 'rm -rf "$work"' EXIT
     git archive "$ref" | tar -x -C "$work"
-    ln -s "$PWD/node_modules" "$work/node_modules"
+    ln -s "$(modules_dir)" "$work/node_modules"
     (cd "$work" && npx tsc >/dev/null)
     mkdir -p examples/out
     cli "$work/dist/cli.js" "$in" -o "examples/out/$name-before.svg"
