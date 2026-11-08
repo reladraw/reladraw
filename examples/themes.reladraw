@@ -1,5 +1,5 @@
 // A diagram that states no color of its own, so every color in it is the
-// theme's. Render it in all of them with `./dev.sh themes examples/themes.reladraw`.
+// theme's. Render it in each theme to compare them.
 
 style quiet  text: (color: theme-muted, size: small)
 

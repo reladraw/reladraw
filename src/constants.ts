@@ -129,7 +129,7 @@ export const DEFAULT_FONT_SIZE = 14;
  * `small` is sampled rather than chosen. In
  * `examples/reference/arch.png` the box and container texts run 25
  * pixels baseline to baseline and every annotation runs 21, which is this
- * ratio; `./dev.sh textrows` is how that was read off. `large` is the same step
+ * ratio. `large` is the same step
  * taken the other way, so the scale is symmetric about the document size.
  */
 export const TEXT_SIZES: Record<string, number> = {

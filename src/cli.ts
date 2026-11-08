@@ -413,7 +413,7 @@ function nearestSettings(
 // The exit code is set, not exited with: process.exit ends the process at
 // once, and a write to a pipe that hasn't drained yet is lost, which cut
 // `format -` and `render -o -` off at 64 KB. Node exits on its own once the
-// output is written. `./dev.sh pipe` checks it.
+// output is written.
 main(process.argv.slice(2)).then(
   (code) => {
     process.exitCode = code;

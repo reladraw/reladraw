@@ -35,7 +35,6 @@
   "scripts": {
     "build": "tsc && tsc -p tsconfig.element.json",
     "prepublishOnly": "npm run build",
-    "preversion": "./dev.sh check-version \"$npm_new_version\"",
     "dev": "tsc --watch",
     "example": "npm run build && node dist/cli.js render examples/arch.reladraw -o examples/out/arch.svg"
   },

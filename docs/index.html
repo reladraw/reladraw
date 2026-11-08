@@ -1,9 +1,8 @@
 <!doctype html>
 <!--
-  Source for the playground page. This is the file to edit; docs/index.html is
-  generated from it by `./dev.sh playground`, which replaces the two markers
-  below with the compiled library and the example sources, both inlined. Do not
-  edit docs/index.html — the next build overwrites it.
+  The playground page. It is generated: the compiled library and the example
+  sources are inlined into a template, so an edit made here by hand is lost at
+  the next build.
 -->
 <html lang="en">
   <head>
@@ -2062,7 +2061,7 @@ const DEFAULT_FONT_SIZE = 14;
  * `small` is sampled rather than chosen. In
  * `examples/reference/arch.png` the box and container texts run 25
  * pixels baseline to baseline and every annotation runs 21, which is this
- * ratio; `./dev.sh textrows` is how that was read off. `large` is the same step
+ * ratio. `large` is the same step
  * taken the other way, so the scale is symmetric about the document size.
  */
 const TEXT_SIZES = {
@@ -17451,9 +17450,7 @@ globalThis.reladraw = { compile, draw, SourceError, highlightLine, THEMES, THEME
 
         var STORE = 'reladraw.source';
 
-        // The seed leads, then whatever `./dev.sh playground` inlined from
-        // examples/. The template on its own has neither the library nor the
-        // examples, so it is never opened directly.
+        // The seed leads, then whatever the build inlined from examples/.
         var EXAMPLES = [
           { name: 'start', about: 'Three boxes in a row, each a stated distance from the last.', source: SEED },
         ].concat(globalThis.reladrawExamples || []);
@@ -17521,8 +17518,7 @@ globalThis.reladraw = { compile, draw, SourceError, highlightLine, THEMES, THEME
 
         // The scanner covers every line end to end, so this rebuilds the source
         // exactly and only wraps some of it in spans. A character lost here
-        // would slide the rest of the line sideways under the cursor, which is
-        // why `./dev.sh tokens` checks the covering rather than the colors.
+        // would slide the rest of the line sideways under the cursor.
         function paint() {
           var text = source.value;
           var out = '';
