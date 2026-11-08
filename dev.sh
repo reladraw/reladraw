@@ -143,6 +143,10 @@ Commands:
   before <file> [ref]           Render one example as <ref> renders it, into
                                  examples/out/<name>-before.png. `regress` says
                                  that something moved; this is how you see what.
+  published <version> <args...> Run a version from npm, as a stranger with it
+                                 installed would: published 0.18.0 check a.reladraw.
+                                 For a report that says "worked in 0.18". Paths are
+                                 made absolute, since it runs outside the repo.
   pictures [ref]                Which pictures did this change move? The check to
                                  run after changing the code or an example file.
                                  Renders every example as <ref> (default HEAD)
@@ -951,6 +955,14 @@ PY
   stress)
     compile
     node tools/stress.mjs "$@"
+    ;;
+  published)
+    [ -n "${1:-}" ] || { echo "usage: ./dev.sh published <version> <args...>" >&2; exit 1; }
+    version="$1"; shift
+    args=()
+    for a in "$@"; do if [ -e "$a" ]; then args+=("$(cd "$(dirname "$a")" && pwd)/$(basename "$a")"); else args+=("$a"); fi; done
+    # Outside the repo, so npx fetches the published package, not this one.
+    (cd "${TMPDIR:-/tmp}" && npx -y "reladraw@$version" "${args[@]}")
     ;;
   pictures)
     # The end-to-end counterpart to `regress`: each side renders its *own*
