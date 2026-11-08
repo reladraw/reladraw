@@ -10981,7 +10981,7 @@ function takeTitlePlacements(tokens, open, subject, line) {
  * is the text.
  */
 function parseNode(head, line) {
-    const name = requireName(head[1], 'node', line);
+    const name = requireName(head[1], 'node', line, head[2]);
     const written = head[2];
     const textToken = written?.quoted ? written : undefined;
     // A bare word here is a text somebody forgot to quote far more often than
@@ -11477,7 +11477,7 @@ function parseGuide(head, line) {
  * between two boxes, which copies of one line share.
  */
 function parseBundle(head, line) {
-    const name = requireName(head[1], 'bundle', line);
+    const name = requireName(head[1], 'bundle', line, head[2]);
     const subject = `bundle "${name}"`;
     const attrs = {};
     let via;
@@ -11588,7 +11588,7 @@ function parseBundle(head, line) {
 }
 /** `point funnel  between c2 and api at 2/3` */
 function parsePoint(head, line) {
-    const name = requireName(head[1], 'point', line);
+    const name = requireName(head[1], 'point', line, head[2]);
     const subject = `point "${name}"`;
     const marked = readMarkText(head, 'point', subject, line);
     head = marked.tokens;
@@ -11607,7 +11607,7 @@ function parsePoint(head, line) {
 }
 /** `region r  c bottom-left to d top-right`, or `region r  between a and b (span: both)` */
 function parseRegion(head, line) {
-    const name = requireName(head[1], 'region', line);
+    const name = requireName(head[1], 'region', line, head[2]);
     const subject = `region "${name}"`;
     const marked = readMarkText(head, 'region', subject, line);
     head = marked.tokens;
@@ -11654,7 +11654,7 @@ function refuseKeys(attrs, keys, subject, what, line) {
 }
 /** `style <name> <attributes>` */
 function parseStyle(head, line) {
-    const name = requireName(head[1], 'style', line);
+    const name = requireName(head[1], 'style', line, head[2]);
     const attrs = attrsOnly(head, 2, line, `style "${name}"`);
     if (Object.keys(attrs).length === 0) {
         throw new SourceError(`style "${name}" sets nothing`, line);
@@ -11710,7 +11710,7 @@ function readLetterIcon(head, start, name, line) {
  * resolved, since only the caller knows whether files can be read at all.
  */
 function parseIcon(head, line) {
-    const name = requireName(head[1], 'icon', line);
+    const name = requireName(head[1], 'icon', line, head[2]);
     const picture = head[2];
     if (picture !== undefined && isAttrKey(picture) && picture.text === 'letters:') {
         return { kind: 'icon', name, source: '', pasted: false, letters: readLetterIcon(head, 2, name, line), line };
@@ -11839,11 +11839,18 @@ function defaultRefusal(kind, key) {
     }
     return `which a default does not set — ${takes}`;
 }
-function requireName(token, keyword, line) {
+function requireName(token, keyword, line, next) {
     if (!token || token.quoted) {
         throw new SourceError(`${keyword} needs a name`, line);
     }
     refuseNameMark(token, `${keyword} "${token.joined ?? token.text}"`, line);
+    // A comma separates the items of a list (0.19.0), so `node a,b` reads as
+    // the name `a` and a stray `b`. Say so, rather than whatever `b` turns into.
+    if (token.text.endsWith(',')) {
+        const touching = next && !next.quoted && next.start !== undefined && next.start === token.end;
+        const written = touching ? `${token.text}${next.text}` : token.text;
+        throw new SourceError(`${keyword} "${written}": a name may not contain ",", because a comma separates the items of a list`, line);
+    }
     return token.text;
 }
 /**
@@ -17048,9 +17055,11 @@ function clauseRuns(tokens, starts) {
     let inKey = false;
     for (const entry of tokens) {
         const { token } = entry;
-        const opens = depth === 0 &&
-            token.text !== '(' &&
-            (starts.has(token) || (token.quoted && !inKey) || runs.length === 0);
+        // A continued line can begin with a bracket, the one that belongs to a
+        // placement on the line before (a comment may sit between them), so the
+        // first token always opens a run, bracket or not.
+        const opens = runs.length === 0 ||
+            (depth === 0 && token.text !== '(' && (starts.has(token) || (token.quoted && !inKey)));
         if (opens) {
             runs.push([entry]);
             inKey = isAttrKey(token);

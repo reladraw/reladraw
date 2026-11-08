@@ -22,7 +22,7 @@ That matters here specifically. You can't see the SVG you produced. With auto-la
 
 ## Check it is installed, and the same version as this skill
 
-This skill teaches reladraw 0.23.0. Once per session, before the first render, run:
+This skill teaches reladraw 0.23.1. Once per session, before the first render, run:
 
 ```
 reladraw --version
@@ -217,7 +217,7 @@ node aside "The worker shares the database / but takes no HTTP traffic." (wrap: 
 
 # Part 2 — the syntax reference
 
-# Syntax reference — 0.23.0
+# Syntax reference — 0.23.1
 
 What the language accepts. The changelog at the end lists what changed in each published version; 0.17.0's changes are large, and its entry has a table of every old spelling and what to write instead.
 
@@ -278,7 +278,7 @@ What every statement of a kind has is positional; what is optional is a key. A w
 
 ### Names and words
 
-A name is unique across nodes, points, regions, lines and bundles. It may not contain `:`, which would make it a key, or `;`, which is reserved. A dot means a child: `server.docker` is inside `server`, and the parent must be declared first. Moving a node to another parent is a rename.
+A name is unique across nodes, points, regions, lines and bundles. It may not contain `:`, which would make it a key, `,`, which separates the items of a list, or `;`, which is reserved. A dot means a child: `server.docker` is inside `server`, and the parent must be declared first. Moving a node to another parent is a rename.
 
 Every word the language owns that has more than one part is hyphenated (`from-mark:`, `bottom-left`, `min-height:`, `align-children:`), while a phrase of separate words stays spaced (`left of`, `even with`). A name you choose should look chosen: the examples use underscores (`some_region`). `to_mark:` is refused by name, pointing to `to-mark:`.
 
@@ -1557,6 +1557,11 @@ Designed and absent from the code.
 
 Pre-1.0, so the minor number is where a breaking change goes. Every removal is refused by name with the replacement quoted, rather than dropped in silence: an older file stops with an error saying what to write instead.
 
+**0.23.1**
+
+- **`reladraw format` no longer fails on a comment between a placement and its bracket**, such as `right of a`, then `// why wide`, then `(gap: wide)` on lines of their own. It stopped with "Cannot read properties of undefined"; it now keeps the comment where it was. Reported in #22.
+- **A comma in a name is refused by name.** `node a,b` has been refused since 0.19.0, but the message said "a text is quoted — write "b" rather than b"; it now says a name may not contain a comma, because a comma separates the items of a list. Reported in #23.
+
 **0.23.0**
 
 - **A box or a line can have several links**, each with a name and a badge: `url: "https://github.com/…" (name: "GitHub", icon: "GH")  "https://docs.example.com/…" (name: "Docs")`. In an SVG a click follows the first and the tooltip lists them all. See [Destinations](#destinations).
@@ -1605,6 +1610,7 @@ Pre-1.0, so the minor number is where a breaking change goes. Every removal is r
 
 - **`reladraw format`** lays a file out again: each statement on one line, neighboring statements with the same keyword lined up in columns, comments kept beside what they are about. No word is respelled, and the result is checked to draw what the original did. `--check` fails on a file that would change, and `.reladraw-format` holds a project's settings; `reladraw format --init` writes one with every setting explained. `reladraw format -` reads standard input and prints the result, for editors. A long statement can wrap past a width (`wrap-at`) or go one clause to a line (`clause-per-line-at`), and `clause-order` puts placements and keys in a chosen order. The playground has a Format button (Shift+Alt+F, undone with Ctrl+Z) and a panel for its settings, which can copy them as a `.reladraw-format`. Spacing inside a clause is evened out too: `gap:tight` becomes `gap: tight`, `( gap: tight )` becomes `(gap: tight)`. Prompted by #14, where a long statement was hard to read in a plain editor.
 - **A comma may touch the next word or stand apart from both.** `(corners: rounded,path: square)` used to be refused with "`corners` has no value", and `(at: start , above edge)` was refused in a text's bracket; both now read as `rounded, path:` and `start, above` do.
+- Breaking, and missing from this list when 0.19.0 shipped: a name may no longer contain `,`. `node a,b` used to declare a node called `a,b`; the comma now ends the name, so the file is refused. Added after the fact, from #23.
 - **The playground opens and saves `.reladraw` files**, with Open… and Save… above the source. Save suggests the name of the file last opened or saved; Chrome and Edge ask where to put it, other browsers save it with the downloads. Opening a file over edits that haven't been saved to one asks first.
 - **The playground's error message can be copied**, with a Copy button beside it or by selecting it. Only the underlined line number jumps to the line now; a click anywhere on the message used to, which took a selection away.
 - **The playground no longer fails on some diagrams with 0.18.0's shapes**, which stopped with "insidePolygon is not defined". The command line was unaffected.
