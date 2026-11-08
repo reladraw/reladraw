@@ -1409,7 +1409,7 @@ function takeTitlePlacements(tokens: Token[], open: number, subject: string, lin
  * is the text.
  */
 function parseNode(head: Token[], line: number): NodeStmt {
-  const name = requireName(head[1], 'node', line);
+  const name = requireName(head[1], 'node', line, head[2]);
   const written = head[2];
   const textToken = written?.quoted ? written : undefined;
   // A bare word here is a text somebody forgot to quote far more often than
@@ -1964,7 +1964,7 @@ function parseGuide(head: Token[], line: number): Stmt {
  * between two boxes, which copies of one line share.
  */
 function parseBundle(head: Token[], line: number): BundleStmt {
-  const name = requireName(head[1], 'bundle', line);
+  const name = requireName(head[1], 'bundle', line, head[2]);
   const subject = `bundle "${name}"`;
   const attrs: Attrs = {};
   let via: ViaEntry[] | undefined;
@@ -2081,7 +2081,7 @@ function parseBundle(head: Token[], line: number): BundleStmt {
 
 /** `point funnel  between c2 and api at 2/3` */
 function parsePoint(head: Token[], line: number): PointStmt {
-  const name = requireName(head[1], 'point', line);
+  const name = requireName(head[1], 'point', line, head[2]);
   const subject = `point "${name}"`;
   const marked = readMarkText(head, 'point', subject, line);
   head = marked.tokens;
@@ -2100,7 +2100,7 @@ function parsePoint(head: Token[], line: number): PointStmt {
 
 /** `region r  c bottom-left to d top-right`, or `region r  between a and b (span: both)` */
 function parseRegion(head: Token[], line: number): RegionStmt {
-  const name = requireName(head[1], 'region', line);
+  const name = requireName(head[1], 'region', line, head[2]);
   const subject = `region "${name}"`;
   const marked = readMarkText(head, 'region', subject, line);
   head = marked.tokens;
@@ -2149,7 +2149,7 @@ function refuseKeys(attrs: Attrs, keys: readonly string[], subject: string, what
 
 /** `style <name> <attributes>` */
 function parseStyle(head: Token[], line: number): StyleStmt {
-  const name = requireName(head[1], 'style', line);
+  const name = requireName(head[1], 'style', line, head[2]);
   const attrs = attrsOnly(head, 2, line, `style "${name}"`);
   if (Object.keys(attrs).length === 0) {
     throw new SourceError(`style "${name}" sets nothing`, line);
@@ -2204,7 +2204,7 @@ function readLetterIcon(head: Token[], start: number, name: string, line: number
  * resolved, since only the caller knows whether files can be read at all.
  */
 function parseIcon(head: Token[], line: number): IconStmt {
-  const name = requireName(head[1], 'icon', line);
+  const name = requireName(head[1], 'icon', line, head[2]);
   const picture = head[2];
   if (picture !== undefined && isAttrKey(picture) && picture.text === 'letters:') {
     return { kind: 'icon', name, source: '', pasted: false, letters: readLetterIcon(head, 2, name, line), line };
@@ -2356,11 +2356,18 @@ function defaultRefusal(kind: DefaultTarget, key: string): string {
   return `which a default does not set — ${takes}`;
 }
 
-function requireName(token: Token | undefined, keyword: string, line: number): string {
+function requireName(token: Token | undefined, keyword: string, line: number, next?: Token): string {
   if (!token || token.quoted) {
     throw new SourceError(`${keyword} needs a name`, line);
   }
   refuseNameMark(token, `${keyword} "${token.joined ?? token.text}"`, line);
+  // A comma separates the items of a list (0.19.0), so `node a,b` reads as
+  // the name `a` and a stray `b`. Say so, rather than whatever `b` turns into.
+  if (token.text.endsWith(',')) {
+    const touching = next && !next.quoted && next.start !== undefined && next.start === token.end;
+    const written = touching ? `${token.text}${next.text}` : token.text;
+    throw new SourceError(`${keyword} "${written}": a name may not contain ",", because a comma separates the items of a list`, line);
+  }
   return token.text;
 }
 
