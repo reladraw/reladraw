@@ -90,6 +90,9 @@ Commands:
                                  check a second pass changes nothing. format
                                  itself refuses a result that draws differently,
                                  so a clean run means no example's picture moved.
+                                 A few layouts no example uses go in with them,
+                                 such as a comment between a placement and its
+                                 bracket (issue #22).
                                  Prints where the copies are, to read them.
   pipe                           Check that output past 64 KB survives a pipe:
                                  format - and render -o - on a large generated
@@ -656,6 +659,8 @@ case "$cmd" in
     [ -f dist/cli.js ] || compile
     dir="$(mktemp -d "${TMPDIR:-/tmp}/reladraw-format.XXXXXX")"
     cp examples/*.reladraw "$dir/"
+    # Layouts no example uses, which format once crashed on (#22).
+    printf 'node a "a"\nnode b "b"  right of a\n  // why wide\n  (gap: wide)\n' > "$dir/zz-comment-before-bracket.reladraw"
     for setting in "$@"; do echo "$setting" >> "$dir/.reladraw-format"; done
     out="$(node dist/cli.js format "$dir"/*.reladraw 2>&1)" || { echo "$out" | grep -v '^formatted '; exit 1; }
     node dist/cli.js format --check "$dir"/*.reladraw || exit 1

@@ -254,10 +254,12 @@ function clauseRuns(tokens: { token: Token; line: string }[], starts: Set<Token>
   let inKey = false;
   for (const entry of tokens) {
     const { token } = entry;
+    // A continued line can begin with a bracket, the one that belongs to a
+    // placement on the line before (a comment may sit between them), so the
+    // first token always opens a run, bracket or not.
     const opens =
-      depth === 0 &&
-      token.text !== '(' &&
-      (starts.has(token) || (token.quoted && !inKey) || runs.length === 0);
+      runs.length === 0 ||
+      (depth === 0 && token.text !== '(' && (starts.has(token) || (token.quoted && !inKey)));
     if (opens) {
       runs.push([entry]);
       inKey = isAttrKey(token);
