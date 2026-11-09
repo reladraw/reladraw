@@ -20,7 +20,7 @@ const USAGE = `reladraw — draw a diagram from stated placement
   reladraw format <input.reladraw>... [--check]
   reladraw format - [--check]
   reladraw format --init
-  reladraw install-skill [skills options]
+  reladraw install-skill [--claude] [--agents]
 
   render      draw the diagram to an SVG, and print any findings: places
               where the picture, drawn as written, may not read as meant.
@@ -38,9 +38,10 @@ const USAGE = `reladraw — draw a diagram from stated placement
               default with what it does.
   install-skill
               install the agent skill that came with this version of
-              reladraw, so it teaches what this tool accepts. It runs
-              npx skills add with --copy, and passes on what follows:
-              -g for every project, -a claude-code for one agent.
+              reladraw, so it teaches what this tool accepts, for every
+              project: --claude in ~/.claude/skills, --agents in
+              ~/.agents/skills (Codex and others), or both. With neither,
+              it asks.
 
   -o, --out   where render writes the SVG. Defaults to the input path with
               its extension replaced by .svg. Use - for standard output.
@@ -66,17 +67,119 @@ const COMMANDS = ['render', 'check', 'format', 'install-skill'] as const;
 // The version of skills this was tried with, so a change there can't break it.
 const SKILLS_PACKAGE = 'skills@1.7.6';
 
+// The two places the skill is installed, each picked by its flag. skills
+// knows a folder by an agent that reads it: ~/.agents/skills is its "codex",
+// and other agents read it too. Left to itself, skills installs for every
+// agent it knows of, more than fifty, so the agents are always named.
+const SKILL_TARGETS = [
+  { flag: '--claude', agent: 'claude-code', label: 'Claude Code', dir: '~/.claude/skills' },
+  { flag: '--agents', agent: 'codex', label: 'Codex and others', dir: '~/.agents/skills' },
+] as const;
+
+function ownVersion(): string {
+  // package.json ships beside dist/, so the number is the installed one.
+  return (JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }).version;
+}
+
+// For any other agent, or a single project, skills is run by hand on this
+// install's skill, so it still matches this reladraw.
+function skillsCommand(skills: string, agent = '<agent>'): string {
+  const path = /\s/.test(skills) ? JSON.stringify(skills) : skills;
+  return `npx ${SKILLS_PACKAGE} add ${path} --copy -g -a ${agent}`;
+}
+
+const NAME_THE_TARGETS =
+  SKILL_TARGETS.map((t) => `${t.flag} (${t.dir}, for ${t.label})`).join(', ') + ', or both';
+
+// In a terminal, a bare install-skill asks; otherwise, as when an agent runs
+// it, the flags must say, because there is no one to ask.
+async function askTargets(skills: string): Promise<string[] | 'other' | undefined> {
+  const { createInterface } = await import('node:readline/promises');
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const closed = new Promise<undefined>((done) => rl.once('close', () => done(undefined)));
+  const both = SKILL_TARGETS.length + 1;
+  process.stdout.write(
+    `Install the reladraw ${ownVersion()} skill for which agents?\n` +
+      SKILL_TARGETS.map((t, i) => `  ${i + 1}  ${t.label.padEnd(17)} ${t.dir}\n`).join('') +
+      `  ${both}  both\n  ${both + 1}  another agent\n`,
+  );
+  try {
+    for (;;) {
+      const answer = await Promise.race([rl.question(`Choose [${both}]: `), closed]);
+      if (answer === undefined) {
+        process.stdout.write('\n');
+        return undefined;
+      }
+      const n = Number(answer.trim() || both);
+      if (n >= 1 && n <= SKILL_TARGETS.length) return [SKILL_TARGETS[n - 1]!.agent];
+      if (n === both) return SKILL_TARGETS.map((t) => t.agent);
+      if (n === both + 1) return 'other';
+      process.stdout.write(`Type a number from 1 to ${both + 1}.\n`);
+    }
+  } finally {
+    rl.close();
+  }
+}
+
 // The skill ships in the package beside dist/, as the one in the repository.
-// skills does the work of knowing where each agent keeps its skills; --copy
-// because an npx run leaves the package in a cache, where a link would break.
-function installSkill(args: string[]): number {
+// skills does the work of copying it in; --copy because an npx run leaves the
+// package in a cache, where a link would break.
+async function installSkill(args: string[]): Promise<number> {
   const skills = fileURLToPath(new URL('../.claude/skills/', import.meta.url));
   if (!existsSync(skills)) {
     process.stderr.write(`reladraw: the skill isn't in this install of reladraw (looked in ${skills})\n`);
     return 1;
   }
+  let agents: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]!;
+    const target = SKILL_TARGETS.find((t) => t.flag === arg);
+    if (target) {
+      if (!agents.includes(target.agent)) agents.push(target.agent);
+    } else if (arg === '-g' || arg === '--global') {
+      // Always global now; skills from before 0.24 tell the user to write -g.
+    } else if (arg === '-h' || arg === '--help') {
+      process.stdout.write(
+        `reladraw install-skill [--claude] [--agents]\n\n` +
+          `Installs the skill that came with reladraw ${ownVersion()}, for every project:\n` +
+          SKILL_TARGETS.map((t) => `  ${t.flag.padEnd(9)} ${t.dir}, for ${t.label}\n`).join('') +
+          `With neither, it asks. For another agent, run:\n  ${skillsCommand(skills)}\n`,
+      );
+      return 0;
+    } else if (arg === '-a' || arg === '--agent') {
+      const agent = args[i + 1];
+      process.stderr.write(
+        `reladraw: install-skill takes ${NAME_THE_TARGETS}, not -a. ` +
+          `For ${agent ? `the agent ${agent}` : 'another agent'}, run:\n  ${skillsCommand(skills, agent)}\n`,
+      );
+      return 1;
+    } else {
+      process.stderr.write(
+        `reladraw: install-skill doesn't take ${arg}; it takes ${NAME_THE_TARGETS}. ` +
+          `For another agent, run:\n  ${skillsCommand(skills)}\n`,
+      );
+      return 1;
+    }
+  }
+  if (agents.length === 0) {
+    if (!process.stdin.isTTY || !process.stdout.isTTY) {
+      process.stderr.write(
+        `reladraw: say which agents to install the skill for: ${NAME_THE_TARGETS}. ` +
+          `For another agent, run:\n  ${skillsCommand(skills)}\n`,
+      );
+      return 1;
+    }
+    const picked = await askTargets(skills);
+    if (picked === undefined) return 1;
+    if (picked === 'other') {
+      process.stdout.write(`For another agent, run this, with its name from skills' list:\n  ${skillsCommand(skills)}\n`);
+      return 0;
+    }
+    agents = picked;
+  }
   const windows = process.platform === 'win32';
-  const command = [SKILLS_PACKAGE, 'add', skills, '--copy', ...args];
+  // -y because the choice is already made; skills would otherwise ask again.
+  const command = [SKILLS_PACKAGE, 'add', skills, '--copy', '-g', '-y', '-a', ...agents];
   // On Windows npx is a .cmd, which Node runs only through a shell.
   const result = spawnSync(windows ? 'npx.cmd' : 'npx', windows ? command.map((a) => `"${a}"`) : command, {
     stdio: 'inherit',
@@ -91,16 +194,14 @@ function installSkill(args: string[]): number {
 type Command = (typeof COMMANDS)[number];
 
 async function main(argv: string[]): Promise<number> {
-  // Everything after install-skill is for skills, -h and -v included.
+  // install-skill reads its own flags, -h included.
   if (argv[0] === 'install-skill') return installSkill(argv.slice(1));
   if (argv.length === 0 || argv.includes('-h') || argv.includes('--help')) {
     process.stdout.write(USAGE);
     return argv.length === 0 ? 1 : 0;
   }
   if (argv.includes('-v') || argv.includes('--version')) {
-    // package.json ships beside dist/, so the number is the installed one.
-    const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string };
-    process.stdout.write(`${pkg.version}\n`);
+    process.stdout.write(`${ownVersion()}\n`);
     return 0;
   }
 

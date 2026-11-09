@@ -1203,7 +1203,7 @@ reladraw check diagram.reladraw
 | `--no-checks` | print no findings; errors still print |
 | `-v`, `--version` | print the version |
 
-`reladraw install-skill` installs the agent skill that came with this version of reladraw, by running `npx skills add` on it with `--copy`. What follows it goes to `skills`: `-g` to install for every project, `-a claude-code` for one agent.
+`reladraw install-skill` installs the agent skill that came with this version of reladraw, for every project, by running `npx skills add` on it with `--copy`. `--claude` installs it in `~/.claude/skills`, `--agents` in `~/.agents/skills` (Codex and others), and both may be given; with neither, it asks, or, with no terminal to ask in, refuses and names them. For any other agent it prints the `skills` command to run.
 
 The output is a standalone SVG: every picture is drawn into it as path data, never from a font or a linked file. A web page can draw a diagram in place with `<reladraw-diagram>`; see "In a web page" in the README.
 
@@ -1337,6 +1337,10 @@ Designed and absent from the code.
 ## Changelog
 
 Pre-1.0, so the minor number is where a breaking change goes. Every removal is refused by name with the replacement quoted, rather than dropped in silence: an older file stops with an error saying what to write instead.
+
+**Unreleased**
+
+- **`reladraw install-skill` installs for Claude Code, the `~/.agents` folder, or both, and asks which.** It used to pass everything on to `skills`, which, given no agent, put a copy in the folder of every agent it knows, more than fifty of them, and in the current project unless `-g` was written. It now always installs for every project, in the places `--claude` and `--agents` name; `-a` and the other `skills` options are refused with the `skills` command that does the same, and `-g` is still accepted.
 
 **0.23.1**
 
