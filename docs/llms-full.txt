@@ -22,7 +22,7 @@ That matters here specifically. You can't see the SVG you produced. With auto-la
 
 ## Check it is installed, and the same version as this skill
 
-This skill teaches reladraw 0.23.1. Once per session, before the first render, run:
+This skill teaches reladraw 0.24.0. Once per session, before the first render, run:
 
 ```
 reladraw --version
@@ -217,7 +217,7 @@ node aside "The worker shares the database / but takes no HTTP traffic." (wrap: 
 
 # Part 2 — the syntax reference
 
-# Syntax reference — 0.23.1
+# Syntax reference — 0.24.0
 
 What the language accepts. The changelog at the end lists what changed in each published version; 0.17.0's changes are large, and its entry has a table of every old spelling and what to write instead.
 
@@ -1557,7 +1557,7 @@ Designed and absent from the code.
 
 Pre-1.0, so the minor number is where a breaking change goes. Every removal is refused by name with the replacement quoted, rather than dropped in silence: an older file stops with an error saying what to write instead.
 
-**Unreleased**
+**0.24.0**
 
 - **`reladraw install-skill` installs for Claude Code, the `~/.agents` folder, or both, and asks which.** It used to pass everything on to `skills`, which, given no agent, put a copy in the folder of every agent it knows, more than fifty of them, and in the current project unless `-g` was written. It now always installs for every project, in the places `--claude` and `--agents` name; `-a` and the other `skills` options are refused with the `skills` command that does the same, and `-g` is still accepted.
 
