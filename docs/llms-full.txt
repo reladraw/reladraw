@@ -490,7 +490,7 @@ node notes "notes"  below resolver (gap: tight)  shape: none
 
 ### Several targets at once
 
-A placement may name several targets, joined by `and` or commas: `right of a, b and c`. It places against the box bounding them all, a region nobody had to declare. A lone direction centers on that region, which is how one row is offset against another:
+A placement may name several targets, joined by `and` or commas: `right of a, b and c`. It places against the box bounding them all, a region nobody had to declare. A distance and a direction after the `and` or comma start another placement instead: `right of a and 2 above c top` is `right of a  2 above c top`. To place against a point and a box together, name the point first: `point p  2 above c top-center`, then `right of a and p`. A lone direction centers on that region, which is how one row is offset against another:
 
 ```
 node a  icon: cube
@@ -523,7 +523,7 @@ A fraction of the way across a box is written fraction first: `top even with 3/4
 
 `center 12 right of a center` puts the two centers exactly 12 apart, the even steps of a timeline whose boxes differ in width. `top 3 below a bottom` is the same for edges. The direction means what it always means, so with nothing else said the box also sits level with `a`'s center. A placement naming parts must give its distance: `center right of a center` is refused ("say how far").
 
-Two distances, one per axis, are accepted in any placement: `3 below and 2 right of a`, or `top-left 3 below and 2 right of a bottom-right`.
+Two distances, one per axis, are accepted in any placement: `3 below and 2 right of a`, or `top-left 3 below and 2 right of a bottom-right`. A `left` or `right` that comes first may keep its `of`: `2 right of and 3 below a` is `2 right and 3 below a`.
 
 **How far along the side it faces.** `right of server 3/4 down` puts the box the usual gap right of `server`, its middle level with a spot three quarters of the way down `server`'s right side. `down` and `up` run along a left or right side, `across` along a top or bottom one. A word that doesn't run along the side the direction faces is refused, listing the words that do.
 
@@ -1624,6 +1624,10 @@ Designed and absent from the code.
 Pre-1.0, so the minor number is where a breaking change goes. Every removal is refused by name with the replacement quoted, rather than dropped in silence: an older file stops with an error saying what to write instead.
 
 **Unreleased**
+
+- **`2 right of and 3 below a`** is accepted, the same as `2 right and 3 below a`. It used to be refused with a message that took `and` for the name of a box.
+
+- **`right of a and 2 above c top` is two placements**: `b` right of `a`, and its bottom 2 above `c`'s top. A distance and a direction after `and` or a comma used to add a point to the targets, so `b` was placed right of the region round `a` and that point, with no warning, and the second half looked ignored. A point meant as a target is named first with `point`.
 
 - **A box or a line can have a description**, shown in the panel when it is selected on a `--page` page, and as hover text in an SVG. It is written on the thing, `description: "Forwards each request by its path."`; at a distance, `description for orders and to-orders """…"""`; or named, `description replica """…"""`, and taken with `description: replica`. The text is a small part of Markdown: paragraphs, lists, bold, italic, code and links.
 

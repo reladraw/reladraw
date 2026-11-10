@@ -2568,11 +2568,13 @@ function readPlacement(
         line,
       );
     }
-    // `3 below and 2 right of a`: a different distance on each axis.
-    const other = tokens[at + 3];
-    if (follows(tokens, at + 2, 'and') && other && !other.quoted && /^\d*\.?\d+(px)?$/.test(other.text) && tokens[at + 4] && isDirection(tokens[at + 4]!.text)) {
+    // `3 below and 2 right of a`: a different distance on each axis. The first
+    // half may keep its `of`, `2 right of and 3 below a`.
+    const of = follows(tokens, at + 2, 'of') && /left|right/.test(tokens[at + 1]!.text) ? 1 : 0;
+    const other = tokens[at + 3 + of];
+    if (follows(tokens, at + 2 + of, 'and') && other && !other.quoted && /^\d*\.?\d+(px)?$/.test(other.text) && tokens[at + 4 + of] && isDirection(tokens[at + 4 + of]!.text)) {
       const first = tokens[at + 1]!.text as Direction;
-      const second = tokens[at + 4]!.text as Direction;
+      const second = tokens[at + 4 + of]!.text as Direction;
       const vertical = (d: Direction) => d === 'above' || d === 'below';
       const horizontal = (d: Direction) => d === 'left' || d === 'right';
       if (!((vertical(first) && horizontal(second)) || (horizontal(first) && vertical(second)))) {
@@ -2582,7 +2584,7 @@ function readPlacement(
           line,
         );
       }
-      const read = readPlacement(tokens, at + 3, line, subject, true);
+      const read = readPlacement(tokens, at + 3 + of, line, subject, true);
       if (read.placement.kind !== 'offset') return read;
       const y = vertical(first) ? first : second;
       const x = vertical(first) ? second : first;
@@ -3208,14 +3210,31 @@ function readTargets(
     targets.push(read.target);
     i = read.next;
 
+    // `right of a and 2 above c top`: a distance and a direction after the
+    // joiner start the next placement, not a point as another target. A point
+    // meant as a target is named first (design.org 4.5).
     if (follows(tokens, i, 'and')) {
+      if (opensMeasuredPlacement(tokens, i + 1)) return { targets, next: i + 1 };
       i += 1;
       continue;
     }
+    if (read.listed && opensMeasuredPlacement(tokens, i)) return { targets, next: i };
     comma = read.listed ? nameTarget(read.target) : undefined;
     if (read.listed) continue;
     return { targets, next: i };
   }
+}
+
+/**
+ * Whether a placement written with its distance starts at `at`: `2 above c
+ * top`, or measured from this box's part, `center 2 above c center`.
+ */
+function opensMeasuredPlacement(tokens: Token[], at: number): boolean {
+  const word = tokens[at];
+  if (!word || word.quoted) return false;
+  if (isPart(word.text)) return opensPartPlacement(tokens, at);
+  const direction = tokens[at + 1];
+  return /^-?\d*\.?\d+(px)?$/.test(word.text) && direction !== undefined && !direction.quoted && isDirection(direction.text);
 }
 
 /**

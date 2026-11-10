@@ -903,13 +903,11 @@ export class Placer {
       // Bare, the direction would give way to the pins (`checkYielded`); it is
       // the distance written on it that they would overrule.
       const [direction] = directions;
-      const pins = statements
-        .filter((statement) => statement.kind === 'align')
-        .map((statement) => `"${describePlacement(statement.placement)}"`)
-        .join(' and ');
+      const aligns = statements.filter((statement) => statement.kind === 'align');
+      const pins = aligns.map((statement) => `"${describePlacement(statement.placement)}"`).join(' and ');
       return new SourceError(
         `"${node.name}" says how far away "${describePlacement(direction!.placement)}" is, but ${pins} already ` +
-          `say where it goes ${AXIS_SAID[axis]} — drop the distance to keep only the direction, or drop the direction`,
+          `${aligns.length === 1 ? 'says' : 'say'} where it goes ${AXIS_SAID[axis]} — drop the distance to keep only the direction, or drop the direction`,
         direction!.placement.line,
       );
     }
