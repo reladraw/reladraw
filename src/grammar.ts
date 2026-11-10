@@ -69,7 +69,7 @@ export interface Span {
  * it. A word missing here is a word that draws in the plain color, which is a
  * dull page rather than a wrong one.
  */
-export const STATEMENT_KEYWORDS = ['node', 'edge', 'style', 'diagram', 'default', 'icon', 'point', 'region', 'bundle', 'guide'] as const;
+export const STATEMENT_KEYWORDS = ['node', 'edge', 'style', 'diagram', 'default', 'icon', 'description', 'point', 'region', 'bundle', 'guide'] as const;
 
 /** Statements whose second word declares a name. `diagram` has none. */
 const DECLARES_NAME = ['node', 'style', 'icon', 'point', 'region', 'bundle'];
@@ -283,7 +283,17 @@ export function highlightLine(line: string): Span[] {
           push('keyword', at + next.length);
           keyword = next;
         }
-        if (DECLARES_NAME.includes(keyword)) {
+        if (keyword === 'description') {
+          // `description notes """…"""` declares a name; `description for a, b`
+          // names things declared elsewhere, so `for` colors as a keyword.
+          const space = match(SPACE, line, at);
+          if (space !== null) {
+            push('plain', at + space.length);
+            const word = match(WORD, line, at);
+            if (word === 'for') push('keyword', at + word.length);
+            else if (word !== null && !word.endsWith(':')) push('name', at + word.length);
+          }
+        } else if (DECLARES_NAME.includes(keyword)) {
           const space = match(SPACE, line, at);
           if (space !== null) {
             push('plain', at + space.length);

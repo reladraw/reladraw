@@ -38,6 +38,7 @@ An indented line with nothing to continue, at the top of the file or after a bla
 | `default` | appearance every thing of one kind wears ([Defaults](#defaults)) |
 | `diagram` | settings for the whole drawing ([The diagram](#the-diagram)) |
 | `icon` | a picture of your own ([Your own icons](#your-own-icons)) |
+| `description` | text about a box or a line, for the page's panel ([Descriptions](#descriptions)) |
 
 `box`, `link`, `note`, `deck`, `rect` and `arrow` at the start of a statement are refused by name, each quoting what to write instead.
 
@@ -71,7 +72,7 @@ A text is quoted. ` / `, a slash with whitespace on both sides, breaks the line,
 
 A node with no text shows its name, and a dotted name shows only its last part: `node server.docker` reads "docker". The name is never prettified. `""` says a node deliberately has none. A node drawn as a picture shows no text unless one is written.
 
-A `"""` string takes everything between its marks as written, quotes and line breaks included. It is accepted only for an icon's SVG.
+A `"""` string takes everything between its marks as written, quotes and line breaks included. It is accepted only for an icon's SVG and a description's text ([Descriptions](#descriptions)).
 
 ### Numbers and the file's unit
 
@@ -1060,7 +1061,7 @@ node nas "NAS"  right of mirror
 edge mirror -> nas  style: backup
 ```
 
-A style is a named bundle of appearance, worn with `style:`. Color carries meaning through the style's name rather than being written per thing. A style takes `fill`, `border`, `line`, `text`, `badge`, `icon`, `shape`, `from-mark`, `to-mark`, `padding`, `corners` and a region's `opacity`, and a title's position inside `text: (…)`: `style zone  text: (outside top, align: left)`. It never says where a thing goes, so it can't carry a placement, a `gap:`, a `depth:`, or a line's `from:` or `to:`, and it can't carry a `url:` or a deck's `cards:`.
+A style is a named bundle of appearance, worn with `style:`. Color carries meaning through the style's name rather than being written per thing. A style takes `fill`, `border`, `line`, `text`, `badge`, `icon`, `shape`, `from-mark`, `to-mark`, `padding`, `corners` and a region's `opacity`, and a title's position inside `text: (…)`: `style zone  text: (outside top, align: left)`. It never says where a thing goes, so it can't carry a placement, a `gap:`, a `depth:`, or a line's `from:` or `to:`, and it can't carry a `url:`, a `description:` or a deck's `cards:`.
 
 - **A style may span kinds.** It gives each thing only the keys that thing has, so the style above gives nodes their border and lines their color.
 - **A style must give a thing at least one key it has.** A style that dresses a thing in nothing is on the wrong thing.
@@ -1126,7 +1127,7 @@ A default is a style every thing of one kind wears without naming it: `node`, `l
 
 A container inside another container is filled a shade further from the page than the one it sits in, so the two read as two backdrops. An invisible container (`shape: none`) doesn't count, and a stated `fill:` wins as always.
 
-A default takes the words a style does and may wear a style of its own (`default edge  style: quiet`), laid beneath its own words. It is strict about kind, since it names its kind: `default edge  fill: red` is refused, pointing to `line:`. `icon:` is a leaf's alone. A default carries no `url:`. Each kind is written once, and `default leaf node` is refused, naming `default leaf`.
+A default takes the words a style does and may wear a style of its own (`default edge  style: quiet`), laid beneath its own words. It is strict about kind, since it names its kind: `default edge  fill: red` is refused, pointing to `line:`. `icon:` is a leaf's alone. A default carries no `url:` or `description:`. Each kind is written once, and `default leaf node` is refused, naming `default leaf`.
 
 ### The diagram
 
@@ -1163,6 +1164,50 @@ node api "Orders API"
 - **In an SVG**, a click follows the first link, and the browser's tooltip lists them all. **On a page** made with `--page`, a click selects the thing and the panel beside the drawing lists its links; a link is followed from there ([A page for looking at a diagram](#a-page-for-looking-at-a-diagram)).
 
 The same address twice in one `url:` is refused.
+
+### Descriptions
+
+A box or a line can carry a description: text a reader asks for, shown in the panel when it is selected on a page made with `--page`, and never drawn. It can be written three ways.
+
+On the thing's own statement, quoted:
+
+```
+node proxy "Proxy"  description: "Forwards each request by its path."
+```
+
+At a distance, for things already named, so a long text doesn't crowd the diagram's statements:
+
+```
+node proxy "Proxy"
+node orders "Orders"  right of proxy
+edge to-orders proxy -> orders
+
+description for orders and to-orders """
+Owns the order records.
+
+- `/orders` lands here
+- see [the docs](https://example.com/orders)
+"""
+```
+
+Or named, for any box or line to take by that name:
+
+```
+description replica """
+One of three identical replicas behind the proxy.
+"""
+
+node r1 "Replica 1"  description: replica
+node r2 "Replica 2"  description: replica  below r1
+```
+
+`description:` takes the text quoted, or a description's name unquoted, as `icon:` takes letters quoted and a picture's name bare. `description for` names boxes and named lines, separated by commas or `and`; a name that is neither is refused. A long text goes between `"""` marks, where line breaks are kept and the indentation every line shares is taken off.
+
+The text is Markdown, in part: paragraphs, lists (`-`, `*` or `1.`), `**bold**`, `*italic*` or `_italic_`, `` `code` `` and links, `[text](https://…)`. Anything else shows as written. A link goes to an `https:`, `http:` or `mailto:` address or a path; any other is refused.
+
+**In an SVG**, the description is the thing's hover text, with the marks taken out and each link's address after its text. Writing one never moves anything in the drawing.
+
+A thing has one description: two on one statement, or one there and another from `description for`, are refused. So is a name declared twice. A style and a default carry none.
 
 ## Errors and findings
 
@@ -1223,7 +1268,7 @@ reladraw render arch.reladraw --page
 
 `--page` writes `arch.html`: one self-contained file, for opening in a browser, attaching or committing, that needs nothing running and fetches nothing. The page is in the diagram's own colors, so a dark diagram doesn't sit on a white page, and it is headed with `diagram title:`, or the file's name when there is none. Under the title it says which file it was drawn from and when, such as "drawn from arch.reladraw, 2026-11-05 14:32": the page is a snapshot of the file, and is behind it once the file is edited, until it is rendered again. Drag to pan; scroll, pinch or double-click to zoom; Fit shows the whole diagram and 100% returns it to its own scale. The zoom is always shown, with "Fit" beside it while the whole diagram is in view. There is a full-screen button. The Save menu saves the page itself, as it was written rather than at its current zoom; the `.reladraw` source it was drawn from; or the picture as an SVG or a PNG, as `render` would draw it; or copies the SVG. Each is named after the source file: `arch.html`, `arch.reladraw`, `arch.svg`, `arch.png`. In Chrome and Edge it asks where to save; other browsers put the file with their downloads. The findings are listed beside it in a panel that folds away, and clicking one lights up what its line drew. A box's or a line's name shows under the pointer.
 
-**A click on a box or a line selects it**, and never follows a link. The selection is amber; what feeds it is green and what it feeds is red, the lines dashed and moving the way they run; the rest dims. A line runs from the end without an arrowhead when only one end has one, and otherwise from the end written first. The panel beside the drawing names the selection and lists its links, each with its badge, and the boxes it comes from and goes to; a link opens in a new tab, and a box selects it. One line out lights by default, and the panel's button lights everything upstream and downstream. A box with links underlines its text under the pointer. A click on the background or Escape clears the selection.
+**A click on a box or a line selects it**, and never follows a link. The selection is amber; what feeds it is green and what it feeds is red, the lines dashed and moving the way they run; the rest dims. A line runs from the end without an arrowhead when only one end has one, and otherwise from the end written first. The panel beside the drawing names the selection and lists its links, each with its badge, and the boxes it comes from and goes to; a link opens in a new tab, and a box selects it. One line out lights by default, and the panel's button lights everything upstream and downstream. Its description, if it has one, comes last ([Descriptions](#descriptions)). A box with links underlines its text under the pointer. A click on the background or Escape clears the selection.
 
 Keys: `+` and `-` zoom, `0` fits, `1` is actual size, `f` is full screen, Escape clears the selection.
 
@@ -1298,6 +1343,7 @@ Every attribute, and what takes one. A node's kind is what its body is: a box (`
 | `gather-children` | ✓ | | ✓ | | where the children sit in spare room |
 | `heading` | ✓ | | ✓ | | the child that is the title |
 | `join-with` | ✓ | ✓ | ✓ | | the thing this moves with |
+| `description` | ✓ | ✓ | ✓ | ✓ | text for the page's panel ([Descriptions](#descriptions)) |
 | `padding` | ✓ | | ✓ | | room inside the edge |
 | `padding-top`, `-right`, `-bottom`, `-left` | ✓ | | ✓ | | one side's room, over `padding` |
 | `width`, `height`, `min-…`, `max-…` | ✓ | | ✓ | | a stated size |
@@ -1347,6 +1393,8 @@ Designed and absent from the code.
 Pre-1.0, so the minor number is where a breaking change goes. Every removal is refused by name with the replacement quoted, rather than dropped in silence: an older file stops with an error saying what to write instead.
 
 **Unreleased**
+
+- **A box or a line can have a description**, shown in the panel when it is selected on a `--page` page, and as hover text in an SVG. It is written on the thing, `description: "Forwards each request by its path."`; at a distance, `description for orders and to-orders """…"""`; or named, `description replica """…"""`, and taken with `description: replica`. The text is a small part of Markdown: paragraphs, lists, bold, italic, code and links.
 
 - **A line's text can rise a stated amount off its line, or part of the way clear.** `above edge` and its kin always moved a text all the way clear, which on a slanted line can be well away from it. `(1 above edge)` now raises it one unit from its spot on the line, still crossing the line if that is short of clear, and `(1/2 clear above edge)` moves it half the way. `(1 above edge)` used to be refused, pointing to `edge-gap:`.
 

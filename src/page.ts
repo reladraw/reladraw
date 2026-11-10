@@ -4,6 +4,7 @@ import type { DrawOptions } from './index.js';
 import { blame, parse } from './parser.js';
 import type { Icon } from './icons.js';
 import { linkLabel, linksOf, type Link } from './links.js';
+import { markdownHtml } from './markdown.js';
 import type { Layout, LayoutNode } from './model.js';
 import { iconSvg, renderTagged, themeOf } from './render.js';
 import { resolve } from './resolve.js';
@@ -78,9 +79,13 @@ interface LinkView {
  * first. A line's index is its place in the layout, which `data-edge` names.
  */
 interface Graph {
-  nodes: Record<string, { label: string; links: LinkView[] }>;
-  edges: { up: string; down: string; label: string; links: LinkView[] }[];
+  nodes: Record<string, { label: string; links: LinkView[]; description?: string }>;
+  edges: { up: string; down: string; label: string; links: LinkView[]; description?: string }[];
 }
+
+/** A description as the panel shows it: its Markdown as HTML, or nothing. */
+const describe = (attrs: Record<string, string>): { description?: string } =>
+  attrs['description'] === undefined ? {} : { description: markdownHtml(attrs['description']) };
 
 const BADGE_SIDE = 20;
 
@@ -108,7 +113,7 @@ function graphOf(layout: Layout, theme: Theme): Graph {
   const nodes: Graph['nodes'] = {};
   for (const node of layout.nodes) {
     const text = plainText(node.text);
-    nodes[node.name] = { label: text === '' ? node.name.split('.').pop()! : text, links: views(linksFor(node)) };
+    nodes[node.name] = { label: text === '' ? node.name.split('.').pop()! : text, links: views(linksFor(node)), ...describe(node.attrs) };
   }
   const edges = layout.edges.map((edge) => {
     // The upstream end is the one a line runs from: the end without a mark
@@ -117,7 +122,7 @@ function graphOf(layout: Layout, theme: Theme): Graph {
     const backwards = start !== '' && end === '';
     const [up, down] = backwards ? [edge.to, edge.from] : [edge.from, edge.to];
     const text = edge.texts.map((one) => plainText(one.text)).filter((one) => one !== '').join(' · ');
-    return { up: up.name, down: down.name, label: text, links: views(linksOf(edge.attrs)) };
+    return { up: up.name, down: down.name, label: text, links: views(linksOf(edge.attrs)), ...describe(edge.attrs) };
   });
   return { nodes, edges };
 }
@@ -257,6 +262,11 @@ const PAGE = `<!doctype html>
   }
   #selected h3 svg { flex: none; }
   #selected .none { color: var(--muted); font-size: 13px; }
+  #selected .description { font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+  #selected .description p, #selected .description ul, #selected .description ol { margin: 0 0 8px; }
+  #selected .description ul, #selected .description ol { padding-left: 20px; }
+  #selected .description code { font-size: 12px; padding: 0 3px; border-radius: 3px; background: color-mix(in srgb, var(--ink) 12%, transparent); }
+  #selected .description a { color: inherit; text-decoration: underline; }
   #selected .link {
     display: flex; align-items: center; gap: 9px; padding: 4px 6px; margin: 0 -6px;
     border-radius: 5px; color: var(--ink); text-decoration: none;
@@ -744,11 +754,12 @@ const PAGE = `<!doctype html>
       selectedPanel.append(element('p', 'empty', 'Click a box or a line to see its links and what it connects to.'));
       return;
     }
-    var heading, links, from, to;
+    var heading, links, from, to, description;
     if (selection.kind === 'node') {
       var node = graph.nodes[selection.key];
       heading = node ? node.label : selection.key;
       links = node ? node.links : [];
+      description = node && node.description;
       from = []; to = [];
       graph.edges.forEach(function (edge) {
         if (edge.down === selection.key && from.indexOf(edge.up) < 0) from.push(edge.up);
@@ -759,6 +770,7 @@ const PAGE = `<!doctype html>
       var name = function (key) { return graph.nodes[key] ? graph.nodes[key].label : key; };
       heading = edge.label || name(edge.up) + ' \\u2192 ' + name(edge.down);
       links = edge.links;
+      description = edge.description;
       from = [edge.up]; to = [edge.down];
     }
     selectedPanel.append(element('h2', '', heading));
@@ -785,6 +797,14 @@ const PAGE = `<!doctype html>
     all.setAttribute('aria-pressed', String(everything));
     all.onclick = function () { everything = !everything; select(selection); };
     selectedPanel.append(all);
+    // Last, so a long description never pushes the rest out of view, and the
+    // sections above stay where they are whatever is selected.
+    if (description) {
+      // Written by reladraw from the file's Markdown, every character escaped.
+      var about = element('div', 'description');
+      about.innerHTML = description;
+      selectedPanel.append(element('h3', '', 'Description'), about);
+    }
   }
 
   // The pan and zoom capture the pointer, so the click lands on the view; what

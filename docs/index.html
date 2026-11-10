@@ -934,6 +934,7 @@
               <code>line: #d2904e</code> <i>(an edge)</i>
               <code>overlap: allow</code>
               <code>url: "https://example.com"</code>
+              <code>description: "What it does"</code> <i>(shown on the page; never drawn)</i>
             </dd>
 
             <dt>Lines</dt>
@@ -1709,10 +1710,10 @@ const PADDING_SIDE_KEYS = PADDING_SIDES.map((side) => `padding-${side}`);
 /** `right-edge-order: ae, ad, ac`: the lines on one side of a box, in reading order. */
 const EDGE_ORDER_KEYS = ['top-edge-order', 'bottom-edge-order', 'left-edge-order', 'right-edge-order'];
 const ATTR_KEYS = {
-    shape: ['style', 'overlap', 'layout', 'gather-children', 'padding', ...PADDING_SIDE_KEYS, ...SIZE_KEY_NAMES, 'heading', 'join-with', 'badge', 'cards', 'shape', 'fill', 'border', 'corners', 'text', 'url', 'depth', ...EDGE_ORDER_KEYS],
-    icon: ['style', 'overlap', 'icon', 'join-with', 'text', 'url', 'depth', ...EDGE_ORDER_KEYS],
-    none: ['style', 'overlap', 'layout', 'gather-children', 'padding', ...SIZE_KEY_NAMES, 'heading', 'join-with', 'shape', 'text', 'url', 'depth', ...EDGE_ORDER_KEYS],
-    edge: ['style', 'from', 'to', 'via', 'from-mark', 'to-mark', 'line', 'text', 'url', 'depth'],
+    shape: ['style', 'overlap', 'layout', 'gather-children', 'padding', ...PADDING_SIDE_KEYS, ...SIZE_KEY_NAMES, 'heading', 'join-with', 'badge', 'cards', 'shape', 'fill', 'border', 'corners', 'text', 'url', 'description', 'depth', ...EDGE_ORDER_KEYS],
+    icon: ['style', 'overlap', 'icon', 'join-with', 'text', 'url', 'description', 'depth', ...EDGE_ORDER_KEYS],
+    none: ['style', 'overlap', 'layout', 'gather-children', 'padding', ...SIZE_KEY_NAMES, 'heading', 'join-with', 'shape', 'text', 'url', 'description', 'depth', ...EDGE_ORDER_KEYS],
+    edge: ['style', 'from', 'to', 'via', 'from-mark', 'to-mark', 'line', 'text', 'url', 'description', 'depth'],
 };
 /**
  * What a node's `corners:` takes, the default first: a box is drawn rounded
@@ -1735,6 +1736,14 @@ const NODE_CORNERS = ['rounded', 'sharp'];
 const ALL_ATTR_KEYS = [
     ...new Set([...Object.values(ATTR_KEYS).flat(), ...DIAGRAM_KEYS, ...REGION_KEYS]),
 ];
+/**
+ * `description for proxy, cache """…"""` attaches one text to things already
+ * named; `description notes """…"""` declares a named one, which a box or a
+ * line takes with `description: notes`. The text is a small Markdown subset,
+ * shown in the page's panel and, marks stripped, as an SVG's hover text.
+ */
+/** Where `description: notes` keeps the name until `resolve` swaps in the text. */
+const DESCRIPTION_NAME_KEY = 'description.name';
 
 // ---- errors.js ----
 /** A problem in the source, reported in the vocabulary of the source. */
@@ -9095,7 +9104,7 @@ function editDistance(a, b) {
  * it. A word missing here is a word that draws in the plain color, which is a
  * dull page rather than a wrong one.
  */
-const STATEMENT_KEYWORDS = ['node', 'edge', 'style', 'diagram', 'default', 'icon', 'point', 'region', 'bundle', 'guide'];
+const STATEMENT_KEYWORDS = ['node', 'edge', 'style', 'diagram', 'default', 'icon', 'description', 'point', 'region', 'bundle', 'guide'];
 /** Statements whose second word declares a name. `diagram` has none. */
 const DECLARES_NAME = ['node', 'style', 'icon', 'point', 'region', 'bundle'];
 /**
@@ -9295,7 +9304,20 @@ function highlightLine(line) {
                     push('keyword', at + next.length);
                     keyword = next;
                 }
-                if (DECLARES_NAME.includes(keyword)) {
+                if (keyword === 'description') {
+                    // `description notes """…"""` declares a name; `description for a, b`
+                    // names things declared elsewhere, so `for` colors as a keyword.
+                    const space = match(SPACE, line, at);
+                    if (space !== null) {
+                        push('plain', at + space.length);
+                        const word = match(WORD, line, at);
+                        if (word === 'for')
+                            push('keyword', at + word.length);
+                        else if (word !== null && !word.endsWith(':'))
+                            push('name', at + word.length);
+                    }
+                }
+                else if (DECLARES_NAME.includes(keyword)) {
                     const space = match(SPACE, line, at);
                     if (space !== null) {
                         push('plain', at + space.length);
@@ -9934,14 +9956,18 @@ function parseStatement(tokens, line) {
     }
     // What a line break inside a node's or an edge's text should mean has not
     // been decided, so until it is a `"""` string is refused anywhere but the one
-    // place it was made for, rather than drawn in some way that might change.
-    if (keyword.text !== 'icon' && tokens.some((token) => token.triple)) {
-        throw new SourceError('a """ string holds the SVG of an `icon` declaration and is not accepted anywhere else yet — ' +
+    // places it was made for, rather than drawn in some way that might change:
+    // an icon's SVG and a description's text.
+    const holdsTriple = keyword.text === 'icon' || keyword.text === 'description';
+    if (!holdsTriple && tokens.some((token, index) => token.triple && tokens[index - 1]?.text !== 'description:')) {
+        throw new SourceError('a """ string holds an `icon` declaration\'s SVG or a description\'s text, and is not accepted anywhere else yet — ' +
             'use ordinary quotes here', line);
     }
     switch (keyword.text) {
         case 'icon':
             return parseIcon(tokens, line);
+        case 'description':
+            return parseDescription(tokens, line);
         case 'node':
             return parseNode(tokens, line);
         case 'edge':
@@ -10481,6 +10507,22 @@ function readAttr(tokens, at, attrs, line, subject) {
             attrs[LINKS_KEY] = JSON.stringify(read.links);
         }
         return read.next;
+    }
+    if (key === 'description') {
+        // Quoted, the text itself; unquoted, the name of a `description` statement,
+        // as `icon:` takes letters quoted and a picture's name bare.
+        const value = tokens[at + 1];
+        if (!value || isAttrKey(value) || value.text === '(' || value.text === ')') {
+            throw new SourceError(`${subject}: description: takes its text in quotes, \`description: "What this does"\`, or the name of a \`description\` statement`, line);
+        }
+        const had = attrs[DESCRIPTION_NAME_KEY] ?? attrs[key];
+        if (had !== undefined)
+            throw new SourceError(`${subject}: "description" is written twice — keep one`, line);
+        if (value.quoted)
+            attrs[key] = descriptionText(value.text);
+        else
+            attrs[DESCRIPTION_NAME_KEY] = value.text;
+        return at + 2;
     }
     if (key === 'title') {
         // A title is a text, and every text is quoted. Unquoted, its first word
@@ -11769,6 +11811,72 @@ function parseIcon(head, line) {
     return { kind: 'icon', name, source: picture.text, pasted: picture.triple === true || picture.text.trim().startsWith('<'), line };
 }
 /**
+ * A description's text as written between `"""` marks, without the line break
+ * after the opening marks, the blank lines at either end, or the indentation
+ * every line shares, so a description indented under its statement reads as
+ * Markdown from the left margin.
+ */
+function descriptionText(raw) {
+    const lines = raw.replace(/\r\n?/g, '\n').split('\n');
+    while (lines.length > 0 && lines[0].trim() === '')
+        lines.shift();
+    while (lines.length > 0 && lines[lines.length - 1].trim() === '')
+        lines.pop();
+    const indents = lines.filter((one) => one.trim() !== '').map((one) => one.match(/^[ \t]*/)[0].length);
+    const shared = indents.length === 0 ? 0 : Math.min(...indents);
+    return lines.map((one) => one.slice(shared).trimEnd()).join('\n');
+}
+/**
+ * `description for proxy, cache and api """…"""` or `description notes """…"""`.
+ * `for` keeps the two apart: without it a misspelled box name would silently
+ * declare a description nothing uses.
+ */
+function parseDescription(head, line) {
+    const textAt = head.findIndex((token, index) => index > 0 && token.quoted);
+    const textToken = textAt === -1 ? undefined : head[textAt];
+    const shape = 'write `description for proxy """…"""` to describe things already named, or `description notes """…"""` to declare one for `description: notes`';
+    if (head[1] === undefined)
+        throw new SourceError(`description needs a name or \`for\` — ${shape}`, line);
+    if (textToken === undefined) {
+        throw new SourceError('a description needs its text, between """ marks or in quotes, after what it names', line);
+    }
+    if (textAt + 1 < head.length) {
+        throw new SourceError(`a description ends with its text — "${head[textAt + 1].text}" is left over`, line);
+    }
+    const text = descriptionText(textToken.text);
+    if (text.trim() === '')
+        throw new SourceError('a description\'s text is empty', line);
+    if (follows(head, 1, 'for')) {
+        const targets = [];
+        for (let next = 2; next < textAt; next++) {
+            const token = head[next];
+            if (token.text === 'and' && targets.length > 0)
+                continue;
+            if (isAttrKey(token) || token.text === '(' || token.text === ')') {
+                throw new SourceError(`description for: expected the names of boxes or lines, found "${token.text}"`, line);
+            }
+            const name = token.text.replace(/,$/, '');
+            if (name === '')
+                continue;
+            if (targets.includes(name))
+                throw new SourceError(`description for: "${name}" is named twice — keep one`, line);
+            targets.push(name);
+        }
+        if (targets.length === 0)
+            throw new SourceError(`description for names nothing — ${shape}`, line);
+        return { kind: 'description', targets, text, line };
+    }
+    const name = requireName(head[1], 'description', line, head[2]);
+    if (textAt !== 2) {
+        throw new SourceError(`description "${name}" takes one name — to describe several things at once, write \`description for ${head
+            .slice(1, textAt)
+            .map((token) => token.text.replace(/,$/, ''))
+            .filter((one) => one !== 'and')
+            .join(', ')} """…"""\``, line);
+    }
+    return { kind: 'description', name, text, line };
+}
+/**
  * `diagram <attributes>` — no name, because a file holds one diagram. Unknown
  * keys are refused rather than ignored: a misspelt diagram-wide setting that
  * silently does nothing is the kind of thing an author stares at for a while.
@@ -11861,6 +11969,9 @@ function defaultRefusal(kind, key) {
     const takes = `it takes ${DEFAULT_KEYS[kind].map((k) => `${k}:`).join(', ')}`;
     if (key === 'url')
         return `and a destination belongs to one thing rather than to every one of a kind`;
+    if (key === 'description') {
+        return 'and a description belongs to the things it describes — to give several one text, write `description for a, b and c """…"""`';
+    }
     if (key === 'heading') {
         return "and a heading names one node's own child, so it is written on that node";
     }
@@ -13395,6 +13506,110 @@ function monospaceMeasurer(fontFamily = DEFAULT_STACK, advanceRatio = DEFAULT_AD
     };
 }
 
+// ---- markdown.js ----
+/**
+ * The Markdown a description is written in: paragraphs, lists (`-`, `*` or
+ * `1.`), `**bold**`, `*italic*` or `_italic_`, `` `code` `` and
+ * `[text](address)`. Anything else is shown as the characters written.
+ *
+ * Two readings of one text: HTML for the page's panel, and plain text for an
+ * SVG's hover text, which can't show formatting.
+ */
+const BULLET = /^\s*[-*]\s+(.*)$/;
+const NUMBERED = /^\s*\d+[.)]\s+(.*)$/;
+function blocksOf(text) {
+    const blocks = [];
+    let open;
+    for (const line of text.split('\n')) {
+        if (line.trim() === '') {
+            open = undefined;
+            continue;
+        }
+        const bullet = line.match(BULLET);
+        const numbered = bullet ? null : line.match(NUMBERED);
+        const item = bullet ?? numbered;
+        if (item) {
+            const ordered = numbered !== null;
+            if (open?.kind !== 'list' || open.ordered !== ordered) {
+                open = { kind: 'list', ordered, items: [] };
+                blocks.push(open);
+            }
+            open.items.push(item[1].trim());
+        }
+        else if (open?.kind === 'list' && /^\s/.test(line)) {
+            // An indented line under an item continues it.
+            open.items[open.items.length - 1] += ` ${line.trim()}`;
+        }
+        else if (open?.kind === 'paragraph') {
+            open.lines.push(line.trim());
+        }
+        else {
+            open = { kind: 'paragraph', lines: [line.trim()] };
+            blocks.push(open);
+        }
+    }
+    return blocks;
+}
+const LINK = /\[([^\]]+)\]\(([^)\s]+)\)/g;
+/** The addresses a description may link to: the web, mail, or a path with no scheme. */
+const SAFE_ADDRESS = /^(https?:|mailto:|[^:]*$)/i;
+/** Every link address in a description that the page would refuse to follow. */
+function unsafeLinks(text) {
+    return [...text.matchAll(LINK)].map((match) => match[2]).filter((href) => !SAFE_ADDRESS.test(href));
+}
+function escapeHtml(text) {
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+/** One line's marks as HTML. Code is set aside first, so nothing inside it is read as a mark. */
+function inlineHtml(text) {
+    const codes = [];
+    let out = text.replace(/`([^`]+)`/g, (_, code) => {
+        codes.push(`<code>${escapeHtml(code)}</code>`);
+        return `\u0000${codes.length - 1}\u0000`;
+    });
+    const links = [];
+    out = out.replace(LINK, (_, label, href) => {
+        const safe = SAFE_ADDRESS.test(href) ? href : '#';
+        links.push(`<a href="${escapeHtml(safe)}" target="_blank" rel="noopener">${marks(escapeHtml(label))}</a>`);
+        return `\u0001${links.length - 1}\u0001`;
+    });
+    out = marks(escapeHtml(out));
+    return out
+        .replace(/\u0001(\d+)\u0001/g, (_, index) => links[Number(index)])
+        .replace(/\u0000(\d+)\u0000/g, (_, index) => codes[Number(index)]);
+}
+function marks(html) {
+    return html
+        .replace(/\*\*(?=\S)(.+?)(?<=\S)\*\*/g, '<strong>$1</strong>')
+        .replace(/(^|[^*\w])\*(?=\S)(.+?)(?<=\S)\*(?![*\w])/g, '$1<em>$2</em>')
+        .replace(/(^|[^_\w])_(?=\S)(.+?)(?<=\S)_(?![_\w])/g, '$1<em>$2</em>');
+}
+/** A description as HTML, for the page's panel. */
+function markdownHtml(text) {
+    return blocksOf(text)
+        .map((block) => {
+        if (block.kind === 'paragraph')
+            return `<p>${block.lines.map(inlineHtml).join(' ')}</p>`;
+        const tag = block.ordered ? 'ol' : 'ul';
+        return `<${tag}>${block.items.map((item) => `<li>${inlineHtml(item)}</li>`).join('')}</${tag}>`;
+    })
+        .join('');
+}
+/** A description with its marks taken out, for an SVG's hover text. A link keeps its address after its text. */
+function markdownPlain(text) {
+    const inline = (line) => line
+        .replace(LINK, (_, label, href) => `${label} (${href})`)
+        .replace(/`([^`]+)`/g, '$1')
+        .replace(/\*\*(?=\S)(.+?)(?<=\S)\*\*/g, '$1')
+        .replace(/(^|[^*\w])\*(?=\S)(.+?)(?<=\S)\*(?![*\w])/g, '$1$2')
+        .replace(/(^|[^_\w])_(?=\S)(.+?)(?<=\S)_(?![_\w])/g, '$1$2');
+    return blocksOf(text)
+        .map((block) => block.kind === 'paragraph'
+        ? block.lines.map(inline).join(' ')
+        : block.items.map((item, index) => `${block.ordered ? `${index + 1}.` : '•'} ${inline(item)}`).join('\n'))
+        .join('\n\n');
+}
+
 // ---- render.js ----
 const CORNER = 8;
 /** Turn solved geometry into a standalone SVG document. */
@@ -13500,7 +13715,7 @@ function drawing(layout, options) {
     }
     const lineSvg = new Map(lines.map((line) => [line.key, line.svg]));
     const body = sequence
-        .map((item) => ({ item, svg: lineSvg.get(item.key) ?? item.svg }))
+        .map((item) => ({ item, svg: described(layout, item, lineSvg.get(item.key) ?? item.svg) }))
         .filter(({ svg }) => svg.length > 0);
     // An edge's geometry is measured rather than solved for, so the resolver sized
     // the canvas from the boxes alone. A curve out of a `top` side, or a text
@@ -13570,6 +13785,18 @@ function themeOf(layout, options = {}) {
  * `<g data-name="api" data-line="12">` round each thing drawn: what a page
  * shows on hover, and what a finding about that line lights up.
  */
+/**
+ * A box or a line with a description carries it, marks stripped, as hover
+ * text. A `<title>` is the tooltip of the element it opens, so the drawing is
+ * wrapped in a group of its own; one without a description draws as before.
+ */
+function described(layout, item, svg) {
+    const attrs = item.node?.attrs ?? (item.key.startsWith('edge ') ? layout.edges[Number(item.key.slice('edge '.length))]?.attrs : undefined);
+    const text = attrs?.['description'];
+    if (text === undefined || svg.length === 0)
+        return svg;
+    return `  <g>\n  <title>${escapeXml(markdownPlain(text))}</title>\n${svg}\n  </g>`;
+}
 function tag(layout, item, svg) {
     let name;
     let line;
@@ -15075,6 +15302,10 @@ function resolve(doc, options = {}) {
     const measurer = options.measurer ?? monospaceMeasurer();
     const fontSize = options.fontSize ?? DEFAULT_FONT_SIZE;
     const margin = options.margin ?? DEFAULT_MARGIN;
+    // `description: notes` becomes the text it names, and `description for …`
+    // waits until the boxes and lines it names exist. Nothing else reads them.
+    const described = nameDescriptions(doc.statements);
+    doc = { statements: described.statements };
     const styles = collectStyles(doc.statements);
     checkStyleKeys(doc.statements);
     const defaults = collectDefaults(doc.statements, styles);
@@ -15099,6 +15330,7 @@ function resolve(doc, options = {}) {
     // gaps are being worked out. Nothing here reads geometry.
     const named = collectNamed(doc.statements, byName);
     const edges = buildEdges(statements, byName, named, styles, defaults, measurer, fontSize);
+    attachDescriptions(described.attached, byName, edges);
     const facts = new Map(nodes.map((node) => [node, factsFor(node, measurer, fontSize)]));
     const markTexts = measureMarkTexts(named, measurer, fontSize);
     const regionTexts = new Map([...markTexts].flatMap(([name, text]) => (text.region ? [[name, text.region]] : [])));
@@ -15374,6 +15606,77 @@ function collectStyles(statements) {
     return styles;
 }
 /** The file's own icons, by name, each pasted in or read from its file. */
+/**
+ * Swaps each `description: notes` for the text `description notes` declares,
+ * and sets aside the `description for …` statements, which name boxes and
+ * lines that don't exist until the tree is built. Every description's links
+ * are checked here, inline ones included.
+ */
+function nameDescriptions(statements) {
+    const declared = new Map();
+    const attached = [];
+    const checkLinks = (text, line) => {
+        const bad = unsafeLinks(text)[0];
+        if (bad !== undefined) {
+            throw new SourceError(`a description links to "${bad}" — a link goes to a web or mail address (https:, http:, mailto:) or a path`, line);
+        }
+    };
+    for (const stmt of statements) {
+        if (stmt.kind !== 'description')
+            continue;
+        checkLinks(stmt.text, stmt.line);
+        if (stmt.targets !== undefined) {
+            attached.push(stmt);
+            continue;
+        }
+        const before = declared.get(stmt.name);
+        if (before !== undefined) {
+            throw new SourceError(`description "${stmt.name}" is declared twice, on lines ${before.line} and ${stmt.line} — keep one`, stmt.line);
+        }
+        declared.set(stmt.name, stmt);
+    }
+    const rest = statements.flatMap((stmt) => {
+        if (stmt.kind === 'description')
+            return [];
+        if (!('attrs' in stmt) || stmt.attrs === undefined)
+            return [stmt];
+        if (stmt.attrs['description'] !== undefined)
+            checkLinks(stmt.attrs['description'], stmt.line);
+        const name = stmt.attrs[DESCRIPTION_NAME_KEY];
+        if (name === undefined)
+            return [stmt];
+        const found = declared.get(name);
+        if (found === undefined) {
+            const known = [...declared.keys()];
+            throw new SourceError(`there is no description named "${name}" — ` +
+                (known.length === 0
+                    ? 'declare it with `description ' + name + ' """…"""`, or quote the text to write it here'
+                    : `the file declares ${known.map((one) => `"${one}"`).join(', ')}; quote the text to write it here`), stmt.line);
+        }
+        const { [DESCRIPTION_NAME_KEY]: _, ...attrs } = stmt.attrs;
+        return [{ ...stmt, attrs: { ...attrs, description: found.text } }];
+    });
+    return { statements: rest, attached };
+}
+/** `description for proxy, cache`: each name a box, or a named line, that has no description yet. */
+function attachDescriptions(attached, byName, edges) {
+    for (const stmt of attached) {
+        for (const target of stmt.targets) {
+            const node = byName.get(target);
+            const lines = node ? [] : edges.filter((edge) => edge.name === target);
+            const things = node ? [node] : lines;
+            if (things.length === 0) {
+                throw new SourceError(`description for "${target}": there is no box or named line called "${target}"`, stmt.line);
+            }
+            for (const thing of things) {
+                if (thing.attrs['description'] !== undefined) {
+                    throw new SourceError(`description for "${target}": "${target}" already has a description — keep one`, stmt.line);
+                }
+                thing.attrs['description'] = stmt.text;
+            }
+        }
+    }
+}
 function collectIcons(statements, readIconFile) {
     const icons = new Map();
     for (const stmt of statements) {
@@ -16033,6 +16336,10 @@ function checkStyleKeys(statements) {
             }
             if (topKey(key) === 'cards') {
                 throw new SourceError(`style "${stmt.name}" has cards:, which are one deck's own children, so it is written on that deck`, stmt.line);
+            }
+            if (topKey(key) === 'description') {
+                throw new SourceError(`style "${stmt.name}" has description:, which is about the things it describes rather than how they look — ` +
+                    'to give several one text, write `description for a, b and c """…"""`', stmt.line);
             }
             if (topKey(key) === 'from' || topKey(key) === 'to') {
                 throw new SourceError(`style "${stmt.name}" has ${key}:, which says where one line ends, so it is written on that edge`, stmt.line);

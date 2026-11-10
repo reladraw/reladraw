@@ -1,6 +1,7 @@
-import type { Attrs, Kind, DefaultTarget, Document, EdgeStmt, Mark, NodeStmt, PlacementTarget, POINT_TEXT_SIDES, PointStmt, RegionStmt, Stmt } from './ast.js';
+import type { Attrs, Kind, DefaultTarget, DescriptionStmt, Document, EdgeStmt, Mark, NodeStmt, PlacementTarget, POINT_TEXT_SIDES, PointStmt, RegionStmt, Stmt } from './ast.js';
 import { TEXT_GAP } from './linetexts.js';
 import {
+  DESCRIPTION_NAME_KEY,
   POINT_KEYS,
   REGION_KEYS,
   ALL_ATTR_KEYS,
@@ -37,6 +38,7 @@ import {
 import { SourceError } from './errors.js';
 import { type Body, bodyFor, type Icon, iconNamed, pastedIcon } from './icons.js';
 import { linksOf } from './links.js';
+import { unsafeLinks } from './markdown.js';
 import { monospaceMeasurer, type Measurer } from './measure.js';
 import { isBoxy, middleOf, sizeFor, SUBPROCESS_INSET } from './outline.js';
 import { markupStyles, parseMarkup, plain, splitRuns, wrapLine, type Line } from './text.js';
@@ -399,6 +401,11 @@ export function resolve(doc: Document, options: ResolveOptions = {}): Layout {
   const fontSize = options.fontSize ?? DEFAULT_FONT_SIZE;
   const margin = options.margin ?? DEFAULT_MARGIN;
 
+  // `description: notes` becomes the text it names, and `description for …`
+  // waits until the boxes and lines it names exist. Nothing else reads them.
+  const described = nameDescriptions(doc.statements);
+  doc = { statements: described.statements };
+
   const styles = collectStyles(doc.statements);
   checkStyleKeys(doc.statements);
   const defaults = collectDefaults(doc.statements, styles);
@@ -423,6 +430,7 @@ export function resolve(doc: Document, options: ResolveOptions = {}): Layout {
   // gaps are being worked out. Nothing here reads geometry.
   const named = collectNamed(doc.statements, byName);
   const edges = buildEdges(statements, byName, named, styles, defaults, measurer, fontSize);
+  attachDescriptions(described.attached, byName, edges);
 
   const facts = new Map(nodes.map((node) => [node, factsFor(node, measurer, fontSize)]));
   const markTexts = measureMarkTexts(named, measurer, fontSize);
@@ -719,6 +727,77 @@ function collectStyles(statements: Stmt[]): Map<string, Attrs> {
 }
 
 /** The file's own icons, by name, each pasted in or read from its file. */
+/**
+ * Swaps each `description: notes` for the text `description notes` declares,
+ * and sets aside the `description for …` statements, which name boxes and
+ * lines that don't exist until the tree is built. Every description's links
+ * are checked here, inline ones included.
+ */
+function nameDescriptions(statements: Stmt[]): { statements: Stmt[]; attached: DescriptionStmt[] } {
+  const declared = new Map<string, DescriptionStmt>();
+  const attached: DescriptionStmt[] = [];
+  const checkLinks = (text: string, line: number): void => {
+    const bad = unsafeLinks(text)[0];
+    if (bad !== undefined) {
+      throw new SourceError(`a description links to "${bad}" — a link goes to a web or mail address (https:, http:, mailto:) or a path`, line);
+    }
+  };
+  for (const stmt of statements) {
+    if (stmt.kind !== 'description') continue;
+    checkLinks(stmt.text, stmt.line);
+    if (stmt.targets !== undefined) {
+      attached.push(stmt);
+      continue;
+    }
+    const before = declared.get(stmt.name!);
+    if (before !== undefined) {
+      throw new SourceError(`description "${stmt.name}" is declared twice, on lines ${before.line} and ${stmt.line} — keep one`, stmt.line);
+    }
+    declared.set(stmt.name!, stmt);
+  }
+  const rest = statements.flatMap((stmt): Stmt[] => {
+    if (stmt.kind === 'description') return [];
+    if (!('attrs' in stmt) || stmt.attrs === undefined) return [stmt];
+    if (stmt.attrs['description'] !== undefined) checkLinks(stmt.attrs['description'], stmt.line);
+    const name = stmt.attrs[DESCRIPTION_NAME_KEY];
+    if (name === undefined) return [stmt];
+    const found = declared.get(name);
+    if (found === undefined) {
+      const known = [...declared.keys()];
+      throw new SourceError(
+        `there is no description named "${name}" — ` +
+          (known.length === 0
+            ? 'declare it with `description ' + name + ' """…"""`, or quote the text to write it here'
+            : `the file declares ${known.map((one) => `"${one}"`).join(', ')}; quote the text to write it here`),
+        stmt.line,
+      );
+    }
+    const { [DESCRIPTION_NAME_KEY]: _, ...attrs } = stmt.attrs;
+    return [{ ...stmt, attrs: { ...attrs, description: found.text } } as Stmt];
+  });
+  return { statements: rest, attached };
+}
+
+/** `description for proxy, cache`: each name a box, or a named line, that has no description yet. */
+function attachDescriptions(attached: DescriptionStmt[], byName: Map<string, LayoutNode>, edges: LayoutEdge[]): void {
+  for (const stmt of attached) {
+    for (const target of stmt.targets!) {
+      const node = byName.get(target);
+      const lines = node ? [] : edges.filter((edge) => edge.name === target);
+      const things: { attrs: Attrs }[] = node ? [node] : lines;
+      if (things.length === 0) {
+        throw new SourceError(`description for "${target}": there is no box or named line called "${target}"`, stmt.line);
+      }
+      for (const thing of things) {
+        if (thing.attrs['description'] !== undefined) {
+          throw new SourceError(`description for "${target}": "${target}" already has a description — keep one`, stmt.line);
+        }
+        thing.attrs['description'] = stmt.text;
+      }
+    }
+  }
+}
+
 function collectIcons(statements: Stmt[], readIconFile: ((path: string) => string) | undefined): Map<string, Icon> {
   const icons = new Map<string, Icon>();
   for (const stmt of statements) {
@@ -1486,6 +1565,13 @@ function checkStyleKeys(statements: Stmt[]): void {
       if (topKey(key) === 'cards') {
         throw new SourceError(
           `style "${stmt.name}" has cards:, which are one deck's own children, so it is written on that deck`,
+          stmt.line,
+        );
+      }
+      if (topKey(key) === 'description') {
+        throw new SourceError(
+          `style "${stmt.name}" has description:, which is about the things it describes rather than how they look — ` +
+            'to give several one text, write `description for a, b and c """…"""`',
           stmt.line,
         );
       }

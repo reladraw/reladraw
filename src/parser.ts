@@ -18,6 +18,7 @@ import type {
   EdgeTextStmt,
   TextSide,
   IconStmt,
+  DescriptionStmt,
   Mark,
   MarkText,
   Part,
@@ -34,6 +35,7 @@ import type {
 } from './ast.js';
 import {
   BUNDLE_KEYS,
+  DESCRIPTION_NAME_KEY,
   COLOR_KEYS,
   POINT_KEYS,
   REGION_KEYS,
@@ -263,10 +265,12 @@ function parseStatement(tokens: Token[], line: number): Stmt {
 
   // What a line break inside a node's or an edge's text should mean has not
   // been decided, so until it is a `"""` string is refused anywhere but the one
-  // place it was made for, rather than drawn in some way that might change.
-  if (keyword.text !== 'icon' && tokens.some((token) => token.triple)) {
+  // places it was made for, rather than drawn in some way that might change:
+  // an icon's SVG and a description's text.
+  const holdsTriple = keyword.text === 'icon' || keyword.text === 'description';
+  if (!holdsTriple && tokens.some((token, index) => token.triple && tokens[index - 1]?.text !== 'description:')) {
     throw new SourceError(
-      'a """ string holds the SVG of an `icon` declaration and is not accepted anywhere else yet — ' +
+      'a """ string holds an `icon` declaration\'s SVG or a description\'s text, and is not accepted anywhere else yet — ' +
         'use ordinary quotes here',
       line,
     );
@@ -275,6 +279,8 @@ function parseStatement(tokens: Token[], line: number): Stmt {
   switch (keyword.text) {
     case 'icon':
       return parseIcon(tokens, line);
+    case 'description':
+      return parseDescription(tokens, line);
     case 'node':
       return parseNode(tokens, line);
     case 'edge':
@@ -845,6 +851,22 @@ function readAttr(
       attrs[LINKS_KEY] = JSON.stringify(read.links);
     }
     return read.next;
+  }
+  if (key === 'description') {
+    // Quoted, the text itself; unquoted, the name of a `description` statement,
+    // as `icon:` takes letters quoted and a picture's name bare.
+    const value = tokens[at + 1];
+    if (!value || isAttrKey(value) || value.text === '(' || value.text === ')') {
+      throw new SourceError(
+        `${subject}: description: takes its text in quotes, \`description: "What this does"\`, or the name of a \`description\` statement`,
+        line,
+      );
+    }
+    const had = attrs[DESCRIPTION_NAME_KEY] ?? attrs[key];
+    if (had !== undefined) throw new SourceError(`${subject}: "description" is written twice — keep one`, line);
+    if (value.quoted) attrs[key] = descriptionText(value.text);
+    else attrs[DESCRIPTION_NAME_KEY] = value.text;
+    return at + 2;
   }
   if (key === 'title') {
     // A title is a text, and every text is quoted. Unquoted, its first word
@@ -2264,6 +2286,69 @@ function parseIcon(head: Token[], line: number): IconStmt {
 }
 
 /**
+ * A description's text as written between `"""` marks, without the line break
+ * after the opening marks, the blank lines at either end, or the indentation
+ * every line shares, so a description indented under its statement reads as
+ * Markdown from the left margin.
+ */
+export function descriptionText(raw: string): string {
+  const lines = raw.replace(/\r\n?/g, '\n').split('\n');
+  while (lines.length > 0 && lines[0]!.trim() === '') lines.shift();
+  while (lines.length > 0 && lines[lines.length - 1]!.trim() === '') lines.pop();
+  const indents = lines.filter((one) => one.trim() !== '').map((one) => one.match(/^[ \t]*/)![0].length);
+  const shared = indents.length === 0 ? 0 : Math.min(...indents);
+  return lines.map((one) => one.slice(shared).trimEnd()).join('\n');
+}
+
+/**
+ * `description for proxy, cache and api """…"""` or `description notes """…"""`.
+ * `for` keeps the two apart: without it a misspelled box name would silently
+ * declare a description nothing uses.
+ */
+function parseDescription(head: Token[], line: number): DescriptionStmt {
+  const textAt = head.findIndex((token, index) => index > 0 && token.quoted);
+  const textToken = textAt === -1 ? undefined : head[textAt]!;
+  const shape = 'write `description for proxy """…"""` to describe things already named, or `description notes """…"""` to declare one for `description: notes`';
+  if (head[1] === undefined) throw new SourceError(`description needs a name or \`for\` — ${shape}`, line);
+  if (textToken === undefined) {
+    throw new SourceError('a description needs its text, between """ marks or in quotes, after what it names', line);
+  }
+  if (textAt + 1 < head.length) {
+    throw new SourceError(`a description ends with its text — "${head[textAt + 1]!.text}" is left over`, line);
+  }
+  const text = descriptionText(textToken.text);
+  if (text.trim() === '') throw new SourceError('a description\'s text is empty', line);
+  if (follows(head, 1, 'for')) {
+    const targets: string[] = [];
+    for (let next = 2; next < textAt; next++) {
+      const token = head[next]!;
+      if (token.text === 'and' && targets.length > 0) continue;
+      if (isAttrKey(token) || token.text === '(' || token.text === ')') {
+        throw new SourceError(`description for: expected the names of boxes or lines, found "${token.text}"`, line);
+      }
+      const name = token.text.replace(/,$/, '');
+      if (name === '') continue;
+      if (targets.includes(name)) throw new SourceError(`description for: "${name}" is named twice — keep one`, line);
+      targets.push(name);
+    }
+    if (targets.length === 0) throw new SourceError(`description for names nothing — ${shape}`, line);
+    return { kind: 'description', targets, text, line };
+  }
+  const name = requireName(head[1], 'description', line, head[2]);
+  if (textAt !== 2) {
+    throw new SourceError(
+      `description "${name}" takes one name — to describe several things at once, write \`description for ${head
+        .slice(1, textAt)
+        .map((token) => token.text.replace(/,$/, ''))
+        .filter((one) => one !== 'and')
+        .join(', ')} """…"""\``,
+      line,
+    );
+  }
+  return { kind: 'description', name, text, line };
+}
+
+/**
  * `diagram <attributes>` — no name, because a file holds one diagram. Unknown
  * keys are refused rather than ignored: a misspelt diagram-wide setting that
  * silently does nothing is the kind of thing an author stares at for a while.
@@ -2371,6 +2456,9 @@ function parseDefault(head: Token[], line: number): DefaultStmt {
 function defaultRefusal(kind: DefaultTarget, key: string): string {
   const takes = `it takes ${DEFAULT_KEYS[kind].map((k) => `${k}:`).join(', ')}`;
   if (key === 'url') return `and a destination belongs to one thing rather than to every one of a kind`;
+  if (key === 'description') {
+    return 'and a description belongs to the things it describes — to give several one text, write `description for a, b and c """…"""`';
+  }
   if (key === 'heading') {
     return "and a heading names one node's own child, so it is written on that node";
   }

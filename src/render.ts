@@ -21,6 +21,7 @@ import { crossingPoints, planLines, traceRoute, visibleRuns, type Point, type Ro
 import { patchPadding, placeLineTexts } from './linetexts.js';
 import { plain, type Line, type Run } from './text.js';
 import { linkLabel, linksOf, type Link } from './links.js';
+import { markdownPlain } from './markdown.js';
 
 export interface RenderOptions {
   measurer?: Measurer;
@@ -150,7 +151,7 @@ function drawing(layout: Layout, options: RenderOptions): (tagged: boolean) => s
   }
   const lineSvg = new Map(lines.map((line) => [line.key, line.svg]));
   const body = sequence
-    .map((item) => ({ item, svg: lineSvg.get(item.key) ?? item.svg }))
+    .map((item) => ({ item, svg: described(layout, item, lineSvg.get(item.key) ?? item.svg) }))
     .filter(({ svg }) => svg.length > 0);
 
   // An edge's geometry is measured rather than solved for, so the resolver sized
@@ -227,6 +228,18 @@ export function themeOf(layout: Layout, options: RenderOptions = {}): Theme {
  * `<g data-name="api" data-line="12">` round each thing drawn: what a page
  * shows on hover, and what a finding about that line lights up.
  */
+/**
+ * A box or a line with a description carries it, marks stripped, as hover
+ * text. A `<title>` is the tooltip of the element it opens, so the drawing is
+ * wrapped in a group of its own; one without a description draws as before.
+ */
+function described(layout: Layout, item: Drawn, svg: string): string {
+  const attrs = item.node?.attrs ?? (item.key.startsWith('edge ') ? layout.edges[Number(item.key.slice('edge '.length))]?.attrs : undefined);
+  const text = attrs?.['description'];
+  if (text === undefined || svg.length === 0) return svg;
+  return `  <g>\n  <title>${escapeXml(markdownPlain(text))}</title>\n${svg}\n  </g>`;
+}
+
 function tag(layout: Layout, item: Drawn, svg: string): string {
   let name: string;
   let line: number;

@@ -972,10 +972,10 @@ export const PADDING_SIDE_KEYS = PADDING_SIDES.map((side) => `padding-${side}`);
 export const EDGE_ORDER_KEYS = ['top-edge-order', 'bottom-edge-order', 'left-edge-order', 'right-edge-order'] as const;
 
 export const ATTR_KEYS: Record<Kind, readonly string[]> = {
-  shape: ['style', 'overlap', 'layout', 'gather-children', 'padding', ...PADDING_SIDE_KEYS, ...SIZE_KEY_NAMES, 'heading', 'join-with', 'badge', 'cards', 'shape', 'fill', 'border', 'corners', 'text', 'url', 'depth', ...EDGE_ORDER_KEYS],
-  icon: ['style', 'overlap', 'icon', 'join-with', 'text', 'url', 'depth', ...EDGE_ORDER_KEYS],
-  none: ['style', 'overlap', 'layout', 'gather-children', 'padding', ...SIZE_KEY_NAMES, 'heading', 'join-with', 'shape', 'text', 'url', 'depth', ...EDGE_ORDER_KEYS],
-  edge: ['style', 'from', 'to', 'via', 'from-mark', 'to-mark', 'line', 'text', 'url', 'depth'],
+  shape: ['style', 'overlap', 'layout', 'gather-children', 'padding', ...PADDING_SIDE_KEYS, ...SIZE_KEY_NAMES, 'heading', 'join-with', 'badge', 'cards', 'shape', 'fill', 'border', 'corners', 'text', 'url', 'description', 'depth', ...EDGE_ORDER_KEYS],
+  icon: ['style', 'overlap', 'icon', 'join-with', 'text', 'url', 'description', 'depth', ...EDGE_ORDER_KEYS],
+  none: ['style', 'overlap', 'layout', 'gather-children', 'padding', ...SIZE_KEY_NAMES, 'heading', 'join-with', 'shape', 'text', 'url', 'description', 'depth', ...EDGE_ORDER_KEYS],
+  edge: ['style', 'from', 'to', 'via', 'from-mark', 'to-mark', 'line', 'text', 'url', 'description', 'depth'],
 };
 
 /**
@@ -1028,7 +1028,26 @@ export interface IconStmt {
   line: number;
 }
 
-export type Stmt = NodeStmt | EdgeStmt | StyleStmt | DiagramStmt | DefaultStmt | IconStmt | PointStmt | RegionStmt | BundleStmt;
+/**
+ * `description for proxy, cache """…"""` attaches one text to things already
+ * named; `description notes """…"""` declares a named one, which a box or a
+ * line takes with `description: notes`. The text is a small Markdown subset,
+ * shown in the page's panel and, marks stripped, as an SVG's hover text.
+ */
+/** Where `description: notes` keeps the name until `resolve` swaps in the text. */
+export const DESCRIPTION_NAME_KEY = 'description.name';
+
+export interface DescriptionStmt {
+  kind: 'description';
+  /** The declared name, for the named form. */
+  name?: string;
+  /** The boxes and lines named after `for`, for the at-a-distance form. */
+  targets?: string[];
+  text: string;
+  line: number;
+}
+
+export type Stmt = NodeStmt | EdgeStmt | StyleStmt | DiagramStmt | DefaultStmt | IconStmt | PointStmt | RegionStmt | BundleStmt | DescriptionStmt;
 
 export interface Document {
   statements: Stmt[];

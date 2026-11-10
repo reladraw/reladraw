@@ -170,7 +170,19 @@ node api_link "github.com/acme/api"  shape: none  right of api
 node api "API server"  url: "https://github.com/acme/api"
 ```
 
-The address is never drawn; a reader follows it by clicking. A line with no text can't carry one, and neither can a style. Quote the value, since an unquoted `//` starts a comment.
+The address is never drawn; a reader follows it by clicking. A line with no text can carry one too, but a style can't. Quote the value, since an unquoted `//` starts a comment.
+
+### Descriptions
+
+```
+node proxy "Proxy"  description: "Forwards each request by its path."
+
+description for orders and to-orders """
+Owns the order records. See [the docs](https://example.com/orders).
+"""
+```
+
+**Notes about a thing go in its description, not in a box beside it.** A description is shown when the thing is selected on the `--page` page, and as hover text in an SVG; it is never drawn, so it can run to paragraphs and lists in Markdown. Write a short one on the statement, and a long one with `description for`, after the diagram's statements, so it doesn't crowd them. When several things share one text, name them all after `for`.
 
 **Offer links; don't add them unasked.** When the things in a diagram have real web addresses, such as the files of a pull request on GitHub, end your reply with one line offering to link each node to its file. Never guess an address, and don't link to files on the local machine.
 
