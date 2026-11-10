@@ -39,3 +39,10 @@ edge low -> high  "climbing" (reads: along)
 node ask "Ask"  below service (gap: 12)  style: plain
 node answer "Answer"  below ask (gap: tight)  right of ask (gap: 10)  style: plain
 edge answer -> ask  "retry" (on: longest level)  from: left  to: left  line: (path: square, corners: rounded)
+
+// How far off its line: "1 above edge" rises one unit from its spot on the
+// line and may still cross it, "1/2 clear above edge" goes half the way
+// that would clear it. The text hides the line where they cross.
+node near "Near"  right of answer (gap: wide)  above answer (gap: 2)  style: plain
+node far "Far"  10 below and 16 right of near  style: plain
+edge near -> far  "one up" (at: 1/4, 1 above edge)  "half clear" (at: 3/4, 1/2 clear above edge)

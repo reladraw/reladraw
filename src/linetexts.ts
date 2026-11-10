@@ -49,7 +49,10 @@ export interface PlacedText {
   angle: number;
   /** What the text covers on the page, its knockout included, as an upright box. */
   box: { minX: number; minY: number; maxX: number; maxY: number };
-  /** Moved off its line by `right of edge` and the rest, rather than sitting on it. */
+  /**
+   * Moved off its line by `right of edge` and the rest, rather than sitting on it,
+   * and meant to be clear of it: not a stated distance or part of the way clear.
+   */
   beside: boolean;
 }
 
@@ -367,9 +370,17 @@ export function placeLineTexts(edge: LayoutEdge, route: Route): PlacedText[] {
       const out = { above: [0, -1], below: [0, 1], 'left of': [-1, 0], 'right of': [1, 0] }[place.by.side];
       center = { x: spot.x + (out[0]! * size.width) / 2, y: spot.y + (out[1]! * size.height) / 2 };
     }
-    if (place.beside) {
+    if (place.beside && place.rise?.distance !== undefined) {
+      // `2 above edge`: that far from its spot on the line, the stated way, whatever the line does.
+      const by = gapPixels(place.rise.distance, `${subject}: the text "${text.text}" ${place.rise.written}`, edge.line);
+      const out = { above: [0, -1], below: [0, 1], 'left of': [-1, 0], 'right of': [1, 0] }[place.beside];
+      center = { x: center.x + out[0]! * by, y: center.y + out[1]! * by };
+    } else if (place.beside) {
       const gap = place.edgeGap === undefined ? TEXT_GAP : gapPixels(place.edgeGap, `${subject}: the text "${text.text}" edge-gap`, edge.line);
-      center = besideLine(whole, s, center, size, place.beside, gap);
+      const clear = besideLine(whole, s, center, size, place.beside, gap);
+      // `1/2 clear above edge`: that fraction of the move that clears it.
+      const fraction = place.rise?.clear ?? 1;
+      center = { x: center.x + (clear.x - center.x) * fraction, y: center.y + (clear.y - center.y) * fraction };
     }
     const pad = patchPadding(text, subject, edge.line);
     const knockout = turned(text.width + pad.x * 2, text.height + pad.y * 2, angle);
@@ -391,7 +402,8 @@ export function placeLineTexts(edge: LayoutEdge, route: Route): PlacedText[] {
         maxX: center.x + knockout.width / 2,
         maxY: center.y + knockout.height / 2,
       },
-      beside: place.beside !== undefined,
+      // A stated distance, or less than the whole way clear, may leave it across its line on purpose.
+      beside: place.beside !== undefined && place.rise?.distance === undefined && (place.rise?.clear ?? 1) >= 1,
     };
   });
 }

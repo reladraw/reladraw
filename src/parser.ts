@@ -1177,14 +1177,33 @@ function readEdgeTextBracket(
       continue;
     }
     // `2 above s1`: the distance from the box, written in front as a box writes it.
-    const distance = /^\d*\.?\d+$/.test(word) && /^(above|below|left|right)$/.test(plain(tokens[i + 1]) ?? '') ? word : undefined;
-    if (distance !== undefined) {
-      if (place.gap !== undefined) throw new SourceError(`${about} says its distance from the box twice (gap: ${place.gap}, ${distance} in front) — keep one`, line);
-      place.gap = distance;
-      seen.add('gap');
+    // `2 above edge`: how far the text rises from its spot on the line.
+    // `clear above edge`, `1/2 clear above edge`: the rise that clears the line, or a fraction of it.
+    const isDirection = (token: Token | undefined): boolean => /^(above|below|left|right)$/.test(plain(token) ?? '');
+    const distance = /^\d*\.?\d+$/.test(word) && isDirection(tokens[i + 1]) ? word : undefined;
+    let clear: { fraction: number; written: string } | undefined;
+    if (word === 'clear' && isDirection(tokens[i + 1])) {
+      clear = { fraction: 1, written: 'clear' };
       i += 1;
+    } else if (plain(tokens[i + 1]) === 'clear' && isDirection(tokens[i + 2]) && fractionValue(word) !== undefined) {
+      const fraction = fractionValue(word)!;
+      if (fraction <= 0) throw new SourceError(`${about}: "${word} clear" — say how much of the way clear, more than none, such as 1/2 clear`, line);
+      clear = { fraction, written: `${word} clear` };
+      i += 2;
+    } else if (/^\d+\/\d+$/.test(word) && isDirection(tokens[i + 1])) {
+      const value = fractionValue(word);
+      const decimal = value === undefined ? word : String(Math.round(value * 1000) / 1000);
+      const way = plain(tokens[i + 1])!;
+      const two = way === 'left' || way === 'right';
+      const onEdge = plain(tokens[i + (two ? 3 : 2)]) === 'edge';
+      throw new SourceError(
+        `${about}: "${word} ${way}" — a distance is a number, \`${decimal} ${way}${two ? ' of' : ''}\`` +
+          (onEdge ? `; for part of the way clear of the line, write \`${word} clear ${way}${two ? ' of' : ''} edge\`` : ''),
+        line,
+      );
     }
-    const said = distance === undefined ? word : plain(tokens[i])!;
+    if (distance !== undefined) i += 1;
+    const said = distance === undefined && clear === undefined ? word : plain(tokens[i])!;
     let relation: 'straight' | TextSide;
     if (said === 'straight') {
       const way = plain(tokens[i + 1]);
@@ -1207,12 +1226,23 @@ function readEdgeTextBracket(
       );
     }
     const besideIt = relation !== 'straight' && plain(tokens[i]) === 'edge';
-    if (besideIt && distance !== undefined) {
-      throw new SourceError(`${about}: "${distance} ${relation} edge" — the distance off the line is written \`edge-gap: ${distance}\``, line);
+    if (clear !== undefined && !besideIt) {
+      throw new SourceError(
+        `${about}: "${clear.written}" says how far off its own line a text moves, so it goes with \`${relation} edge\`` +
+          (relation === 'straight' ? '' : `, not a box — for a distance from the box, write it in front, \`2 ${relation} …\``),
+        line,
+      );
+    }
+    if (distance !== undefined && !besideIt) {
+      if (place.gap !== undefined) throw new SourceError(`${about} says its distance from the box twice (gap: ${place.gap}, ${distance} in front) — keep one`, line);
+      place.gap = distance;
+      seen.add('gap');
     }
     if (besideIt) {
       once('a side of the line', `${relation} edge`);
       place.beside = relation as TextSide;
+      if (distance !== undefined) place.rise = { distance, written: `${distance} ${relation} edge` };
+      if (clear !== undefined) place.rise = { clear: clear.fraction, written: `${clear.written} ${relation} edge` };
       i += 1;
     } else {
       if (!tokens[i] || plain(tokens[i]) === ')' || isAttrKey(tokens[i]!)) {
@@ -1280,6 +1310,12 @@ function readEdgeTextBracket(
     if (other) {
       throw new SourceError(`${about}: "${written}" and "${other.said}" both say where it sits ${placement.axis === 'x' ? 'across' : 'up and down'} — keep one`, line);
     }
+  }
+  if (place.edgeGap !== undefined && place.rise?.distance !== undefined) {
+    throw new SourceError(
+      `${about}: "${place.rise.written}" and "edge-gap: ${place.edgeGap}" both say how far off the line it sits — keep one`,
+      line,
+    );
   }
   if (place.edgeGap !== undefined && !place.beside) {
     throw new SourceError(`${about}: edge-gap: is the distance off the line for a text beside it, and it says no side — add \`right of edge\` or another`, line);

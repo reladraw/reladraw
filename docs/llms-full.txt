@@ -1193,11 +1193,19 @@ A line may carry several texts, one after another, each with its own bracket. **
 
 **Beside the line:** `(right of edge)`, `(left of edge)`, `(above edge)`, `(below edge)` move the text out the stated way until it is clear of the part of the line it landed on.
 
+How far it moves can be said in front:
+
+- `(at: 4/5, 1 above edge)`: one unit up from where it would sit on the line. If that is short of clear, the text still crosses the line and hides it there.
+- `(at: 4/5, 1/2 clear above edge)`: half of the move that would clear the line. Any fraction or number works, `3/4 clear` or `1.5 clear`.
+- `(at: 4/5, clear above edge)`: all the way clear, the same as `above edge`.
+
+A distance is a number, `0.5 above edge`; `1/2 above edge` is refused, naming both forms. `edge-gap:` beside a distance is refused as said twice.
+
 **Lined up with a box on one axis:** `(left even with a right)` puts the left edge of the patch behind the text at `a`'s right side, and leaves its height where it would otherwise sit; `(x even with mid1)` centers the text across on `mid1`. Any `even with` a box takes works, one per axis, and the other axis comes from the line. On a level stretch it slides the text along the line; on an upright one, it moves the text off the line sideways. With a relation that already says the same axis, such as `right of edge`, it is refused. Separate it from the bracket's next item with a comma.
 
 **Which way it reads:** `reads: up` and `reads: down` turn it a quarter turn; `reads: along` takes the line's angle where it sits, never upside down.
 
-`gap:` is the distance from the box for `at: start`, `at: end` and the box relations; `edge-gap:` the distance off the line for a text beside it. Each defaults to half a unit, written in the text's own bracket.
+`gap:` is the distance from the box for `at: start`, `at: end` and the box relations; `edge-gap:` the distance past clear for a text beside it, and part of the move that `1/2 clear` takes a fraction of. Each defaults to half a unit, written in the text's own bracket.
 
 ```
 node a
@@ -1556,6 +1564,10 @@ Designed and absent from the code.
 ## Changelog
 
 Pre-1.0, so the minor number is where a breaking change goes. Every removal is refused by name with the replacement quoted, rather than dropped in silence: an older file stops with an error saying what to write instead.
+
+**Unreleased**
+
+- **A line's text can rise a stated amount off its line, or part of the way clear.** `above edge` and its kin always moved a text all the way clear, which on a slanted line can be well away from it. `(1 above edge)` now raises it one unit from its spot on the line, still crossing the line if that is short of clear, and `(1/2 clear above edge)` moves it half the way. `(1 above edge)` used to be refused, pointing to `edge-gap:`.
 
 **0.24.0**
 

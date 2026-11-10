@@ -614,6 +614,13 @@ export interface EdgeTextPlace {
   /** `right of edge`: moved clear of the part of the line it landed on. */
   beside?: TextSide;
   /**
+   * How far a text beside its line moves, from its spot on the line, the stated way:
+   * `2 above edge` a distance; `clear above edge` (1) or `1/2 clear above edge` a
+   * fraction of the move that clears the line, `edge-gap:` included. Unstated, it is
+   * `clear`. Either may leave the text across its line, and that is meant.
+   */
+  rise?: { distance?: string; clear?: number; written: string };
+  /**
    * `left even with x right`: one axis set by a box, at most one per axis; the
    * other stays where the text would otherwise sit (design.org 7.3).
    */
