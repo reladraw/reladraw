@@ -86,7 +86,7 @@ even with X      top even with X  bottom even with X  left even with X  right ev
 - **A gap is exact**: `none`, `tight`, `normal` (the default) or `wide`, in the placement's bracket, `right of a (gap: tight)`, or a number of the file's unit in front, `2 right of a`. A normal box is about 4 units tall.
 - **A lone direction also centers on its target.** `right of a` alone puts the box level with `a`. Another placement on that axis replaces the centering: `right of a  even with b`.
 - **Each axis is stated once.** Two placements on one axis are refused. The one exception: `right of a  left of b` centers the box in the space between them, and then something must say how high.
-- **Several targets are one region**: `below a and b` sits under the pair, centered between them.
+- **Several targets are one region**: `below a and b` sits under the pair, centered between them. A distance and a direction after `and` start a second placement instead: `right of a and 2 above c top` is two placements. To use a point as a target, name it first with `point p  2 above c top-center`.
 - **Nothing moves a box.** Two boxes placed `right of a` both land on one spot and are reported. Chain them (`b right of a`, `c right of b`) or put them in a container with a layout.
 
 ### Containers

@@ -1422,7 +1422,7 @@ Pre-1.0, so the minor number is where a breaking change goes. Every removal is r
 
 - **`2 right of and 3 below a`** is accepted, the same as `2 right and 3 below a`. It used to be refused with a message that took `and` for the name of a box.
 
-- **`right of a and 2 above c top` is two placements**: `b` right of `a`, and its bottom 2 above `c`'s top. A distance and a direction after `and` or a comma used to add a point to the targets, so `b` was placed right of the region round `a` and that point, with no warning, and the second half looked ignored. A point meant as a target is named first with `point`.
+- **A distance and a direction after `and` or a comma start a second placement**: `node b  right of a and 2 above c top` puts `b` right of `a`, with its bottom 2 above `c`'s top. It used to take `2 above c top` as a point added to the targets, so `b` was placed right of the region covering `a` and that point, with no warning, and the second half looked ignored. To get that reading, name the point first: `point p  2 above c top-center`, then `node b  right of a and p`.
 
 - **A box or a line can have a description**, shown in the panel when it is selected on a `--page` page, and as hover text in an SVG. It is written on the thing, `description: "Forwards each request by its path."`; at a distance, `description for orders and to-orders """…"""`; or named, `description replica """…"""`, and taken with `description: replica`. The text is a small part of Markdown: paragraphs, lists, bold, italic, code and links.
 
