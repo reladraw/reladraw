@@ -1,4 +1,4 @@
-# Syntax reference — 0.25.0
+# Syntax reference — 0.25.1
 
 What the language accepts. The changelog at the end lists what changed in each published version; 0.17.0's changes are large, and its entry has a table of every old spelling and what to write instead.
 
@@ -1413,6 +1413,10 @@ Designed and absent from the code.
 ## Changelog
 
 Pre-1.0, so the minor number is where a breaking change goes. Every removal is refused by name with the replacement quoted, rather than dropped in silence: an older file stops with an error saying what to write instead.
+
+**0.25.1**
+
+- The agent skill now says that a distance and a direction after `and` start a second placement, and how to name a point to use as a target. No change to what the tool accepts or draws.
 
 **0.25.0**
 
