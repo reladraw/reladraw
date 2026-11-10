@@ -100,10 +100,42 @@ export function arrowLength(thickness: number): number {
  * places that block in the room the node gave it.
  */
 export function widestLine(lines: Line[], measurer: Measurer, fontSize: number): number {
-  return lines.reduce(
-    (widest, line) => Math.max(widest, measurer.measure(plain(line), fontSize).width),
-    0,
-  );
+  return lines.reduce((widest, line) => Math.max(widest, lineWidth(line, measurer, fontSize)), 0);
+}
+
+/**
+ * How wide one line is. A line all at the text's own size is measured whole;
+ * a line with a marked run of another size is the runs side by side, each at
+ * its own size.
+ */
+export function lineWidth(line: Line, measurer: Measurer, fontSize: number): number {
+  if (line.every((run) => run.size === undefined)) return measurer.measure(plain(line), fontSize).width;
+  return line.reduce((sum, run) => sum + measurer.measure(run.text, run.size ?? fontSize).width, 0);
+}
+
+/**
+ * The largest size on a line: its own, or a marked run's. Only runs with
+ * something to draw count, so a plain space between two small marked words
+ * doesn't make their line a normal one.
+ */
+export function lineSize(line: Line, fontSize: number): number {
+  const inked = line.filter((run) => run.text.trim().length > 0);
+  if (inked.length === 0) return fontSize;
+  return Math.max(...inked.map((run) => run.size ?? fontSize));
+}
+
+/**
+ * How tall one line is: as tall as its largest text (design.org 7.1), so a
+ * line that is all small takes a small line's spacing and a line mixing sizes
+ * takes the largest's.
+ */
+export function lineTall(line: Line, measurer: Measurer, fontSize: number): number {
+  return measurer.lineHeight(lineSize(line, fontSize));
+}
+
+/** How tall a block of lines is: each line as tall as its own largest text. */
+export function linesTall(lines: Line[], measurer: Measurer, fontSize: number): number {
+  return lines.reduce((sum, line) => sum + lineTall(line, measurer, fontSize), 0);
 }
 
 /**

@@ -33,6 +33,7 @@ import {
   BORDER_THICKNESS,
   BORDER_WIDTH,
   fontSizeFor,
+  linesTall,
   widestLine,
 } from './constants.js';
 import { SourceError } from './errors.js';
@@ -56,7 +57,7 @@ function factsFor(node: LayoutNode, measurer: Measurer, fontSize: number): NodeF
   const lineHeight = measurer.lineHeight(textSize);
   const hasText = node.lines.some((line) => plain(line).length > 0);
   const across = hasText ? widestLine(node.lines, measurer, textSize) : 0;
-  const tall = hasText ? node.lines.length * lineHeight : 0;
+  const tall = hasText ? linesTall(node.lines, measurer, textSize) : 0;
   // A turned text (design.org 7.2) takes the room of its turned ink: as wide
   // as its lines are tall, as tall as its widest line.
   const turned = node.textAttrs['reads'] !== undefined;
@@ -421,7 +422,7 @@ export function resolve(doc: Document, options: ResolveOptions = {}): Layout {
       }
     }
   }
-  const { nodes, byName, roots } = buildTree(writeOutCards(doc.statements), styles, defaults, icons);
+  const { nodes, byName, roots } = buildTree(writeOutCards(doc.statements), styles, defaults, icons, fontSize);
   // From here on, `edge each child of a -> b` and `edge a -> b, c` are the lines they stand for.
   const statements = expandEach(doc.statements, byName);
 
@@ -433,7 +434,7 @@ export function resolve(doc: Document, options: ResolveOptions = {}): Layout {
   attachDescriptions(described.attached, byName, edges);
 
   const facts = new Map(nodes.map((node) => [node, factsFor(node, measurer, fontSize)]));
-  const markTexts = measureMarkTexts(named, measurer, fontSize);
+  const markTexts = measureMarkTexts(named, measurer, fontSize, styles);
   const regionTexts = new Map([...markTexts].flatMap(([name, text]) => (text.region ? [[name, text.region] as const] : [])));
   const placer = new Placer(roots, byName, facts, named, regionTexts);
   placer.run();
@@ -556,17 +557,22 @@ interface MeasuredMarkText {
  * an inside text grows its region (design.org 7.4). Set small, as an aside is:
  * it labels a spot or an area rather than being a thing in the diagram.
  */
-function measureMarkTexts(named: Map<string, PointStmt | RegionStmt>, measurer: Measurer, fontSize: number): Map<string, MeasuredMarkText> {
+function measureMarkTexts(
+  named: Map<string, PointStmt | RegionStmt>,
+  measurer: Measurer,
+  fontSize: number,
+  styles: Map<string, Attrs>,
+): Map<string, MeasuredMarkText> {
   const measured = new Map<string, MeasuredMarkText>();
   for (const [name, stmt] of named) {
     if (!stmt.text) continue;
     const { text, textAttrs } = stmt.text;
     const subject = `${stmt.kind} "${name}"`;
-    const lines = linesFor(text, textAttrs, subject, stmt.line);
     const size = fontSizeFor('none', textAttrs, fontSize, stmt.line);
+    const lines = linesFor(text, textAttrs, subject, stmt.line, { styles, fontSize, base: size });
     const lineHeight = measurer.lineHeight(size);
     const across = widestLine(lines, measurer, size);
-    const tall = lines.length * lineHeight;
+    const tall = linesTall(lines, measurer, size);
     const turned = textAttrs['reads'] !== undefined;
     const width = turned ? tall : across;
     const height = turned ? across : tall;
@@ -888,6 +894,7 @@ function buildTree(
   styles: Map<string, Attrs>,
   defaults: Map<DefaultTarget, Attrs>,
   icons: ReadonlyMap<string, Icon>,
+  fontSize: number,
 ) {
   const nodes: LayoutNode[] = [];
   const byName = new Map<string, LayoutNode>();
@@ -1000,7 +1007,11 @@ function buildTree(
       body,
       corners: 'rounded',
       text,
-      lines: linesFor(text, textAttrs, `"${stmt.name}"`, stmt.line),
+      lines: linesFor(text, textAttrs, `"${stmt.name}"`, stmt.line, {
+        styles,
+        fontSize,
+        base: fontSizeFor(kind, textAttrs, fontSize, stmt.line),
+      }),
       children: [],
       x: 0,
       y: 0,
@@ -1781,8 +1792,8 @@ function buildEdges(
     // page selects a line by the same, so it is accepted.
     const texts = stmt.texts.map(({ text, textAttrs: own, place }) => {
       const textAttrs = { ...bracketOf('text', appearance), ...own };
-      const lines = linesFor(text, textAttrs, `edge ${what}`, stmt.line);
       const size = fontSizeFor('edge', textAttrs, fontSize, stmt.line);
+      const lines = linesFor(text, textAttrs, `edge ${what}`, stmt.line, { styles, fontSize, base: size });
       return {
         text,
         lines,
@@ -1790,7 +1801,7 @@ function buildEdges(
         place,
         size,
         width: widestLine(lines, measurer, size),
-        height: lines.length * measurer.lineHeight(size),
+        height: linesTall(lines, measurer, size),
       };
     });
     edges.push({
@@ -2148,13 +2159,15 @@ function bracketOf(key: string, attrs: Attrs): Attrs {
 }
 
 /**
- * Every style the markup in this file names, resolved to the color it lends.
+ * Every style the markup in this file names that lends a color, resolved to
+ * that color. A style may lend a size instead or as well; the runs carry that
+ * themselves, from `sizeRuns`.
  *
  * A style is the only thing markup may name — never a color — so that a marked
  * word borrows a meaning the file already has instead of restating a value that
  * goes stale the day the thing it means is recolored. Both ways that can fail
- * are refused by name: a style nobody declared, and one that says nothing about
- * text and so would lend nothing.
+ * are refused by name: a style nobody declared, and one that gives text neither
+ * a color nor a size and so would lend nothing.
  */
 function markupColors(
   nodes: LayoutNode[],
@@ -2180,14 +2193,14 @@ function markupColors(
         );
       }
       const color = style['text.color'];
-      if (color === undefined) {
+      if (color === undefined && style['text.size'] === undefined) {
         throw new SourceError(
-          `${what}: its text marks [${name}], and style "${name}" says nothing about text — ` +
-            `write \`style ${name}  text: (color: …)\``,
+          `${what}: its text marks [${name}], and style "${name}" gives text no color or size — ` +
+            `write \`style ${name}  text: (color: …)\` or \`text: (size: …)\``,
           line,
         );
       }
-      colors[name] = color;
+      if (color !== undefined) colors[name] = color;
     }
   }
   return colors;
@@ -2207,8 +2220,9 @@ function markupColors(
  * what makes markup general where the `subtext:` slice it replaced could only
  * ever reach the tail of a text.
  */
-function linesFor(text: string, textAttrs: Attrs, subject: string, line: number): Line[] {
+function linesFor(text: string, textAttrs: Attrs, subject: string, line: number, sizes?: TextSizes): Line[] {
   const lines = splitRuns(parseMarkup(text, subject, line));
+  if (sizes) sizeRuns(lines, sizes, line);
   const stated = textAttrs['wrap'];
   if (stated === undefined) return lines;
 
@@ -2216,7 +2230,34 @@ function linesFor(text: string, textAttrs: Attrs, subject: string, line: number)
   if (!Number.isInteger(columns) || columns < 1) {
     throw new SourceError(`wrap must be a whole number of characters, not "${stated}"`, line);
   }
-  return lines.flatMap((part) => wrapLine(part, columns));
+  return lines.flatMap((part) => wrapLine(part, columns, sizes?.base));
+}
+
+/**
+ * What a text's marked runs need to know their size: the file's styles, the
+ * document's size that `small` and `1.2` are measured from, and the size of the
+ * text the runs sit in.
+ */
+interface TextSizes {
+  styles: Map<string, Attrs>;
+  fontSize: number;
+  base: number;
+}
+
+/**
+ * Give each marked run the size its style states (design.org 7.1). A run whose
+ * style states no size, or the same size as the text it sits in, keeps none,
+ * so a text marked only for color measures exactly as it always did. A style
+ * that doesn't exist is left for `markupColors` to refuse by name.
+ */
+function sizeRuns(lines: Line[], sizes: TextSizes, line: number): void {
+  for (const run of lines.flat()) {
+    if (run.style === undefined) continue;
+    const stated = sizes.styles.get(run.style)?.['text.size'];
+    if (stated === undefined) continue;
+    const size = fontSizeFor('node', { size: stated }, sizes.fontSize, line);
+    if (size !== sizes.base) run.size = size;
+  }
 }
 
 function bounds(nodes: LayoutNode[], marks: LayoutMark[]) {

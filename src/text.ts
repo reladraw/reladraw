@@ -2,7 +2,7 @@
  * A text and the runs inside it.
  *
  * A text is a string, and the one piece of structure it may carry is markup:
- * `[dim]synced[/dim]` draws that word in the text color of `style dim`. The
+ * `[dim]synced[/dim]` draws that word in the text color and size of `style dim`. The
  * opener names a *style* and never a color, so the word borrows a meaning the
  * file already has rather than restating a value that goes stale the day the
  * thing it means is recolored.
@@ -14,7 +14,7 @@
  * reaches a word in the middle of a line, which the slice never could.
  *
  * Everything downstream therefore works in *runs* rather than strings: a drawn
- * line is a list of runs, each with the style it borrows its color from, and
+ * line is a list of runs, each with the style it borrows its color and size from, and
  * line breaking and wrapping carry the runs along rather than re-parsing text
  * that has already been read.
  */
@@ -23,8 +23,14 @@ import { SourceError } from './errors.js';
 /** A stretch of text drawn in one style. `style` is a style name from the file. */
 export interface Run {
   text: string;
-  /** The style whose text color this run borrows, or undefined for the node's own. */
+  /** The style whose text color and size this run borrows, or undefined for the node's own. */
   style?: string;
+  /**
+   * The run's text size in pixels, when its style states one; undefined for
+   * the size of the text it sits in. Filled in by the resolver, which knows the
+   * styles and the document's size.
+   */
+  size?: number;
 }
 
 /** One drawn line, as the runs it is made of. */
@@ -166,21 +172,30 @@ function tidy(lines: Line[]): Line[] {
   return kept.length > 0 ? kept : [[{ text: '' }]];
 }
 
-/** Fold one line onto several at word boundaries, never exceeding `columns`. */
-export function wrapLine(line: Line, columns: number): Line[] {
+/**
+ * Fold one line onto several at word boundaries, never exceeding `columns`.
+ *
+ * A column is a character of the text's own size (`base`). A marked run of
+ * another size counts each of its characters by the ratio of the two, so a
+ * small word takes less of the line than a normal one, as it does when drawn.
+ */
+export function wrapLine(line: Line, columns: number, base?: number): Line[] {
   const lines: Line[] = [];
   let current: Line = [];
   let length = 0;
+  const weight = (run: Run) => (run.size === undefined || base === undefined ? 1 : run.size / base);
 
   for (const word of words(line)) {
-    const space = length === 0 ? 0 : 1;
-    if (length > 0 && length + space + word.text.length > columns) {
+    const scale = weight(word);
+    const space = length === 0 ? 0 : scale;
+    const wide = word.text.length * scale;
+    if (length > 0 && length + space + wide > columns + 1e-9) {
       lines.push(current);
       current = [];
       length = 0;
     }
     append(current, length === 0 ? word : { ...word, text: ` ${word.text}` });
-    length += (length === 0 ? 0 : 1) + word.text.length;
+    length += (length === 0 ? 0 : scale) + wide;
   }
   if (current.length > 0) lines.push(current);
   return lines.length > 0 ? lines : [[{ text: '' }]];

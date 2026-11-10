@@ -7,6 +7,8 @@ import {
   PAD,
   arrowLength,
   fontSizeFor,
+  lineSize,
+  lineTall,
   textStyleFor,
   widestLine,
 } from './constants.js';
@@ -86,7 +88,7 @@ function drawing(layout: Layout, options: RenderOptions): (tagged: boolean) => s
   const boxes = layout.roots.flatMap((root) => drawNode(root, theme, measurer, fontSize, layout.markup, guides));
   const marks = layout.marks.map((mark) => ({
     mark,
-    item: { key: mark.name, svg: markSvg(mark, theme, guides, layout.markup, fontSize), fills: markFills(mark, theme) },
+    item: { key: mark.name, svg: markSvg(mark, theme, guides, layout.markup, fontSize, measurer), fills: markFills(mark, theme) },
   }));
   const lines: Drawn[] = [];
   // Everything the boxes cover. Edges are added to it as they are drawn.
@@ -589,7 +591,7 @@ function nodeSvg(
     while (behind && behind.body.kind === 'none') behind = behind.parent;
     const onFill = behind ? textOnFill(behind.appearance['fill'] ?? '', theme) : undefined;
     return [sized(
-      textBlock(node.lines, node.x, node.y, textHeight, size, node.textBox, {
+      textBlock(node.lines, node.x, node.y, measurer, size, node.textBox, {
         color: textColorOf(node.textAttrs, theme, onFill ?? theme.text),
         align: style.align,
         ink,
@@ -612,7 +614,7 @@ function nodeSvg(
     if (node.lines.some((line) => plain(line).length > 0)) {
       drawn.push(
         sized(
-          textBlock(node.lines, node.x, node.y, textHeight, size, node.textBox, {
+          textBlock(node.lines, node.x, node.y, measurer, size, node.textBox, {
             color: textColorOf(node.textAttrs, theme, theme.text),
             align: style.align,
             ink,
@@ -698,7 +700,7 @@ function nodeSvg(
   );
   parts.push(
     sized(
-      textBlock(node.lines, node.x, node.y, textHeight, size, node.textBox, {
+      textBlock(node.lines, node.x, node.y, measurer, size, node.textBox, {
         color: text,
         align: textStyle.align,
         ink,
@@ -717,11 +719,11 @@ function nodeSvg(
  * primary color; a point is a dot. A guide is drawn only when guides are
  * shown, dashed and unfilled in the guide color.
  */
-function markSvg(mark: LayoutMark, theme: Theme, guides: Guides, markup: Record<string, string>, fontSize: number): string {
+function markSvg(mark: LayoutMark, theme: Theme, guides: Guides, markup: Record<string, string>, fontSize: number, measurer: Measurer): string {
   const said = (key: string) => mark.appearance[key] ?? (mark.guide ? guides.looks[mark.kind][key] : undefined);
   if (mark.guide && !guides.shown) return '';
   const color = (value: string | undefined) => (value === undefined ? undefined : themeColor(value, theme));
-  const label = markTextSvg(mark, theme, mark.guide ? guides.color : theme.text, markup, fontSize);
+  const label = markTextSvg(mark, theme, mark.guide ? guides.color : theme.text, markup, fontSize, measurer);
   if (mark.kind === 'point') {
     const fill = color(said('fill')) ?? (mark.guide ? guides.color : theme.edge);
     return `  <circle cx="${round(mark.x)}" cy="${round(mark.y)}" r="3" fill="${fill}"/>${label}`;
@@ -787,11 +789,11 @@ function markFills(mark: LayoutMark, theme: Theme): Fill[] {
 }
 
 /** A point's or a region's text (design.org 7.4), on a line of its own after the mark. */
-function markTextSvg(mark: LayoutMark, theme: Theme, fallback: string, markup: Record<string, string>, fontSize: number): string {
+function markTextSvg(mark: LayoutMark, theme: Theme, fallback: string, markup: Record<string, string>, fontSize: number, measurer: Measurer): string {
   const text = mark.text;
   if (!text) return '';
   const align = text.textAttrs['align'];
-  const block = textBlock(text.lines, 0, 0, text.lineHeight, text.size, text.box, {
+  const block = textBlock(text.lines, 0, 0, measurer, text.size, text.box, {
     color: textColorOf(text.textAttrs, theme, fallback),
     align: align === 'left' || align === 'top' ? 'start' : align === 'right' || align === 'bottom' ? 'end' : 'middle',
     ink: (run, own) => runInk(run, own, markup, theme),
@@ -1115,7 +1117,6 @@ function drawEdge(
   const patches: Patch[] = [];
   for (const placed of placeLineTexts(edge, route)) {
     const { text, center, angle } = placed;
-    const lineHeight = measurer.lineHeight(text.size);
     const { width, height } = text;
     const top = center.y - height / 2;
     const turn = angle === 0 ? '' : ` transform="rotate(${round(angle)} ${round(center.x)} ${round(center.y)})"`;
@@ -1134,7 +1135,7 @@ function drawEdge(
       ...(turn ? ['  <g' + turn + '>'] : []),
       marker,
       sized(
-        textBlock(text.lines, center.x - width / 2, top, lineHeight, text.size,
+        textBlock(text.lines, center.x - width / 2, top, measurer, text.size,
           { x: 0, y: 0, width, height },
           {
             // A colored edge carries its meaning into its text; an uncolored
@@ -1545,7 +1546,7 @@ function textBlock(
   lines: Line[],
   x: number,
   y: number,
-  lineHeight: number,
+  heights: Measurer,
   fontSize: number,
   box: { x: number; y: number; width: number; height: number },
   style: {
@@ -1561,7 +1562,7 @@ function textBlock(
     const cx = x + box.x + box.width / 2;
     const cy = y + box.y + box.height / 2;
     const level = { x: cx - box.height / 2, y: cy - box.width / 2, width: box.height, height: box.width };
-    const inner = textBlock(lines, 0, 0, lineHeight, fontSize, level, { ...style, reads: undefined });
+    const inner = textBlock(lines, 0, 0, heights, fontSize, level, { ...style, reads: undefined });
     return `  <g transform="rotate(${style.reads === 'up' ? -90 : 90} ${round(cx)} ${round(cy)})">\n${inner}\n  </g>`;
   }
   // `box` is the ink the text occupies, worked out by the resolver — the one
@@ -1575,27 +1576,37 @@ function textBlock(
       : style.align === 'end'
         ? blockLeft + box.width
         : blockLeft;
+  // Each line is as tall as its largest text (design.org 7.1), so the lines are
+  // stacked by their own heights rather than at one spacing.
+  let lineTop = top;
   return lines
-    .map((line, index) => {
+    .map((line) => {
+      const tall = lineTall(line, heights, fontSize);
+      const largest = lineSize(line, fontSize);
+      const at = lineTop;
+      lineTop += tall;
       if (plain(line).length === 0) return '';
-      const baseline = top + index * lineHeight + lineHeight / 2 + fontSize * 0.35;
+      // The runs on a line share one baseline, set by the largest of them.
+      const baseline = at + tall / 2 + largest * 0.35;
       // One `<text>` per line, with a `<tspan>` per run inside it, so the runs
       // flow from the line's own anchor and a mark never moves a character.
-      // A line drawn in one color says so on the `<text>` and emits no spans at
-      // all, which is what keeps a whole quiet line identical to what the
-      // `subtext:` it replaced produced.
+      // A line drawn in one color and one size says so on the `<text>` and
+      // emits no spans at all, which is what keeps a whole quiet line identical
+      // to what the `subtext:` it replaced produced.
       const colors = line.map((run) => style.ink(run, style.color));
-      const uniform = colors.every((color) => color === colors[0]);
+      const sizes = line.map((run) => run.size);
+      const uniform = colors.every((color) => color === colors[0]) && sizes.every((size) => size === sizes[0]);
+      const sizeAttr = (size: number | undefined) => (size === undefined ? '' : ` font-size="${size}px"`);
       const body = uniform
         ? escapeXml(plain(line))
         : line
-            .map((run, run_index) =>
-              colors[run_index] === style.color
-                ? escapeXml(run.text)
-                : `<tspan fill="${colors[run_index]}">${escapeXml(run.text)}</tspan>`,
-            )
+            .map((run, run_index) => {
+              const fill = colors[run_index] === style.color ? '' : ` fill="${colors[run_index]}"`;
+              const sized = sizeAttr(run.size);
+              return fill || sized ? `<tspan${fill}${sized}>${escapeXml(run.text)}</tspan>` : escapeXml(run.text);
+            })
             .join('');
-      return `  <text x="${round(anchorX)}" y="${round(baseline)}" fill="${uniform ? colors[0] ?? style.color : style.color}" text-anchor="${style.align}">${body}</text>`;
+      return `  <text x="${round(anchorX)}" y="${round(baseline)}" fill="${uniform ? colors[0] ?? style.color : style.color}"${uniform ? sizeAttr(sizes[0]) : ''} text-anchor="${style.align}">${body}</text>`;
     })
     .filter((element) => element.length > 0)
     .join('\n');
@@ -1606,7 +1617,8 @@ function textBlock(
  * color, so the word borrows a meaning the file already has rather than
  * restating a value that goes stale the day the thing it means is recolored.
  * The resolver has already refused a mark naming a style that does not exist or
- * that says nothing about text.
+ * that gives text neither a color nor a size; a style that lends only a size
+ * leaves the run in the text's own color.
  */
 function runInk(
   run: Run,
@@ -1614,8 +1626,8 @@ function runInk(
   markup: Record<string, string>,
   theme: Theme,
 ): string {
-  if (run.style === undefined) return own;
-  return themeColor(markup[run.style]!, theme);
+  const color = run.style === undefined ? undefined : markup[run.style];
+  return color === undefined ? own : themeColor(color, theme);
 }
 
 /**

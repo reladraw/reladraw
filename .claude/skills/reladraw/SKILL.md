@@ -117,7 +117,7 @@ node grinder "Grinder / [dim]medium-fine[/dim]"
 node note "a longer remark that folds" (size: small, wrap: 30)  shape: none  below grinder (gap: tight)
 ```
 
-`[dim]…[/dim]` borrows a style's look for a stretch of text. A style hangs the bracket off a key: `style aside  text: (size: small, color: theme-muted)`. **Always give bare text a `(wrap: n)`**, or a sentence is one long line across whatever is beside it.
+`[dim]…[/dim]` borrows a style's text color and size for a stretch of text; a line that is all small is spaced as a small line. A style hangs the bracket off a key: `style aside  text: (size: small, color: theme-muted)`. **Always give bare text a `(wrap: n)`**, or a sentence is one long line across whatever is beside it.
 
 ### Lines
 

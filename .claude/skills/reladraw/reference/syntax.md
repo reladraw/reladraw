@@ -685,14 +685,16 @@ node rack.b "web-2"
 
 ### Markup
 
-A stretch of text can borrow a style's look:
+A stretch of text can borrow a style's text color and size:
 
 ```
-style dim  text: (color: theme-muted)
+style dim  text: (color: theme-muted, size: small)
 node files "shared folder / [dim]synced[/dim]"
 ```
 
-The opener names a style, never a color, so the marked words borrow a meaning the file already has. A name no style answers to is refused, and so is a style that says nothing about text. The closer repeats the name, so a mismatched close is refused by name. Marks don't nest, and a mark may cross a line break. A bare `[` is an error; write `\[` for a literal one.
+The opener names a style, never a color, so the marked words borrow a meaning the file already has. A name no style answers to is refused, and so is a style that gives text neither a color nor a size.
+
+**A line is as tall as its largest text.** A line that is all small is spaced as a small line, so the box is shorter. A small stretch mid-line, `"3 [dim]files[/dim] waiting"`, sits on the same baseline as the words around it, and the line keeps the normal spacing. With `wrap:`, a small character counts as less than a whole one, by the ratio of the two sizes. The closer repeats the name, so a mismatched close is refused by name. Marks don't nest, and a mark may cross a line break. A bare `[` is an error; write `\[` for a literal one.
 
 ## Lines
 
@@ -1393,6 +1395,8 @@ Designed and absent from the code.
 Pre-1.0, so the minor number is where a breaking change goes. Every removal is refused by name with the replacement quoted, rather than dropped in silence: an older file stops with an error saying what to write instead.
 
 **Unreleased**
+
+- **Marked text takes its style's size**: with `style dim  text: (size: small)`, `"Some Node / [dim]something[/dim]"` draws the second line small, and a line that is all small is spaced as one. Markup used to take only a style's color, and a style with only a size was refused as saying nothing about text. See [Markup](#markup).
 
 - **`2 right of and 3 below a`** is accepted, the same as `2 right and 3 below a`. It used to be refused with a message that took `and` for the name of a box.
 

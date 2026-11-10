@@ -44,6 +44,12 @@ node tall.disk  icon: disk  1 right of tall text  top even with tall text  join-
 node deep "Bottom"  below tall (gap: tight)  style: plain
 node deep.disk  icon: disk  1 right of deep text  bottom even with deep text  join-with: deep text
 
+// Marked words take their style's size as well as its color. A line that is
+// all small is spaced as a small line, and a small word mid-line sits on the
+// same baseline as its neighbors.
+style note  text: (size: small, color: theme-muted)
+node synced "Shared folder / [note]synced 2 min ago[/note] / 3 [note]files[/note] waiting"  below deep (gap: tight)  style: plain
+
 // `size` and `wrap` are properties of the text too. The wrap is a count of
 // characters, not a distance: it says how much fits on a line and nothing
 // about where anything sits.

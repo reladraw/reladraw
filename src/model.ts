@@ -294,9 +294,10 @@ export interface Layout {
   roots: LayoutNode[];
   edges: LayoutEdge[];
   /**
-   * Every style the file's markup names, resolved to the color it lends. The
-   * renderer needs it because a marked run borrows its color from a style
-   * rather than stating one, and styles are otherwise merged away by here.
+   * Every style the file's markup names that lends a color, resolved to that
+   * color. The renderer needs it because a marked run borrows its color from a
+   * style rather than stating one, and styles are otherwise merged away by
+   * here. A size a style lends is carried on the run itself.
    */
   markup: Record<string, string>;
   /** The pictures links' badges name, by name, for the page that draws the badges. */
