@@ -15,7 +15,7 @@ That matters here specifically. You can't see the SVG you produced. With auto-la
 
 ## Check it is installed, and the same version as this skill
 
-This skill teaches reladraw 0.24.0. Once per session, before the first render, run:
+This skill teaches reladraw 0.25.0. Once per session, before the first render, run:
 
 ```
 reladraw --version

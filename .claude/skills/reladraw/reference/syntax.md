@@ -1,4 +1,4 @@
-# Syntax reference — 0.24.0
+# Syntax reference — 0.25.0
 
 What the language accepts. The changelog at the end lists what changed in each published version; 0.17.0's changes are large, and its entry has a table of every old spelling and what to write instead.
 
@@ -1414,7 +1414,7 @@ Designed and absent from the code.
 
 Pre-1.0, so the minor number is where a breaking change goes. Every removal is refused by name with the replacement quoted, rather than dropped in silence: an older file stops with an error saying what to write instead.
 
-**Unreleased**
+**0.25.0**
 
 - **A link can be declared once and used by name**: `url orders-docs "https://…" (name: "Docs", icon: "D")`, then `url: orders-docs`, so long addresses stay out of the statements that link to them. A declaration may list several links, declared names among them, and a `url:` mixes names and quoted addresses. See [Destinations](#destinations).
 
