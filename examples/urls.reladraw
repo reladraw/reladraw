@@ -20,7 +20,16 @@ node site.deep   "Deep dive"  style: plain  url: "https://example.com/deep"
 node store  icon: database  below docs (gap: wide)  url: "https://example.com/store"
 node aside  "and this line is a link as well"  shape: none  right of store  url: "https://example.com/aside"
 
-// An edge's text is what carries the destination. An edge with no text is
-// refused one: the line is a pixel and a half wide, which is a target nobody
-// can hit, and shipping that would be the silent defect this language refuses.
+// An edge's text is what carries the destination. An edge with no text may
+// have one too: an unseen wider copy of the line takes the click.
 edge docs -> store "read first"  from: bottom  to: top  url: "https://example.com/order"
+
+// A long address is declared once under a name, with its name and badge, and
+// used by that name. A declaration may also list several links, a bundle, and
+// a `url:` mixes names and quoted addresses in the order written.
+url orders-docs   "https://docs.example.com/orders/v2/reference/endpoints" (name: "Docs", icon: "D" (fill: #3a6ea5, text: white))
+url orders-code   "https://github.com/example/orders/tree/main/services/api" (name: "Code", icon: "C")
+url orders-links  orders-docs  orders-code  "https://wiki.example.com/teams/orders" (name: "Wiki")
+
+node api     "Orders API"  style: plain  below store (gap: wide)  url: orders-links
+node worker  "Worker"  style: plain  right of api  url: orders-docs  "https://example.com/runbooks/worker" (name: "Runbook")

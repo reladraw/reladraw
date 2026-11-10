@@ -1167,6 +1167,26 @@ node api "Orders API"
 
 The same address twice in one `url:` is refused.
 
+A link can be declared once, with its name and badge, and used by name. A quoted value after `url:` is an address and an unquoted one is a declared link, and the two mix in one list in the order written:
+
+```
+url orders-docs  "https://docs.example.com/orders/v2/reference" (name: "Docs", icon: "D" (fill: #3a6ea5, text: white))
+url orders-code  "https://github.com/example/orders/tree/main/services/api" (name: "Code")
+
+node api "Orders API"  url: orders-docs  orders-code
+node worker "Worker"   url: orders-docs  "https://example.com/runbooks/worker" (name: "Runbook")
+```
+
+A declaration may list several links, each a quoted address or another declared name, and a use gives all of them in order:
+
+```
+url orders-links  orders-docs  orders-code  "https://wiki.example.com/orders" (name: "Wiki")
+
+node api "Orders API"  url: orders-links
+```
+
+A declared link's name and badge are its own, so a bracket after its name in a `url:` is refused; to show it differently, declare another. A declaration may come before or after its use. Refused, each with a message: a name used but never declared, a name declared twice, a declaration that reaches itself through its own list, and a name that starts a placement, such as `below`, since a placement may follow a `url:` on the same statement.
+
 ### Descriptions
 
 A box or a line can carry a description: text a reader asks for, shown in the panel when it is selected on a page made with `--page`, and never drawn. It can be written three ways.
@@ -1395,6 +1415,8 @@ Designed and absent from the code.
 Pre-1.0, so the minor number is where a breaking change goes. Every removal is refused by name with the replacement quoted, rather than dropped in silence: an older file stops with an error saying what to write instead.
 
 **Unreleased**
+
+- **A link can be declared once and used by name**: `url orders-docs "https://…" (name: "Docs", icon: "D")`, then `url: orders-docs`, so long addresses stay out of the statements that link to them. A declaration may list several links, declared names among them, and a `url:` mixes names and quoted addresses. See [Destinations](#destinations).
 
 - **Marked text takes its style's size**: with `style dim  text: (size: small)`, `"Some Node / [dim]something[/dim]"` draws the second line small, and a line that is all small is spaced as one. Markup used to take only a style's color, and a style with only a size was refused as saying nothing about text. See [Markup](#markup).
 

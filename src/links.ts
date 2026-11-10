@@ -20,6 +20,9 @@ export interface Link {
   icon?: LinkIcon;
 }
 
+/** One item in a `url:` list or a `url` declaration: an address with its bracket, or a declared link's name. */
+export type LinkEntry = Link | { ref: string };
+
 /** Every link a thing carries, in the order the source writes them. */
 export function linksOf(attrs: Attrs): Link[] | undefined {
   const listed = attrs[LINKS_KEY];

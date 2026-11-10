@@ -29,6 +29,7 @@ import type {
   RegionStmt,
   Stmt,
   StyleStmt,
+  UrlStmt,
   Way,
   ViaEntry,
   ViaStop,
@@ -36,6 +37,7 @@ import type {
 import {
   BUNDLE_KEYS,
   DESCRIPTION_NAME_KEY,
+  LINK_NAMES_KEY,
   COLOR_KEYS,
   POINT_KEYS,
   REGION_KEYS,
@@ -74,7 +76,7 @@ import { CHECK_DEFAULTS, CHECK_KINDS, setCheck } from './checks.js';
 import { SourceError } from './errors.js';
 import { STATEMENT_KEYWORDS } from './grammar.js';
 import { isAttrKey, nameMark, OpenString, tokenizeLine, type Token } from './lexer.js';
-import { LINKS_KEY, type Link, type LinkIcon } from './links.js';
+import { LINKS_KEY, type Link, type LinkEntry, type LinkIcon } from './links.js';
 import { SHAPE_SETTINGS } from './outline.js';
 import { checkOpacity } from './place.js';
 
@@ -281,6 +283,8 @@ function parseStatement(tokens: Token[], line: number): Stmt {
       return parseIcon(tokens, line);
     case 'description':
       return parseDescription(tokens, line);
+    case 'url':
+      return parseUrl(tokens, line);
     case 'node':
       return parseNode(tokens, line);
     case 'edge':
@@ -845,9 +849,15 @@ function readAttr(
     // its cards, each named in a bracket after it. The first stays under `url`,
     // so whatever follows one link follows the first of several; the whole
     // list is kept beside it only when there is more than a bare address.
+    // A declared link's name is kept with the list until `resolve` knows what
+    // it declares; `url` holds the first entry meanwhile, so a style's or a
+    // default's refusal of a destination sees one either way.
     const read = readLinks(tokens, at + 1, subject, line);
-    setOnce(attrs, key, read.links[0]!.href, subject, line, { key, value: quoteOf });
-    if (read.links.length > 1 || read.links.some((link) => link.name !== undefined || link.icon !== undefined)) {
+    const first = read.links[0]!;
+    setOnce(attrs, key, 'href' in first ? first.href : first.ref, subject, line, { key, value: quoteOf });
+    if (read.links.some((link) => 'ref' in link)) {
+      attrs[LINK_NAMES_KEY] = JSON.stringify(read.links);
+    } else if (read.links.length > 1 || read.links.some((link) => 'href' in link && (link.name !== undefined || link.icon !== undefined))) {
       attrs[LINKS_KEY] = JSON.stringify(read.links);
     }
     return read.next;
@@ -3012,37 +3022,107 @@ function checkColorWord(value: string, subject: string, line: number): void {
 }
 
 const URL_QUOTES =
-  'a url is written in quotes — `url: "https://example.com"`. Without them everything from the `//` onwards is read as a comment';
+  'a url is written in quotes — `url: "https://example.com"`. Without them everything from the `//` onwards is read as a comment. ' +
+  'An unquoted word is the name of a `url` statement';
 
 /**
- * `url: "https://a" (name: "A", icon: "A" (fill: red))  "https://b"`: one or
- * more quoted addresses, each with an optional bracket after it. The values in
+ * `url: "https://a" (name: "A", icon: "A" (fill: red))  "https://b"  docs`: one
+ * or more quoted addresses, each with an optional bracket after it, and the
+ * bare names of `url` statements, which take no bracket. The values in
  * a link's bracket are a name (a text, so quoted) and a badge, which is quoted
  * letters or the unquoted name of a picture. `readBracket` takes only unquoted
  * values and no bracket inside a bracket, so links are read here.
  */
-function readLinks(tokens: Token[], start: number, subject: string, line: number): { links: Link[]; next: number } {
+function readLinks(tokens: Token[], start: number, subject: string, line: number): { links: LinkEntry[]; next: number } {
   // `url: https://example.com` loses everything from the `//` onwards, because
   // `//` opens a comment — so the value is either missing entirely or is the
   // bare scheme, which reads as another attribute key. Neither report says
   // what is wrong, and the remedy is punctuation rather than a missing word.
-  if (!tokens[start]?.quoted) throw new SourceError(`${subject}: ${URL_QUOTES}`, line);
-  const links: Link[] = [];
+  if (!tokens[start] || !(tokens[start]!.quoted || isLinkName(tokens, start))) {
+    throw new SourceError(`${subject}: ${URL_QUOTES}`, line);
+  }
+  const links: LinkEntry[] = [];
   let i = start;
-  while (tokens[i]?.quoted) {
-    const link: Link = { href: tokens[i]!.text };
+  while (tokens[i]?.quoted || isLinkName(tokens, i)) {
+    const token = tokens[i]!;
     i += 1;
+    if (!token.quoted) {
+      // A declared link's name and badge belong to the destination, so the
+      // same link can't be shown one way on one box and another way on the next.
+      if (follows(tokens, i, '(')) {
+        throw new SourceError(
+          `${subject}: the link "${token.text}" is declared with its own name and badge, so a bracket after it here is refused — ` +
+            'to show it differently, declare another `url` with the bracket you want',
+          line,
+        );
+      }
+      if (token.text.endsWith(',')) {
+        throw new SourceError(`${subject}: links are written one after another, without commas — \`url: ${token.text.slice(0, -1)} …\``, line);
+      }
+      if (links.some((had) => 'ref' in had && had.ref === token.text)) {
+        throw new SourceError(`${subject}: "${token.text}" is linked twice in one \`url:\` — keep one`, line);
+      }
+      links.push({ ref: token.text });
+      continue;
+    }
+    const link: Link = { href: token.text };
     if (follows(tokens, i, '(')) {
       const read = readLinkBracket(tokens, i, link.href, subject, line);
       Object.assign(link, read.link);
       i = read.next;
     }
-    if (links.some((had) => had.href === link.href)) {
+    if (links.some((had) => 'href' in had && had.href === link.href)) {
       throw new SourceError(`${subject}: "${link.href}" is linked twice in one \`url:\` — keep one`, line);
     }
     links.push(link);
   }
   return { links, next: i };
+}
+
+/**
+ * A bare word in a list of links is a declared link's name, unless it opens a
+ * placement, which may follow a `url:` on the same statement. A `url`
+ * declaration refuses those words as names, so the two never meet.
+ */
+function isLinkName(tokens: Token[], at: number): boolean {
+  const token = tokens[at];
+  if (!token || token.quoted || isAttrKey(token)) return false;
+  if (token.text === '(' || token.text === ')' || token.text === ',') return false;
+  return !startsPlacement(token, tokens[at + 1]) && !PLACEMENT_LEADS.includes(token.text);
+}
+
+/** Words that open a clause after a statement's attributes without `startsPlacement` knowing them. */
+const PLACEMENT_LEADS = ['stays', 'and', 'x', 'y'];
+
+/**
+ * `url orders-docs "https://…" (name: "Docs", icon: "D")`, or a bundle:
+ * `url orders-links orders-docs orders-code "https://…" (name: "Wiki")`.
+ */
+function parseUrl(head: Token[], line: number): UrlStmt {
+  const shape = 'write `url orders-docs "https://…" (name: "Docs")`, then `url: orders-docs` on whatever links to it';
+  const nameToken = head[1];
+  if (nameToken === undefined || nameToken.quoted) throw new SourceError(`url needs a name — ${shape}`, line);
+  if (isAttrKey(nameToken)) {
+    throw new SourceError(`\`url\` starts a statement that declares a link; to link this, \`${nameToken.text}\` goes on a box or a line as \`url:\` — ${shape}`, line);
+  }
+  const name = requireName(nameToken, 'url', line, head[2]);
+  if (startsPlacement(nameToken, head[2]) || PLACEMENT_LEADS.includes(name)) {
+    throw new SourceError(`url "${name}": "${name}" can't name a link, because after \`url:\` it would start a placement — choose another name`, line);
+  }
+  const subject = `url "${name}"`;
+  if (head[2] === undefined) throw new SourceError(`${subject} links to nothing — ${shape}`, line);
+  // The links are one clause to the formatter, so a bundle's names stay
+  // together after its own name instead of lining up as part of it.
+  clauseStarts?.add(head[2]);
+  const read = readLinks(head, 2, subject, line);
+  const stray = head[read.next];
+  if (stray !== undefined) {
+    throw new SourceError(
+      `${subject}: "${stray.text}" is not a link — a \`url\` statement holds quoted addresses, each with an optional bracket, and the names of other \`url\` statements`,
+      line,
+    );
+  }
+  return { kind: 'url', name, entries: read.links, line };
 }
 
 function readLinkBracket(

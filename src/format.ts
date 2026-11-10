@@ -204,8 +204,11 @@ function statementCells(
   const keyword = all.slice(0, keywordCount);
   result.push({ text: joinTokens(keyword), kind: 'keyword' });
 
-  const runs = clauseRuns(all.slice(keywordCount), starts);
+  let runs = clauseRuns(all.slice(keywordCount), starts);
   const head = runs[0] && !isAttrKey(runs[0][0]!.token) && !starts.has(runs[0][0]!.token) ? runs.shift()! : undefined;
+  // A `url` declaration's links are one list, addresses and names alike, kept
+  // together after its name rather than spread over the columns of texts.
+  if (all[0]!.token.text === 'url' && runs.length > 1) runs = [runs.flat()];
   if (head) {
     if (all[0]!.token.text === 'edge' && settings['edge-name-and-ends'] === 'own-columns') result.push(...edgeHeadCells(head));
     else result.push({ text: joinTokens(head), kind: 'head' });

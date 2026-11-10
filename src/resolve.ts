@@ -1,7 +1,8 @@
-import type { Attrs, Kind, DefaultTarget, DescriptionStmt, Document, EdgeStmt, Mark, NodeStmt, PlacementTarget, POINT_TEXT_SIDES, PointStmt, RegionStmt, Stmt } from './ast.js';
+import type { Attrs, Kind, DefaultTarget, DescriptionStmt, Document, EdgeStmt, Mark, NodeStmt, PlacementTarget, POINT_TEXT_SIDES, PointStmt, RegionStmt, Stmt, UrlStmt } from './ast.js';
 import { TEXT_GAP } from './linetexts.js';
 import {
   DESCRIPTION_NAME_KEY,
+  LINK_NAMES_KEY,
   POINT_KEYS,
   REGION_KEYS,
   ALL_ATTR_KEYS,
@@ -38,7 +39,7 @@ import {
 } from './constants.js';
 import { SourceError } from './errors.js';
 import { type Body, bodyFor, type Icon, iconNamed, pastedIcon } from './icons.js';
-import { linksOf } from './links.js';
+import { LINKS_KEY, linksOf, type Link, type LinkEntry } from './links.js';
 import { unsafeLinks } from './markdown.js';
 import { monospaceMeasurer, type Measurer } from './measure.js';
 import { isBoxy, middleOf, sizeFor, SUBPROCESS_INSET } from './outline.js';
@@ -405,7 +406,7 @@ export function resolve(doc: Document, options: ResolveOptions = {}): Layout {
   // `description: notes` becomes the text it names, and `description for …`
   // waits until the boxes and lines it names exist. Nothing else reads them.
   const described = nameDescriptions(doc.statements);
-  doc = { statements: described.statements };
+  doc = { statements: nameLinks(described.statements) };
 
   const styles = collectStyles(doc.statements);
   checkStyleKeys(doc.statements);
@@ -782,6 +783,78 @@ function nameDescriptions(statements: Stmt[]): { statements: Stmt[]; attached: D
     return [{ ...stmt, attrs: { ...attrs, description: found.text } } as Stmt];
   });
   return { statements: rest, attached };
+}
+
+/**
+ * Takes out the `url` statements and swaps each declared name in a `url:` for
+ * the links it declares, a bundle's in order, so nothing after this sees a name.
+ */
+function nameLinks(statements: Stmt[]): Stmt[] {
+  const declared = new Map<string, UrlStmt>();
+  for (const stmt of statements) {
+    if (stmt.kind !== 'url') continue;
+    const before = declared.get(stmt.name);
+    if (before !== undefined) {
+      throw new SourceError(`url "${stmt.name}" is declared twice, on lines ${before.line} and ${stmt.line} — keep one`, stmt.line);
+    }
+    declared.set(stmt.name, stmt);
+  }
+  const unknown = (name: string, line: number): SourceError => {
+    const known = [...declared.keys()];
+    return new SourceError(
+      `there is no link named "${name}" — ` +
+        (known.length === 0
+          ? 'declare it with `url ' + name + ' "https://…"`, or quote an address to write it here'
+          : `the file declares ${known.map((one) => `"${one}"`).join(', ')}; quote an address to write it here`),
+      line,
+    );
+  };
+  const expanded = new Map<string, Link[]>();
+  const expand = (stmt: UrlStmt, path: string[]): Link[] => {
+    const done = expanded.get(stmt.name);
+    if (done !== undefined) return done;
+    if (path.includes(stmt.name)) {
+      const loop = [...path.slice(path.indexOf(stmt.name)), stmt.name];
+      throw new SourceError(`url "${stmt.name}" reaches itself (${loop.join(' → ')}), so it never says where it goes — take one of them out`, stmt.line);
+    }
+    const links = flatten(stmt.entries, `url "${stmt.name}"`, stmt.line, [...path, stmt.name]);
+    expanded.set(stmt.name, links);
+    return links;
+  };
+  const flatten = (entries: LinkEntry[], subject: string, line: number, path: string[]): Link[] => {
+    const links: Link[] = [];
+    for (const entry of entries) {
+      let more: Link[];
+      if ('href' in entry) more = [entry];
+      else {
+        const found = declared.get(entry.ref);
+        if (found === undefined) throw unknown(entry.ref, line);
+        more = expand(found, path);
+      }
+      for (const link of more) {
+        if (links.some((had) => had.href === link.href)) {
+          const via = 'ref' in entry ? ` (through "${entry.ref}")` : '';
+          throw new SourceError(`${subject}: "${link.href}" is linked twice${via} — keep one`, line);
+        }
+        links.push(link);
+      }
+    }
+    return links;
+  };
+  for (const stmt of declared.values()) expand(stmt, []);
+  return statements.flatMap((stmt): Stmt[] => {
+    if (stmt.kind === 'url') return [];
+    if (!('attrs' in stmt) || stmt.attrs === undefined) return [stmt];
+    const listed = stmt.attrs[LINK_NAMES_KEY];
+    if (listed === undefined) return [stmt];
+    const subject = stmt.kind === 'node' ? `node "${stmt.name}"` : stmt.kind;
+    const links = flatten(JSON.parse(listed) as LinkEntry[], subject, stmt.line, []);
+    const { [LINK_NAMES_KEY]: _, ...attrs } = stmt.attrs;
+    attrs['url'] = links[0]!.href;
+    // As the parser does: the list is kept only when there is more than one bare address.
+    if (links.length > 1 || links.some((link) => link.name !== undefined || link.icon !== undefined)) attrs[LINKS_KEY] = JSON.stringify(links);
+    return [{ ...stmt, attrs } as Stmt];
+  });
 }
 
 /** `description for proxy, cache`: each name a box, or a named line, that has no description yet. */

@@ -172,6 +172,17 @@ node api "API server"  url: "https://github.com/acme/api"
 
 The address is never drawn; a reader follows it by clicking. A line with no text can carry one too, but a style can't. Quote the value, since an unquoted `//` starts a comment.
 
+When addresses are long, or one is used on several things, declare each once with its name and badge and use it by name, so the statements stay readable. A declaration can also list several links for things that share them:
+
+```
+url orders-docs   "https://docs.example.com/orders/v2/reference" (name: "Docs")
+url orders-code   "https://github.com/example/orders/tree/main/services/api" (name: "Code")
+url orders-links  orders-docs  orders-code
+
+node api "Orders API"  url: orders-links
+node worker "Worker"   url: orders-docs
+```
+
 ### Descriptions
 
 ```

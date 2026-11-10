@@ -3,6 +3,8 @@
  * these types are a faithful record of what the author wrote, and no more.
  */
 
+import type { LinkEntry } from './links.js';
+
 export const DIRECTIONS = [
   'above',
   'below',
@@ -1028,15 +1030,15 @@ export interface IconStmt {
   line: number;
 }
 
+/** Where `description: notes` keeps the name until `resolve` swaps in the text. */
+export const DESCRIPTION_NAME_KEY = 'description.name';
+
 /**
  * `description for proxy, cache """…"""` attaches one text to things already
  * named; `description notes """…"""` declares a named one, which a box or a
  * line takes with `description: notes`. The text is a small Markdown subset,
  * shown in the page's panel and, marks stripped, as an SVG's hover text.
  */
-/** Where `description: notes` keeps the name until `resolve` swaps in the text. */
-export const DESCRIPTION_NAME_KEY = 'description.name';
-
 export interface DescriptionStmt {
   kind: 'description';
   /** The declared name, for the named form. */
@@ -1047,7 +1049,26 @@ export interface DescriptionStmt {
   line: number;
 }
 
-export type Stmt = NodeStmt | EdgeStmt | StyleStmt | DiagramStmt | DefaultStmt | IconStmt | PointStmt | RegionStmt | BundleStmt | DescriptionStmt;
+/**
+ * Where a `url:` that names declared links keeps its list, declared names and
+ * quoted addresses in the order written, until `resolve` swaps each name for
+ * the links it declares.
+ */
+export const LINK_NAMES_KEY = 'url.names';
+
+/**
+ * `url orders-docs "https://…" (name: "Docs", icon: "D")` declares a link once,
+ * with its name and badge, for `url: orders-docs`. A declaration may hold
+ * several links, each a quoted address or another declared name: a bundle.
+ */
+export interface UrlStmt {
+  kind: 'url';
+  name: string;
+  entries: LinkEntry[];
+  line: number;
+}
+
+export type Stmt = NodeStmt | EdgeStmt | StyleStmt | DiagramStmt | DefaultStmt | IconStmt | PointStmt | RegionStmt | BundleStmt | DescriptionStmt | UrlStmt;
 
 export interface Document {
   statements: Stmt[];
