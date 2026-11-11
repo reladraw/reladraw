@@ -140,8 +140,35 @@ interface LinkView {
  * first. A line's index is its place in the layout, which `data-edge` names.
  */
 interface Graph {
-  nodes: Record<string, { label: string; links: LinkView[]; description?: string }>;
-  edges: { up: string; down: string; label: string; links: LinkView[]; description?: string }[];
+  nodes: Record<string, GraphNode>;
+  edges: {
+    up: string;
+    down: string;
+    label: string;
+    links: LinkView[];
+    description?: string;
+    /** The styles it wears, by name, which a filter's `style:` matches. */
+    styles: string[];
+    guide?: true;
+  }[];
+}
+
+interface GraphNode {
+  label: string;
+  links: LinkView[];
+  description?: string;
+  /** Where it is in the drawing's own units, `[x, y, width, height]`: where its letter goes, even when it draws nothing. */
+  box: number[];
+  /** The box it sits in, if any. */
+  parent?: string;
+  /** The boxes inside it, in the order written, leaving out a picture `badge:` puts beside its text. */
+  children: string[];
+  styles: string[];
+  guide?: true;
+  /** The picture a `badge:` writes out: part of its box's heading, never picked on its own. */
+  badge?: true;
+  /** Text with no outline and nothing inside, whose letter goes beside it rather than over its first words. */
+  bare?: true;
 }
 
 /** A description as the panel shows it: its Markdown as HTML, or nothing. */
@@ -173,10 +200,24 @@ function graphOf(layout: Layout, themes: Record<string, ThemeView>): Graph {
     }
     return undefined;
   };
+  // A badge's picture is joined to its box's text by `badge:`, not by a
+  // `join-with:` anyone wrote.
+  const isBadge = (node: LayoutNode) => node.joinWith === 'text' && node.attrs['join-with'] === undefined;
   const nodes: Graph['nodes'] = {};
   for (const node of layout.nodes) {
     const text = plainText(node.text);
-    nodes[node.name] = { label: text === '' ? node.name.split('.').pop()! : text, links: views(linksFor(node)), ...describe(node.attrs) };
+    nodes[node.name] = {
+      label: text === '' ? node.name.split('.').pop()! : text,
+      links: views(linksFor(node)),
+      ...describe(node.attrs),
+      box: [node.x, node.y, node.width, node.height].map((n) => Math.round(n * 10) / 10),
+      ...(node.parent ? { parent: node.parent.name } : {}),
+      children: node.children.filter((child) => !isBadge(child)).map((child) => child.name),
+      styles: stylesOf(node.attrs),
+      ...(node.guide ? { guide: true as const } : {}),
+      ...(isBadge(node) ? { badge: true as const } : {}),
+      ...(node.kind === 'none' && node.children.length === 0 ? { bare: true as const } : {}),
+    };
   }
   const edges = layout.edges.map((edge) => {
     // The upstream end is the one a line runs from: the end without a mark
@@ -185,10 +226,21 @@ function graphOf(layout: Layout, themes: Record<string, ThemeView>): Graph {
     const backwards = start !== '' && end === '';
     const [up, down] = backwards ? [edge.to, edge.from] : [edge.from, edge.to];
     const text = edge.texts.map((one) => plainText(one.text)).filter((one) => one !== '').join(' · ');
-    return { up: up.name, down: down.name, label: text, links: views(linksOf(edge.attrs)), ...describe(edge.attrs) };
+    return {
+      up: up.name,
+      down: down.name,
+      label: text,
+      links: views(linksOf(edge.attrs)),
+      ...describe(edge.attrs),
+      styles: stylesOf(edge.attrs),
+      ...(edge.guide ? { guide: true as const } : {}),
+    };
   });
   return { nodes, edges };
 }
+
+/** The styles a `style:` names; the parser joins them on a space. */
+const stylesOf = (attrs: Record<string, string>): string[] => (attrs['style'] === undefined ? [] : attrs['style'].split(' '));
 
 /** A text as a reader sees it: markup such as `[dim]` taken out, its lines run together. */
 function plainText(text: string): string {
@@ -486,6 +538,21 @@ const PAGE = `<!doctype html>
   #view g[data-edge].up :is(line, path[fill="none"], polyline):not(.target) { stroke: var(--up); stroke-dasharray: 8 5; animation: run .9s linear infinite; }
   #view g[data-edge].down :is(line, path[fill="none"], polyline):not(.target) { stroke: var(--down); stroke-dasharray: 8 5; animation: run .9s linear infinite; }
   #view g[data-edge] .target { stroke: #000 !important; stroke-opacity: 0; }
+  #view svg.hinting g[data-name]:not(.hint-on) { opacity: .25 !important; }
+  #view svg.hinting g[data-name].hint-on { opacity: 1 !important; }
+  #hints { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
+  .hintkey { font: 700 12px/16px ui-monospace, Menlo, Consolas, monospace; padding: 0 4px; border-radius: 3px;
+    background: var(--sel); color: #1a1406; box-shadow: 0 0 0 1px rgba(0, 0, 0, .55); white-space: nowrap; }
+  #hints .hintkey { position: absolute; left: 0; top: 0; }
+  .hintkey .done { opacity: .45; }
+  .hintkey.gone { visibility: hidden; }
+  #selected a.link .hintkey { margin-right: 2px; }
+  #link-pop { position: absolute; z-index: 5; display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; font-size: 13px;
+    background: var(--page); border: 1px solid var(--sel); border-radius: 6px; box-shadow: 0 4px 16px rgba(0, 0, 0, .35); }
+  #link-pop a.link { display: flex; align-items: center; gap: 6px; color: var(--ink); text-decoration: none; }
+  #link-pop a.link svg { flex: none; }
+  #strip .query { color: var(--ink); }
+  #strip .query i { font-style: normal; color: var(--sel); }
   @keyframes run { to { stroke-dashoffset: -26; } }
   @media (prefers-reduced-motion: reduce) { #view g[data-edge] :is(line, path, polyline) { animation: none !important; } }
   aside h2 { margin: 0; padding: 10px 16px 6px; font-size: 13px; font-weight: 600; }
@@ -1273,10 +1340,11 @@ const PAGE = `<!doctype html>
     themeList.hidden = level !== 'theme';
     viewList.classList.toggle('behind', level === 'theme');
     strip.hidden = level === null;
-    if (level) {
+    if (level && STRIP[level]) {
       strip.querySelector('.crumbs').innerHTML = STRIP[level][0];
       strip.querySelector('.hint').textContent = STRIP[level][1];
     }
+    if (level !== 'pick' && level !== 'filter') clearHints();
     markCursor();
   }
 
@@ -1292,6 +1360,407 @@ const PAGE = `<!doctype html>
     zoom.grab(false);
     unlight();
     select(null);
+  }
+
+  /* ---- picking from the keyboard: letters on things ---- */
+
+  // s puts a letter on everything, / starts a filter that narrows what gets
+  // one, and with something selected n letters what one edge away from it,
+  // i what is inside it and the box it sits in, and l its links. Typing a
+  // letter picks. These are two more levels: 'pick', where letters pick, and
+  // 'filter', where everything typed goes into the filter until Enter. A
+  // filter's plain words match a thing's text; is:node, is:edge,
+  // is:container and style:name narrow by kind and style.
+  var hint = null;
+  var hintLayer = element('div', '');
+  hintLayer.id = 'hints';
+  view.append(hintLayer);
+  var popup = null;
+  var frame = 0;
+  var noticeTimer = 0;
+  var MODE_WORD = { all: 'Select', neighbors: 'Neighbors', inside: 'Inside', links: 'Links' };
+  var KINDS = ['node', 'edge', 'container'];
+
+  function shownThing(name) {
+    var node = graph.nodes[name];
+    return node && !node.badge && (!node.guide || guidesShown);
+  }
+  function shownEdge(edge) { return !edge.guide || guidesShown; }
+  function nameOf(target) {
+    if (target.kind === 'node') return graph.nodes[target.key].label;
+    var edge = graph.edges[target.key];
+    return edge.label || graph.nodes[edge.up].label + ' \\u2192 ' + graph.nodes[edge.down].label;
+  }
+
+  // Where a thing's letter goes, in the drawing's own units: a box's top-left
+  // corner, or the middle of its top edge when a child's letter already holds
+  // the corner; bare text's, just left of it; a line's, somewhere along it
+  // clear of its text.
+  var anchors = { svg: null, at: {} };
+  function anchorOf(target) {
+    if (anchors.svg !== svg) anchors = { svg: svg, at: {} };
+    var id = target.kind + ' ' + target.key;
+    if (anchors.at[id]) return anchors.at[id];
+    var at = null;
+    if (target.kind === 'node') {
+      var node = graph.nodes[target.key];
+      var box = node.box;
+      var crowded = node.children.some(function (child) {
+        var other = graph.nodes[child].box;
+        return Math.abs(other[0] - box[0]) < 8 && Math.abs(other[1] - box[1]) < 8;
+      });
+      if (node.bare) at = { x: box[0], y: box[1] + box[3] / 2, el: svg, side: 'left' };
+      else at = { x: crowded ? box[0] + box[2] / 2 : box[0] + 2, y: box[1] + 2, el: svg };
+    } else {
+      var group = edgeGroups(target.key)[0];
+      var stroke = group && group.querySelector('line:not(.target), path[fill="none"]:not(.target), polyline:not(.target)');
+      if (stroke && stroke.getTotalLength) {
+        var texts = Array.prototype.map.call(group.querySelectorAll('text'), function (text) { return text.getBBox(); });
+        var length = stroke.getTotalLength();
+        var clear = function (point) {
+          return texts.every(function (box) {
+            return point.x < box.x - 12 || point.x > box.x + box.width + 12 || point.y < box.y - 12 || point.y > box.y + box.height + 12;
+          });
+        };
+        var point = null;
+        [0.3, 0.7, 0.2, 0.8, 0.5, 0.12, 0.88].some(function (along) {
+          var tried = stroke.getPointAtLength(length * along);
+          if (!point) point = tried;
+          if (clear(tried)) { point = tried; return true; }
+          return false;
+        });
+        at = { x: point.x, y: point.y, el: stroke };
+      }
+    }
+    anchors.at[id] = at;
+    return at;
+  }
+  // The same, in pixels from the view's top-left corner, or null.
+  function onScreen(target) {
+    var at = anchorOf(target);
+    if (!at) return null;
+    var matrix = at.el.getScreenCTM();
+    if (!matrix) return null;
+    var point = new DOMPoint(at.x, at.y).matrixTransform(matrix);
+    var room = view.getBoundingClientRect();
+    return { x: point.x - room.left, y: point.y - room.top, side: at.side, inView: point.x >= room.left && point.x <= room.right && point.y >= room.top && point.y <= room.bottom };
+  }
+
+  // Things in view come first, so the one-letter labels go to what can be
+  // seen; then top to bottom and left to right. Boxes before lines.
+  function ordered(targets) {
+    // Links keep the order the source writes them in, as the panel lists them.
+    if (targets.length && targets[0].kind === 'link') return targets;
+    var placed = targets.map(function (target, i) { return { target: target, at: onScreen(target) || { x: 0, y: 0, inView: false }, i: i }; });
+    placed.sort(function (a, b) {
+      if (a.target.kind !== b.target.kind) return a.target.kind === 'node' ? -1 : 1;
+      if (a.at.inView !== b.at.inView) return a.at.inView ? -1 : 1;
+      return Math.round(a.at.y / 24) - Math.round(b.at.y / 24) || a.at.x - b.at.x;
+    });
+    return placed.map(function (one) { return one.target; });
+  }
+
+  function allTargets() {
+    var out = [];
+    Object.keys(graph.nodes).forEach(function (name) { if (shownThing(name)) out.push({ kind: 'node', key: name }); });
+    graph.edges.forEach(function (edge, index) { if (shownEdge(edge)) out.push({ kind: 'edge', key: index }); });
+    return out;
+  }
+  function neighborTargets() {
+    var nodes = [], edges = [];
+    function addNode(name) {
+      if (shownThing(name) && !(selection.kind === 'node' && name === selection.key) && nodes.indexOf(name) < 0) nodes.push(name);
+    }
+    if (selection.kind === 'edge') {
+      var edge = graph.edges[selection.key];
+      addNode(edge.up);
+      addNode(edge.down);
+    } else {
+      graph.edges.forEach(function (edge, index) {
+        if (!shownEdge(edge) || (edge.up !== selection.key && edge.down !== selection.key)) return;
+        edges.push(index);
+        addNode(edge.up === selection.key ? edge.down : edge.up);
+      });
+    }
+    return nodes.map(function (name) { return { kind: 'node', key: name }; })
+      .concat(edges.map(function (index) { return { kind: 'edge', key: index }; }));
+  }
+  function insideTargets() {
+    var node = graph.nodes[selection.key];
+    var out = node.children.filter(shownThing);
+    if (node.parent && shownThing(node.parent)) out.push(node.parent);
+    return out.map(function (name) { return { kind: 'node', key: name }; });
+  }
+  function linkTargets() {
+    var thing = selection.kind === 'node' ? graph.nodes[selection.key] : graph.edges[selection.key];
+    return thing.links.map(function (link, index) { return { kind: 'link', key: index, link: link }; });
+  }
+
+  // As many one-letter labels as there are letters; past that, letters from
+  // the end of the alphabet start two-letter ones, as few as will do.
+  function codes(count) {
+    var letters = 'abcdefghijklmnopqrstuvwxyz';
+    if (count <= 26) return letters.slice(0, count).split('');
+    for (var prefixes = 1; prefixes <= 26; prefixes++) {
+      if (26 - prefixes + 26 * prefixes < count) continue;
+      var out = letters.slice(0, 26 - prefixes).split('');
+      for (var p = 0; out.length < count; p++) {
+        for (var q = 0; q < 26 && out.length < count; q++) out.push(letters[25 - p] + letters[q]);
+      }
+      return out;
+    }
+    var all = [''];
+    while (all.length < count) {
+      var longer = [];
+      all.forEach(function (start) { for (var i = 0; i < 26; i++) longer.push(start + letters[i]); });
+      all = longer;
+    }
+    return all.slice(0, count);
+  }
+
+  var styleNames = {};
+  Object.keys(graph.nodes).forEach(function (name) { graph.nodes[name].styles.forEach(function (one) { styleNames[one] = true; }); });
+  graph.edges.forEach(function (edge) { edge.styles.forEach(function (one) { styleNames[one] = true; }); });
+
+  // The filter: every word must match. Returns the matches, and a message
+  // when a word can match nothing at all, naming what it accepts.
+  function filtered(targets, query) {
+    var words = query.toLowerCase().split(' ').filter(function (word) { return word !== ''; });
+    var message = '';
+    var tests = words.map(function (word) {
+      var colon = word.indexOf(':');
+      var key = colon > 0 ? word.slice(0, colon) : '';
+      var value = colon > 0 ? word.slice(colon + 1) : '';
+      if (key === 'is') {
+        var kinds = KINDS.filter(function (kind) { return kind.indexOf(value) === 0; });
+        if (kinds.length === 0) message = 'is: takes node, edge or container';
+        return function (target, thing) {
+          if (value === '') return true;
+          return kinds.some(function (kind) {
+            if (kind === 'edge') return target.kind === 'edge';
+            if (kind === 'node') return target.kind === 'node';
+            return target.kind === 'node' && thing.children.length > 0;
+          });
+        };
+      }
+      if (key === 'style') {
+        var names = Object.keys(styleNames).filter(function (name) { return name.toLowerCase().indexOf(value) === 0; });
+        if (names.length === 0) message = 'no style named "' + value + '"';
+        return function (target, thing) {
+          return value === '' || (thing.styles || []).some(function (name) { return names.indexOf(name) >= 0; });
+        };
+      }
+      if (key !== '' && /^[a-z]+$/.test(key)) {
+        message = key + ': is not a filter; the filters are is: and style:';
+        return function () { return false; };
+      }
+      return function (target, thing) { return (thing.label || '').toLowerCase().indexOf(word) >= 0; };
+    });
+    var matches = targets.filter(function (target) {
+      var thing = target.kind === 'node' ? graph.nodes[target.key] : target.kind === 'edge' ? graph.edges[target.key] : target.link;
+      return tests.every(function (test) { return test(target, thing); });
+    });
+    return { matches: matches, message: message };
+  }
+
+  function startHints(mode, filtering) {
+    var base;
+    if (mode === 'all') base = allTargets();
+    else if (!selection) { notice('Select something first: s, then a letter'); return; }
+    else if (mode === 'inside' && selection.kind === 'edge') { notice('A line has nothing inside it'); return; }
+    else base = mode === 'neighbors' ? neighborTargets() : mode === 'inside' ? insideTargets() : linkTargets();
+    if (base.length === 0) {
+      notice(mode === 'links' ? nameOf(selection) + ' has no links' : mode === 'inside' ? nameOf(selection) + ' has nothing inside it and sits in nothing' : nameOf(selection) + ' has no lines');
+      return;
+    }
+    hint = { mode: mode, base: base, query: '', typed: '', filtering: !!filtering, direct: !!filtering, shown: [], message: '' };
+    setLevel(filtering ? 'filter' : 'pick');
+    refresh();
+  }
+
+  function clearHints() {
+    if (!hint && !popup) return;
+    hint = null;
+    hintLayer.textContent = '';
+    if (popup) { popup.remove(); popup = null; }
+    each(document.querySelectorAll('#selected .hintkey'), function (key) { key.remove(); });
+    if (svg) {
+      svg.classList.remove('hinting');
+      each(svg.querySelectorAll('.hint-on'), function (group) { group.classList.remove('hint-on'); });
+    }
+    cancelAnimationFrame(frame);
+  }
+
+  function groupsOf(target) {
+    return target.kind === 'node' ? nodeGroups(target.key) : target.kind === 'edge' ? edgeGroups(target.key) : [];
+  }
+
+  // Work out what wears a letter, and draw the letters and the strip.
+  function refresh() {
+    var result = filtered(hint.base, hint.query);
+    hint.message = result.message;
+    var targets = ordered(result.matches);
+    var labels = codes(targets.length);
+    hint.shown = targets.map(function (target, i) { return { target: target, code: labels[i] }; });
+    hint.typed = '';
+    // Dim what can't be picked, unless everything can. Links aren't in the
+    // drawing, so picking one dims nothing.
+    each(svg.querySelectorAll('.hint-on'), function (group) { group.classList.remove('hint-on'); });
+    var narrowed = hint.mode !== 'links' && (hint.mode !== 'all' || hint.shown.length < hint.base.length);
+    svg.classList.toggle('hinting', narrowed);
+    hint.shown.forEach(function (one) { each(groupsOf(one.target), function (group) { group.classList.add('hint-on'); }); });
+    if (selection) each(groupsOf(selection), function (group) { group.classList.add('hint-on'); });
+    drawLabels();
+    showStrip();
+  }
+
+  function keyElement(code) {
+    var key = element('span', 'hintkey');
+    key.setAttribute('data-code', code);
+    key.textContent = code;
+    return key;
+  }
+
+  function drawLabels() {
+    hintLayer.textContent = '';
+    if (popup) { popup.remove(); popup = null; }
+    each(document.querySelectorAll('#selected .hintkey'), function (key) { key.remove(); });
+    if (hint.mode === 'links') {
+      if (!side.hidden) {
+        // On the panel's own rows, where the links already are.
+        var rows = selectedPanel.querySelectorAll('a.link');
+        hint.shown.forEach(function (one) { var row = rows[one.target.key]; if (row) row.prepend(keyElement(one.code)); });
+      } else {
+        // The panel is hidden, so the links come up beside the selection.
+        popup = element('div', '');
+        popup.id = 'link-pop';
+        hint.shown.forEach(function (one) {
+          var row = element('a', 'link');
+          row.href = one.target.link.href;
+          row.target = '_blank';
+          row.rel = 'noopener';
+          row.append(keyElement(one.code));
+          row.insertAdjacentHTML('beforeend', one.target.link.badges[shownTheme]);
+          row.append(element('span', 'label', one.target.link.label));
+          popup.append(row);
+        });
+        view.append(popup);
+      }
+    } else {
+      hint.shown.forEach(function (one) {
+        var key = keyElement(one.code);
+        one.el = key;
+        hintLayer.append(key);
+      });
+    }
+    place();
+  }
+
+  // Letters follow the drawing as it pans and zooms.
+  function place() {
+    cancelAnimationFrame(frame);
+    if (!hint) return;
+    hint.shown.forEach(function (one) {
+      if (!one.el) return;
+      var at = onScreen(one.target);
+      one.el.style.display = at ? '' : 'none';
+      if (at) one.el.style.transform = 'translate(' + Math.round(at.x) + 'px,' + Math.round(at.y) + 'px) ' + (at.side === 'left' ? 'translate(calc(-100% - 4px), -50%)' : 'translate(-50%, -50%)');
+    });
+    if (popup && selection) {
+      var at = onScreen(selection);
+      if (at) {
+        popup.style.left = Math.round(Math.min(Math.max(at.x, 8), view.clientWidth - popup.offsetWidth - 8)) + 'px';
+        popup.style.top = Math.round(Math.min(Math.max(at.y - popup.offsetHeight - 10, 8), view.clientHeight - popup.offsetHeight - 8)) + 'px';
+      }
+    }
+    frame = requestAnimationFrame(place);
+  }
+
+  function escapeText(text) {
+    var holder = element('span', '', text);
+    return holder.innerHTML;
+  }
+
+  function showStrip() {
+    var crumbs = '<b>' + MODE_WORD[hint.mode] + '</b>';
+    if (hint.mode !== 'all') crumbs += ' ' + (hint.mode === 'inside' ? '' : 'of ') + escapeText(nameOf(selection));
+    if (hint.filtering || hint.query) crumbs += ' \\u203A <span class="query">/' + escapeText(hint.query) + (hint.filtering ? '<i>\\u258C</i>' : '') + '</span>';
+    var count = hint.shown.length;
+    var said;
+    if (hint.filtering) {
+      said = (hint.message || (count === 1 ? '1 match \\u00B7 Enter picks it' : count + ' match' + (count === 1 ? '' : 'es') + (count ? ' \\u00B7 Enter to pick' : ''))) + ' \\u00B7 \\u232B \\u00B7 Esc out';
+    } else {
+      said = (hint.mode === 'links' ? 'letter to open' : 'letter to pick') + (hint.mode === 'links' ? '' : ' \\u00B7 / filter') + ' \\u00B7 \\u232B back \\u00B7 Esc out \\u00B7 ' + count;
+    }
+    strip.hidden = false;
+    strip.querySelector('.crumbs').innerHTML = crumbs;
+    strip.querySelector('.hint').textContent = said;
+  }
+
+  function notice(text) {
+    clearTimeout(noticeTimer);
+    if (level) setLevel(null);
+    strip.hidden = false;
+    strip.querySelector('.crumbs').textContent = '';
+    strip.querySelector('.hint').textContent = text;
+    noticeTimer = setTimeout(function () { if (!level) strip.hidden = true; }, 1800);
+  }
+
+  // A picked thing is selected, and brought into view if it was out of it.
+  function act(target) {
+    if (target.kind === 'link') {
+      setLevel(null);
+      window.open(target.link.href, '_blank', 'noopener');
+      return;
+    }
+    setLevel(null);
+    select(target);
+    var at = onScreen(target);
+    if (at && !at.inView) zoom.pan(view.clientWidth / 2 - at.x, view.clientHeight / 2 - at.y);
+  }
+
+  // The keys at the two levels. Returns false for a key left to the page.
+  function hintKey(event) {
+    var key = event.key;
+    if (hint.filtering) {
+      if (key === 'Enter') {
+        if (hint.shown.length === 1) act(hint.shown[0].target);
+        else if (hint.shown.length > 1) { hint.filtering = false; setLevel('pick'); showStrip(); }
+      } else if (key === 'Backspace') {
+        if (hint.query) { hint.query = hint.query.slice(0, -1); refresh(); }
+        else if (hint.direct) setLevel(null);
+        else { hint.filtering = false; setLevel('pick'); showStrip(); }
+      } else if (key.length === 1) { hint.query += key; refresh(); }
+      else return false;
+      return true;
+    }
+    if (ZOOM_KEYS[key] || key === 'Tab') return false;
+    if (key === 'Backspace') {
+      if (hint.typed) { hint.typed = hint.typed.slice(0, -1); markTyped(); }
+      else if (hint.query || hint.mode === 'all' && hint.direct) { hint.filtering = true; setLevel('filter'); showStrip(); }
+      else setLevel(null);
+      return true;
+    }
+    if (key === '/' && hint.mode !== 'links') { hint.filtering = true; setLevel('filter'); showStrip(); return true; }
+    if (key.length === 1 && /[a-z]/i.test(key)) {
+      var typed = hint.typed + key.toLowerCase();
+      var exact = hint.shown.filter(function (one) { return one.code === typed; })[0];
+      if (exact) { act(exact.target); return true; }
+      if (hint.shown.some(function (one) { return one.code.indexOf(typed) === 0; })) { hint.typed = typed; markTyped(); }
+      return true;
+    }
+    return key.indexOf('Arrow') !== 0;
+  }
+
+  // Letters that no longer fit what has been typed step aside.
+  function markTyped() {
+    hint.shown.forEach(function (one) {
+      var key = one.el || document.querySelector('#selected .hintkey[data-code="' + one.code + '"], #link-pop .hintkey[data-code="' + one.code + '"]');
+      if (!key) return;
+      var fits = one.code.indexOf(hint.typed) === 0;
+      key.classList.toggle('gone', !fits);
+      key.innerHTML = fits && hint.typed ? '<span class="done">' + hint.typed + '</span>' + one.code.slice(hint.typed.length) : one.code;
+    });
   }
 
   saveButton.onclick = function () { setLevel(level === 'save' ? null : 'save'); };
@@ -1325,8 +1794,16 @@ const PAGE = `<!doctype html>
     if (event.target.closest && event.target.closest('input, textarea, select, [contenteditable]')) return;
     var key = event.key;
     if (key === 'Escape') plain();
-    else if (level === null) {
+    else if (level === 'pick' || level === 'filter') {
+      if (!hintKey(event)) return;
+    } else if (level === null) {
       if (key === 'm' || key === 'M') setLevel('bar');
+      else if (key === 's') startHints('all');
+      else if (key === '/') startHints('all', true);
+      else if (key === 'n') startHints('neighbors');
+      else if (key === 'i') startHints('inside');
+      // During a grab, l pans right.
+      else if (key === 'l' && !zoom.held()) startHints('links');
       else if (key === 'Backspace') {
         if (zoom.held()) zoom.grab(false);
         else if (lit.length) unlight();

@@ -1538,7 +1538,9 @@ reladraw render arch.reladraw --page
 
 **A click on a box or a line selects it**, and never follows a link. The selection is amber; what feeds it is green and what it feeds is red, the lines dashed and moving the way they run; the rest dims. A line runs from the end without an arrowhead when only one end has one, and otherwise from the end written first. The panel beside the drawing names the selection and lists its links, each with its badge, and the boxes it comes from and goes to; a link opens in a new tab, and a box selects it. One line out lights by default, and the panel's button lights everything upstream and downstream. Its description, if it has one, comes last ([Descriptions](#descriptions)). A box with links underlines its text under the pointer. A click on the background, Escape or Backspace clears the selection.
 
-Keys: `+` and `-` zoom, `0` fits, `1` is actual size, `f` is full screen, `p` shows or hides the side panel, Escape clears the selection.
+**Selecting from the keyboard**: `s` puts a letter on every box and line, and typing a letter selects that thing. Things in view get the one-letter labels; past 26, the rest take two letters. `/` starts a filter that narrows what gets a letter, live as it is typed: a plain word matches a box's or a line's text, `is:node`, `is:edge` and `is:container` match a kind, and `style:synced` matches what wears that style. Words combine, so `/is:edge rclone` letters only the lines whose text says rclone. Enter ends the filter and the letters pick again, or selects the match at once when there is only one. With something selected, `n` letters what is one line away (from a box, its lines and the boxes at their other ends; from a line, its two ends), `i` letters the boxes inside the selected box and the box it sits in, and `l` letters its links, which a letter opens in a new tab: on the side panel's rows when the panel is shown, and in a small list beside the selection when it is hidden. Backspace steps back a letter, then out of the filter, then out; Escape clears everything. A picked thing out of view is brought into it.
+
+Keys: `+` and `-` zoom, `0` fits, `1` is actual size, `f` is full screen, `p` shows or hides the side panel, `s` and `/` select, `n` `i` `l` step from the selection, Escape clears the selection.
 
 ### Formatting
 
@@ -1662,6 +1664,7 @@ Pre-1.0, so the minor number is where a breaking change goes. Every removal is r
 
 **Unreleased**
 
+- **The `--page` page selects from the keyboard.** `s` puts a letter on every box and line and a letter selects it; `/` filters what gets a letter by text, `is:node`, `is:edge`, `is:container` or `style:`; with something selected, `n` letters what is one line away, `i` what is inside it and the box it sits in, and `l` its links. See [A page for looking at a diagram](#a-page-for-looking-at-a-diagram).
 - **The `--page` page has a View menu**, and its bar keeps only the zoom, Full screen, Save and View. The theme, the side panel, auto-hide and the findings moved into View, each a switch that says on or off, and View gained **Guides**, which draws the diagram's guides as `--guides` does. **`m` reaches the menus from the keyboard**: each control shows its letter, a strip names where the keys are, Backspace steps back one level and Escape goes straight back to the plain diagram, clearing the selection too. In the theme list the arrow keys try each theme on the diagram, and Enter keeps one. See [A page for looking at a diagram](#a-page-for-looking-at-a-diagram).
 
 **0.26.1**
