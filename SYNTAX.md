@@ -1,4 +1,4 @@
-# Syntax reference — 0.26.1
+# Syntax reference — 0.27.0
 
 What the language accepts. The changelog at the end lists what changed in each published version; 0.17.0's changes are large, and its entry has a table of every old spelling and what to write instead.
 
@@ -1420,7 +1420,7 @@ Designed and absent from the code.
 
 Pre-1.0, so the minor number is where a breaking change goes. Every removal is refused by name with the replacement quoted, rather than dropped in silence: an older file stops with an error saying what to write instead.
 
-**Unreleased**
+**0.27.0**
 
 - **The `--page` page selects from the keyboard.** `s` puts a letter on every box and line and a letter selects it; `/` filters what gets a letter by text, `is:node`, `is:edge`, `is:container` or `style:`; with something selected, `n` letters what is one line away, `i` what is inside it and the box it sits in, and `l` its links. See [A page for looking at a diagram](#a-page-for-looking-at-a-diagram).
 - **The `--page` page has a View menu**, and its bar keeps only the zoom, Full screen, Save and View. The theme, the side panel, auto-hide and the findings moved into View, each a switch that says on or off, and View gained **Guides**, which draws the diagram's guides as `--guides` does. **`m` reaches the menus from the keyboard**: each control shows its letter, a strip names where the keys are, Backspace steps back one level and Escape goes straight back to the plain diagram, clearing the selection too. In the theme list the arrow keys try each theme on the diagram, and Enter keeps one. See [A page for looking at a diagram](#a-page-for-looking-at-a-diagram).

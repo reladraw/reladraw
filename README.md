@@ -94,7 +94,7 @@ To install the skill from the main branch instead, which can run ahead of the re
 
 ## Status
 
-Version 0.26.1. Early stage, but works. The parser, layout engine, and SVG renderer are written in TypeScript, with zero runtime dependencies. There is a command-line tool that turns a .reladraw text file into an SVG, and an element that does the same inside a web page.
+Version 0.27.0. Early stage, but works. The parser, layout engine, and SVG renderer are written in TypeScript, with zero runtime dependencies. There is a command-line tool that turns a .reladraw text file into an SVG, and an element that does the same inside a web page.
 
 ## License
 
