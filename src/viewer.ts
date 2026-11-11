@@ -2,8 +2,8 @@
  * The pan and zoom shared by the page `render --page` writes and the
  * playground, so the two look at a diagram the same way: − and +, Fit, 100%,
  * the zoom always shown and saying "Fit" while fitted, the wheel, a pinch, a
- * drag, a double-click, the keys + - 0 1, h j k l to pan, and g to grab the
- * diagram so the arrows pan it too.
+ * drag, a double-click, the keys + - 0 1, and g to grab the diagram so the
+ * arrows or h j k l pan it.
  *
  * It is browser code kept as a string, since it runs in a page, not here: the
  * page writes it into its script, and the playground's build writes it into
@@ -174,7 +174,7 @@ function panZoom(view, stage, label, buttons) {
     return !!(target && target.closest && target.closest('input, textarea, select, [contenteditable]'));
   }
 
-  // g grabs the diagram, and while it is held the arrows pan it; g again or
+  // g grabs the diagram, and while it is held the arrows or h j k l pan it; g again or
   // Escape lets go, and the arrows go back to whatever else uses them. The
   // keys are taken before the page's own handlers see them, so a held
   // diagram's arrows don't also move a list or a divider, and its Escape lets
@@ -193,16 +193,17 @@ function panZoom(view, stage, label, buttons) {
   }
 
   var ARROWS = { ArrowLeft: [1, 0], ArrowRight: [-1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] };
-  // h j k l pan as the arrows do, without a grab: nothing else uses them.
+  // h j k l pan as the arrows do, and like them only while the diagram is
+  // held, so g is the one way into panning from the keyboard.
   var LETTERS = { h: [1, 0], l: [-1, 0], k: [0, 1], j: [0, -1] };
 
   document.addEventListener('keydown', function (event) {
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     if (typing(event.target)) return;
-    var arrow = (held && ARROWS[event.key]) || LETTERS[event.key.toLowerCase()];
+    var arrow = ARROWS[event.key] || LETTERS[event.key.toLowerCase()];
     if (event.key === 'g' || event.key === 'G') grab(!held);
     else if (held && event.key === 'Escape') grab(false);
-    else if (arrow) {
+    else if (held && arrow) {
       // A tenth of the view a press, half of it with Shift; held down, the
       // key repeats.
       var room = size();

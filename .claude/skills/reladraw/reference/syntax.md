@@ -1,4 +1,4 @@
-# Syntax reference — 0.26.0
+# Syntax reference — 0.26.1
 
 What the language accepts. The changelog at the end lists what changed in each published version; 0.17.0's changes are large, and its entry has a table of every old spelling and what to write instead.
 
@@ -1288,7 +1288,7 @@ The output is a standalone SVG: every picture is drawn into it as path data, nev
 reladraw render arch.reladraw --page
 ```
 
-`--page` writes `arch.html`: one self-contained file, for opening in a browser, attaching or committing, that needs nothing running and fetches nothing. The page is in the diagram's own colors, so a dark diagram doesn't sit on a white page, and it is headed with `diagram title:`, or the file's name when there is none. Under the title it says which file it was drawn from and when, such as "drawn from arch.reladraw, 2026-11-05 14:32": the page is a snapshot of the file, and is behind it once the file is edited, until it is rendered again. Drag to pan, or use `h` `j` `k` `l`, or press `g` to grab the diagram and pan it with the arrow keys (Shift for bigger steps either way, `g` or Escape to let go); scroll, pinch or double-click to zoom; Fit shows the whole diagram and 100% returns it to its own scale. The zoom is always shown, with "Fit" beside it while the whole diagram is in view. There is a full-screen button. The Save menu saves the page itself, as it was written rather than at its current zoom; the `.reladraw` source it was drawn from; or the picture as an SVG or a PNG, as `render` would draw it; or copies the SVG. Each is named after the source file: `arch.html`, `arch.reladraw`, `arch.svg`, `arch.png`. In Chrome and Edge it asks where to save; other browsers put the file with their downloads. The findings are listed beside it in a panel that folds away, and clicking one lights up what its line drew. A box's or a line's name shows under the pointer. The theme picker draws the diagram in another theme, as `--theme` would, keeping the view and the selection; a page or text color the file states holds in every theme, and Save SVG, PNG and Copy SVG take the theme shown. It starts on "Diagram's theme", the one the file names (or dark), which follows the file when it is rendered again. A theme picked by name is the reader's: it holds on every reladraw page in that browser, whatever the file says, until "Diagram's theme" is picked again.
+`--page` writes `arch.html`: one self-contained file, for opening in a browser, attaching or committing, that needs nothing running and fetches nothing. The page is in the diagram's own colors, so a dark diagram doesn't sit on a white page, and it is headed with `diagram title:`, or the file's name when there is none. Under the title it says which file it was drawn from and when, such as "drawn from arch.reladraw, 2026-11-05 14:32": the page is a snapshot of the file, and is behind it once the file is edited, until it is rendered again. Drag to pan, or press `g` to grab the diagram and pan it with the arrow keys or `h` `j` `k` `l` (Shift for bigger steps, `g` or Escape to let go); scroll, pinch or double-click to zoom; Fit shows the whole diagram and 100% returns it to its own scale. The zoom is always shown, with "Fit" beside it while the whole diagram is in view. There is a full-screen button. The Save menu saves the page itself, as it was written rather than at its current zoom; the `.reladraw` source it was drawn from; or the picture as an SVG or a PNG, as `render` would draw it; or copies the SVG. Each is named after the source file: `arch.html`, `arch.reladraw`, `arch.svg`, `arch.png`. In Chrome and Edge it asks where to save; other browsers put the file with their downloads. The findings are listed beside it in a panel that folds away, and clicking one lights up what its line drew. A box's or a line's name shows under the pointer. The theme picker draws the diagram in another theme, as `--theme` would, keeping the view and the selection; a page or text color the file states holds in every theme, and Save SVG, PNG and Copy SVG take the theme shown. It starts on "Diagram's theme", the one the file names (or dark), which follows the file when it is rendered again. A theme picked by name is the reader's: it holds on every reladraw page in that browser, whatever the file says, until "Diagram's theme" is picked again.
 
 The side panel can be hidden with the Panel button or `p`, and then stays hidden whatever is selected. With Auto-hide ticked it shows only while something is selected or the findings are open, and the findings start folded. Both choices are remembered by the browser for every page.
 
@@ -1415,6 +1415,10 @@ Designed and absent from the code.
 ## Changelog
 
 Pre-1.0, so the minor number is where a breaking change goes. Every removal is refused by name with the replacement quoted, rather than dropped in silence: an older file stops with an error saying what to write instead.
+
+**0.26.1**
+
+- `h` `j` `k` `l` now pan only while the diagram is grabbed with `g`, as the arrow keys do, on the `--page` page and in the playground. In 0.26.0 they panned without a grab.
 
 **0.26.0**
 
