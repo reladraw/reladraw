@@ -8,7 +8,7 @@ import { markdownHtml } from './markdown.js';
 import type { Layout, LayoutNode } from './model.js';
 import { iconSvg, renderTagged, themeOf } from './render.js';
 import { resolve } from './resolve.js';
-import { luminance, type Theme } from './themes.js';
+import { DEFAULT_THEME, luminance, THEME_NAMES, THEMES, type Theme } from './themes.js';
 import { PAN_ZOOM } from './viewer.js';
 
 /**
@@ -32,13 +32,30 @@ export function drawPage(
   const drawn = `drawn from ${file}, ${stamp(at)}`;
   const run = (text: string) => {
     const layout = resolve(parse(text), options);
-    const { svg, tagged } = renderTagged(layout, options);
     const found =
       options.checks === false ? [] : findings(layout, options.checks ? options.checks(fileChecks(layout)) : fileChecks(layout));
     const title = layout.diagram['title'] ?? name;
-    const theme = themeOf(layout, options);
+    // The theme it was drawn in: the one --theme named, else the file's.
+    const named = layout.diagram['theme'];
+    const current =
+      (options.theme && THEME_NAMES.find((one) => THEMES[one] === options.theme)) ??
+      (named !== undefined && THEMES[named] !== undefined ? named : DEFAULT_THEME);
+    // The same diagram drawn in every theme, for the page's theme picker. A
+    // theme moves nothing, so only the colors differ between them. A page or
+    // text color the file states still holds in each, as in the playground.
+    const themes: Record<string, ThemeView> = {};
+    for (const one of THEME_NAMES) {
+      const drawnIn = { ...options, theme: options.theme && one === current ? options.theme : THEMES[one]! };
+      const theme = themeOf(layout, drawnIn);
+      themes[one] = { ...renderTagged(layout, drawnIn), theme, colors: colorsOf(theme), scheme: schemeOf(theme) };
+    }
+    // A --theme that is not one of the named ones is drawn as given, and offered as such.
+    if (themes[current] === undefined) {
+      const theme = themeOf(layout, options);
+      themes[current] = { ...renderTagged(layout, options), theme, colors: colorsOf(theme), scheme: schemeOf(theme) };
+    }
     return {
-      html: page({ title, name, drawn, source, svg, tagged, findings: found, theme, graph: graphOf(layout, theme) }),
+      html: page({ title, name, drawn, source, findings: found, themes, current, graph: graphOf(layout, themes) }),
       findings: found,
     };
   };
@@ -57,20 +74,32 @@ interface PageParts {
   drawn: string;
   /** The `.reladraw` text the page was drawn from, which Save gives back. */
   source: string;
+  findings: Finding[];
+  /** The diagram in each theme the picker offers, by name. */
+  themes: Record<string, ThemeView>;
+  /** The theme the page opens in. */
+  current: string;
+  graph: Graph;
+}
+
+/** The diagram drawn in one theme, and the page's colors to go with it. */
+interface ThemeView {
   /** The SVG as `render` writes it, which is what Save SVG and Save PNG save. */
   svg: string;
   /** The same drawing with each thing grouped and named, which is what is shown. */
   tagged: string;
-  findings: Finding[];
   theme: Theme;
-  graph: Graph;
+  /** The page's own colors, as CSS custom properties. */
+  colors: Record<string, string>;
+  /** The browser's controls: `dark`, `light`, or `light dark` when it can't be told. */
+  scheme: string;
 }
 
-/** A link as the panel shows it: where it goes, what it is called, and its badge drawn. */
+/** A link as the panel shows it: where it goes, what it is called, and its badge drawn in each theme. */
 interface LinkView {
   href: string;
   label: string;
-  badge: string;
+  badges: Record<string, string>;
 }
 
 /**
@@ -89,7 +118,7 @@ const describe = (attrs: Record<string, string>): { description?: string } =>
 
 const BADGE_SIDE = 20;
 
-function graphOf(layout: Layout, theme: Theme): Graph {
+function graphOf(layout: Layout, themes: Record<string, ThemeView>): Graph {
   const views = (links: Link[] | undefined): LinkView[] =>
     (links ?? []).map((link) => {
       const label = linkLabel(link, links);
@@ -99,7 +128,9 @@ function graphOf(layout: Layout, theme: Theme): Graph {
           : 'picture' in link.icon
             ? layout.linkIcons[link.icon.picture]!
             : link.icon;
-      return { href: link.href, label, badge: iconSvg(icon, BADGE_SIDE, theme) };
+      const badges: Record<string, string> = {};
+      for (const [one, view] of Object.entries(themes)) badges[one] = iconSvg(icon, BADGE_SIDE, view.theme);
+      return { href: link.href, label, badges };
     });
   // A node with no links of its own has its container's, as a click on it in
   // the SVG follows its container's.
@@ -138,39 +169,92 @@ function stamp(at: Date): string {
   return `${at.getFullYear()}-${two(at.getMonth() + 1)}-${two(at.getDate())} ${two(at.getHours())}:${two(at.getMinutes())}`;
 }
 
-function page({ title, name, drawn, source, svg, tagged, findings, theme, graph }: PageParts): string {
-  const hex = (color: string) => /^#[0-9a-f]{6}$/i.test(color);
-  // The browser's own controls (scroll bars, focus rings) follow the page, so
-  // a dark diagram doesn't get a light one's. A color written by hand in a
-  // form that can't be measured leaves the choice to the browser.
-  const scheme =
-    hex(theme.text) && hex(theme.background) ? (luminance(theme.text) > luminance(theme.background) ? 'dark' : 'light') : 'light dark';
+const hex = (color: string) => /^#[0-9a-f]{6}$/i.test(color);
+
+/**
+ * What may differ between one theme's drawing and another's: colors,
+ * opacities, and the ids made from a drawing's hash and an arrowhead's color.
+ * Split on, its matches are the odd pieces. Matching too much costs nothing;
+ * a drawing whose other pieces differ is carried whole.
+ */
+const VARIES = /(#[0-9a-f]{3,8}\b|rgba?\([^)]*\)|opacity="[^"]*"|opacity:[^;"]*|\br[0-9a-f]{8}\b|\b[0-9a-f]{6}\b)/gi;
+
+// The browser's own controls (scroll bars, focus rings) follow the page, so
+// a dark diagram doesn't get a light one's. A color written by hand in a
+// form that can't be measured leaves the choice to the browser.
+function schemeOf(theme: Theme): string {
+  return hex(theme.text) && hex(theme.background)
+    ? luminance(theme.text) > luminance(theme.background)
+      ? 'dark'
+      : 'light'
+    : 'light dark';
+}
+
+function colorsOf(theme: Theme): Record<string, string> {
+  return {
+    '--page': theme.background,
+    '--ink': theme.text,
+    '--muted': theme.mutedText,
+    '--rule': theme.boxStroke,
+    '--accent': theme.primary.color,
+    '--on-accent': theme.primary.on,
+  };
+}
+
+function page({ title, name, drawn, source, findings, themes, current, graph }: PageParts): string {
+  const shown = themes[current]!;
+  // First the diagram's own theme, which follows the file; then every theme
+  // as the reader's choice, dark ones together and light together, as the
+  // playground's picker has them, so stepping through the list doesn't flash
+  // between black and white.
+  const group = (light: boolean) =>
+    Object.keys(themes)
+      .filter((one) => (schemeOf(themes[one]!.theme) === 'light') === light)
+      .map((one) => `<option value="${escapeHtml(one)}">${escapeHtml(one)}</option>`)
+      .join('');
+  const picker =
+    `<option value="" selected>Diagram's theme (${escapeHtml(current)})</option>` +
+    `<optgroup label="Dark">${group(false)}</optgroup><optgroup label="Light">${group(true)}</optgroup>`;
+  // The shown theme goes in whole; another is only the colors that differ
+  // from it, when the rest of the drawing is the same, as it is since a theme
+  // moves nothing. That keeps the page near its size with one theme.
+  const pack = (other: string, base: string): string | string[] => {
+    const theirs = other.split(VARIES);
+    const ours = base.split(VARIES);
+    const same = theirs.length === ours.length && theirs.every((piece, i) => i % 2 === 1 || piece === ours[i]);
+    return same ? theirs.filter((_, i) => i % 2 === 1) : other;
+  };
   const data = {
-    svg,
     name,
     source,
+    current,
+    varies: VARIES.source,
+    themes: Object.fromEntries(
+      Object.entries(themes).map(([one, view]) => [
+        one,
+        one === current
+          ? { svg: view.svg, tagged: view.tagged, colors: view.colors, scheme: view.scheme }
+          : { svg: pack(view.svg, shown.svg), tagged: pack(view.tagged, shown.tagged), colors: view.colors, scheme: view.scheme },
+      ]),
+    ),
     findings: findings.map((finding) => ({ kind: finding.kind, message: finding.message, line: finding.line })),
     graph,
   };
   // Replaced by functions, so a `$` in a title or a drawing is taken as written.
   // The zoom's code goes in first, so nothing a diagram says can be taken for its marker.
   return PAGE.replace('{{panzoom}}', () => PAN_ZOOM)
-    .replace('{{scheme}}', () => scheme)
+    .replace('{{scheme}}', () => shown.scheme)
     .replace('{{title}}', () => escapeHtml(title))
     .replace('{{heading}}', () => escapeHtml(title))
     .replace('{{drawn}}', () => escapeHtml(drawn))
     .replace('{{colors}}', () =>
       [
-        `--page: ${theme.background};`,
-        `--ink: ${theme.text};`,
-        `--muted: ${theme.mutedText};`,
-        `--rule: ${theme.boxStroke};`,
-        `--accent: ${theme.primary.color};`,
-        `--on-accent: ${theme.primary.on};`,
+        ...Object.entries(shown.colors).map(([key, value]) => `${key}: ${value};`),
         '--sel: #e0b25a; --up: #22b98c; --down: #e5484d;',
       ].join(' '),
     )
-    .replace('{{drawing}}', () => tagged)
+    .replace('{{themes}}', () => picker)
+    .replace('{{drawing}}', () => shown.tagged)
     .replace('{{data}}', () => scriptJson(data));
 }
 
@@ -258,12 +342,24 @@ const PAGE = `<!doctype html>
     width: min(24rem, 36vw); display: flex; flex-direction: column; min-height: 0;
     border-left: 1px solid color-mix(in srgb, var(--rule) 45%, transparent);
   }
-  aside { display: flex; flex-direction: column; min-height: 0; flex: 1;
+  #side[hidden] { display: none; }
+  /* What is selected takes the room it needs and the findings the rest; when
+     both want more than there is, each gives up room and scrolls. */
+  aside { display: flex; flex-direction: column; min-height: min(8rem, 40%); flex: 1 1 auto;
     border-top: 1px solid color-mix(in srgb, var(--rule) 45%, transparent); }
   aside[hidden] { display: none; }
+  select {
+    font: inherit; font-size: 13px; color: var(--ink); background: var(--page);
+    border: 1px solid color-mix(in srgb, var(--rule) 70%, transparent); border-radius: 6px;
+    padding: 3px 6px; cursor: pointer;
+  }
+  select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .check { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; cursor: pointer; white-space: nowrap; }
+  .check input { margin: 0; accent-color: var(--accent); cursor: inherit; }
+  .check:has(input:disabled) { opacity: 0.45; cursor: default; }
 
   /* ---- what is selected ---- */
-  #selected { padding: 10px 16px 12px; overflow: auto; flex: none; max-height: 60%; }
+  #selected { padding: 10px 16px 12px; overflow: auto; flex: 0 1 auto; min-height: 0; }
   #selected .empty { margin: 0; color: var(--muted); font-size: 13px; }
   #selected h2 { margin: 0 0 8px; font-size: 15px; font-weight: 600; color: var(--sel); overflow-wrap: anywhere; }
   #selected h3 {
@@ -352,6 +448,10 @@ const PAGE = `<!doctype html>
         <button id="copy-svg" type="button" title="Copy the picture's SVG to the clipboard">Copy SVG</button>
       </span>
     </span>
+    <select id="theme" aria-label="Theme" title="Draw the diagram in another theme">{{themes}}</select>
+    <span class="gap"></span>
+    <button id="toggle-panel" type="button" aria-controls="side" title="Show or hide the side panel (p)">Panel</button>
+    <label class="check" title="Show the side panel only while something is selected or the findings are open"><input id="auto-hide" type="checkbox"> Auto-hide</label>
     <button id="toggle-findings" type="button" aria-controls="findings"></button>
   </div>
 </header>
@@ -381,6 +481,29 @@ const PAGE = `<!doctype html>
   var view = document.getElementById('view');
   var stage = document.getElementById('stage');
   var svg = stage.querySelector('svg');
+  // The theme shown, which the picker changes; Save SVG, PNG and Copy SVG
+  // save the drawing in it.
+  var shownTheme = DATA.current;
+  // Another theme is carried as the colors that differ from the first, put
+  // back in place the first time it is shown.
+  var VARIES = new RegExp(DATA.varies, 'gi');
+  var first = DATA.themes[DATA.current];
+  function unpack(packed, base) {
+    if (typeof packed === 'string') return packed;
+    var pieces = base.split(VARIES);
+    for (var i = 1, j = 0; i < pieces.length; i += 2) pieces[i] = packed[j++];
+    return pieces.join('');
+  }
+  function themed(name) {
+    var view = DATA.themes[name];
+    if (!view.unpacked) {
+      view.svg = unpack(view.svg, first.svg);
+      view.tagged = unpack(view.tagged, first.tagged);
+      view.unpacked = true;
+    }
+    return view;
+  }
+  function shown() { return themed(shownTheme); }
   var tip = document.getElementById('tip');
   var scaleLabel = document.getElementById('scale');
 {{panzoom}}
@@ -492,7 +615,7 @@ const PAGE = `<!doctype html>
   copySvg.onclick = function () {
     function fallback() {
       var area = document.createElement('textarea');
-      area.value = DATA.svg;
+      area.value = shown().svg;
       document.body.appendChild(area);
       area.select();
       var done = false;
@@ -501,14 +624,14 @@ const PAGE = `<!doctype html>
       flash(copySvg, done ? 'Copied' : 'Blocked');
     }
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(DATA.svg).then(function () { flash(copySvg, 'Copied'); }, fallback);
+      navigator.clipboard.writeText(shown().svg).then(function () { flash(copySvg, 'Copied'); }, fallback);
     } else fallback();
   };
 
   var saveSvg = document.getElementById('save-svg');
   saveSvg.onclick = function () {
     saveFile(saveSvg, DATA.name + '.svg', 'SVG image', 'image/svg+xml', function () {
-      return ready(new Blob([DATA.svg], { type: 'image/svg+xml' }));
+      return ready(new Blob([shown().svg], { type: 'image/svg+xml' }));
     });
   };
 
@@ -529,7 +652,7 @@ const PAGE = `<!doctype html>
         canvas.toBlob(function (blob) { blob ? done(blob) : fail(); }, 'image/png');
       };
       image.onerror = fail;
-      image.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(DATA.svg);
+      image.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(shown().svg);
     });
   }
   savePng.onclick = function () {
@@ -576,9 +699,49 @@ const PAGE = `<!doctype html>
   var toggle = document.getElementById('toggle-findings');
   var count = DATA.findings.length;
 
+  /* ---- the side panel: shown, hidden, or shown only when wanted ---- */
+
+  // Hidden, it stays hidden whatever is selected. Auto-hide shows it only
+  // while something is selected or the findings are open. Both choices are
+  // remembered in this browser for every reladraw page.
+  var side = document.getElementById('side');
+  var panelButton = document.getElementById('toggle-panel');
+  var autoHideBox = document.getElementById('auto-hide');
+  var KEPT = 'reladraw-page-panel';
+  var panelOn = true;
+  var autoHide = false;
+  try {
+    var kept = JSON.parse(localStorage.getItem(KEPT) || 'null');
+    if (kept) { panelOn = kept.on !== false; autoHide = kept.autoHide === true; }
+  } catch (e) {}
+  function keepPanel() {
+    try { localStorage.setItem(KEPT, JSON.stringify({ on: panelOn, autoHide: autoHide })); } catch (e) {}
+  }
+  function layoutSide() {
+    side.hidden = !(panelOn && (!autoHide || selection || !panel.hidden));
+    // A finding lights what it is about only while the finding can be seen.
+    if ((panel.hidden || side.hidden) && lit && lit.length) unlight();
+    panelButton.setAttribute('aria-pressed', String(panelOn));
+    if (!toggle.disabled) toggle.setAttribute('aria-pressed', String(panelOn && !panel.hidden));
+    autoHideBox.checked = autoHide;
+    autoHideBox.disabled = !panelOn;
+  }
+  function setPanel(on) {
+    panelOn = on;
+    keepPanel();
+    layoutSide();
+  }
+  panelButton.onclick = function () { setPanel(!panelOn); };
+  autoHideBox.onchange = function () {
+    autoHide = autoHideBox.checked;
+    keepPanel();
+    layoutSide();
+  };
+
   function showPanel(open) {
     panel.hidden = !open;
     toggle.setAttribute('aria-pressed', String(open));
+    layoutSide();
   }
   if (count === 0) {
     toggle.textContent = 'No findings';
@@ -586,8 +749,14 @@ const PAGE = `<!doctype html>
     panel.hidden = true;
   } else {
     toggle.textContent = count === 1 ? '1 finding' : count + ' findings';
-    toggle.onclick = function () { showPanel(panel.hidden); };
-    showPanel(true);
+    // Asking for the findings shows the panel they are in.
+    toggle.onclick = function () {
+      if (!panelOn) { panelOn = true; keepPanel(); showPanel(true); }
+      else showPanel(panel.hidden);
+    };
+    // Open from the start, unless the panel is to stay out of the way.
+    panel.hidden = autoHide;
+    toggle.setAttribute('aria-pressed', String(!autoHide));
   }
 
   var lit = [];
@@ -660,24 +829,28 @@ const PAGE = `<!doctype html>
   function nodeGroups(name) { return svg.querySelectorAll('g[data-node="' + CSS.escape(name) + '"]'); }
   function edgeGroups(index) { return svg.querySelectorAll('g[data-edge="' + index + '"]'); }
 
-  // A line is too thin to hit, so each gets an unseen wider copy along it.
-  each(svg.querySelectorAll('g[data-edge]'), function (group) {
-    each(group.querySelectorAll('line, path[fill="none"], polyline'), function (stroke) {
-      if (stroke.getAttribute('stroke-opacity') === '0') { stroke.classList.add('target'); return; }
-      var wide = stroke.cloneNode(false);
-      ['marker-start', 'marker-end', 'mask', 'stroke-dasharray'].forEach(function (name) { wide.removeAttribute(name); });
-      wide.setAttribute('stroke-width', '12');
-      wide.setAttribute('pointer-events', 'stroke');
-      wide.classList.add('target');
-      stroke.parentNode.insertBefore(wide, stroke.nextSibling);
+  // Run on each drawing the stage is given: at the start, and after a theme change.
+  function prepare() {
+    // A line is too thin to hit, so each gets an unseen wider copy along it.
+    each(svg.querySelectorAll('g[data-edge]'), function (group) {
+      each(group.querySelectorAll('line, path[fill="none"], polyline'), function (stroke) {
+        if (stroke.getAttribute('stroke-opacity') === '0') { stroke.classList.add('target'); return; }
+        var wide = stroke.cloneNode(false);
+        ['marker-start', 'marker-end', 'mask', 'stroke-dasharray'].forEach(function (name) { wide.removeAttribute(name); });
+        wide.setAttribute('stroke-width', '12');
+        wide.setAttribute('pointer-events', 'stroke');
+        wide.classList.add('target');
+        stroke.parentNode.insertBefore(wide, stroke.nextSibling);
+      });
     });
-  });
-  Object.keys(graph.nodes).forEach(function (name) {
-    if (graph.nodes[name].links.length > 0) each(nodeGroups(name), function (group) { group.classList.add('has-links'); });
-  });
-  graph.edges.forEach(function (edge, index) {
-    if (edge.links.length > 0) each(edgeGroups(index), function (group) { group.classList.add('has-links'); });
-  });
+    Object.keys(graph.nodes).forEach(function (name) {
+      if (graph.nodes[name].links.length > 0) each(nodeGroups(name), function (group) { group.classList.add('has-links'); });
+    });
+    graph.edges.forEach(function (edge, index) {
+      if (edge.links.length > 0) each(edgeGroups(index), function (group) { group.classList.add('has-links'); });
+    });
+  }
+  prepare();
 
   function clearMarks() {
     svg.classList.remove('selecting');
@@ -759,6 +932,7 @@ const PAGE = `<!doctype html>
   }
 
   function showSelected() {
+    layoutSide();
     selectedPanel.textContent = '';
     if (!selection) {
       selectedPanel.append(element('p', 'empty', 'Click a box or a line to see its links and what it connects to.'));
@@ -792,7 +966,7 @@ const PAGE = `<!doctype html>
       row.target = '_blank';
       row.rel = 'noopener';
       row.title = link.href;
-      row.innerHTML = link.badge;
+      row.innerHTML = link.badges[shownTheme];
       row.append(element('span', 'label', link.label));
       selectedPanel.append(row);
     });
@@ -840,17 +1014,64 @@ const PAGE = `<!doctype html>
     if (link && svg.contains(link)) event.preventDefault();
   });
 
+  /* ---- the theme picker ---- */
+
+  // "Diagram's theme" follows the file, so an edit to its theme shows on the
+  // next render. Any other choice is the reader's, and holds on every reladraw
+  // page in this browser, whatever its file says, until the diagram's theme
+  // is chosen again.
+  var picker = document.getElementById('theme');
+  var schemeMeta = document.querySelector('meta[name="color-scheme"]');
+  var CHOSEN_THEME = 'reladraw-page-theme';
+
+  // The same drawing in other colors: nothing moves, so the view, the
+  // selection and the panel stay as they were.
+  function showTheme(name) {
+    if (!DATA.themes[name] || name === shownTheme) return;
+    shownTheme = name;
+    var next = shown();
+    Object.keys(next.colors).forEach(function (key) { document.documentElement.style.setProperty(key, next.colors[key]); });
+    schemeMeta.setAttribute('content', next.scheme);
+    unlight();
+    hovered = null;
+    tip.style.display = 'none';
+    stage.innerHTML = next.tagged;
+    svg = stage.querySelector('svg');
+    prepare();
+    zoom.show();
+    select(selection);
+  }
+
+  picker.onchange = function () {
+    try {
+      if (picker.value) localStorage.setItem(CHOSEN_THEME, picker.value);
+      else localStorage.removeItem(CHOSEN_THEME);
+    } catch (e) {}
+    showTheme(picker.value || DATA.current);
+  };
+
+  // A theme chosen on an earlier page, if this page has it.
+  try {
+    var chosenTheme = localStorage.getItem(CHOSEN_THEME);
+    if (chosenTheme && DATA.themes[chosenTheme]) {
+      picker.value = chosenTheme;
+      showTheme(chosenTheme);
+    }
+  } catch (e) {}
+
   /* ---- keys, beyond the zoom's own ---- */
 
   document.addEventListener('keydown', function (event) {
     if (event.ctrlKey || event.metaKey || event.altKey) return;
-    if (event.target.closest && event.target.closest('input, textarea')) return;
-    if (event.key === 'f' && !full.hidden) toggleFull();
+    if (event.target.closest && event.target.closest('input, textarea, select')) return;
+    if (event.key === 'p') setPanel(!panelOn);
+    else if (event.key === 'f' && !full.hidden) toggleFull();
     else if (event.key === 'Escape') { showSave(false); unlight(); select(null); }
     else return;
     event.preventDefault();
   });
 
+  layoutSide();
   zoom.show();
 })();
 </script>

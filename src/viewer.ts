@@ -2,8 +2,8 @@
  * The pan and zoom shared by the page `render --page` writes and the
  * playground, so the two look at a diagram the same way: − and +, Fit, 100%,
  * the zoom always shown and saying "Fit" while fitted, the wheel, a pinch, a
- * drag, a double-click, the keys + - 0 1, and g to grab the diagram so the
- * arrows pan it.
+ * drag, a double-click, the keys + - 0 1, h j k l to pan, and g to grab the
+ * diagram so the arrows pan it too.
  *
  * It is browser code kept as a string, since it runs in a page, not here: the
  * page writes it into its script, and the playground's build writes it into
@@ -182,7 +182,7 @@ function panZoom(view, stage, label, buttons) {
   var held = false;
   var hint = document.createElement('div');
   hint.className = 'grab-hint';
-  hint.textContent = 'Arrows pan · Shift for bigger steps · g or Esc to let go';
+  hint.textContent = 'Arrows or h j k l pan · Shift for bigger steps · g or Esc to let go';
   hint.hidden = true;
   view.appendChild(hint);
 
@@ -193,14 +193,16 @@ function panZoom(view, stage, label, buttons) {
   }
 
   var ARROWS = { ArrowLeft: [1, 0], ArrowRight: [-1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] };
+  // h j k l pan as the arrows do, without a grab: nothing else uses them.
+  var LETTERS = { h: [1, 0], l: [-1, 0], k: [0, 1], j: [0, -1] };
 
   document.addEventListener('keydown', function (event) {
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     if (typing(event.target)) return;
-    var arrow = ARROWS[event.key];
+    var arrow = (held && ARROWS[event.key]) || LETTERS[event.key.toLowerCase()];
     if (event.key === 'g' || event.key === 'G') grab(!held);
     else if (held && event.key === 'Escape') grab(false);
-    else if (held && arrow) {
+    else if (arrow) {
       // A tenth of the view a press, half of it with Shift; held down, the
       // key repeats.
       var room = size();

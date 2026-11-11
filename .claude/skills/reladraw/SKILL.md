@@ -151,7 +151,7 @@ style store  fill: theme-primary-subtle  border: theme-primary  badge: database
 node records "Records"  style: store
 ```
 
-`fill` is a box's area, `border` its outline, `line` an edge's line, and a text's color goes in its bracket. `corners: sharp` squares a box's rounded corners, and `border: (color: theme-primary, thickness: thick)` thickens its outline, the box growing to keep its padding. Prefer theme colors, which read in light and dark themes alike: `theme-primary` and `theme-secondary` are the accents, `-subtle` is an accent softened toward the page (the one to fill a box with), `theme-muted` is quieter text. A hex or CSS color stays fixed in every theme.
+`fill` is a box's area, `border` its outline, `line` an edge's line, and a text's color goes in its bracket. `corners: sharp` squares a box's rounded corners, and `border: (color: theme-primary, thickness: thick)` thickens its outline, the box growing to keep its padding. Prefer theme colors, which read in light and dark themes alike: `theme-primary` and `theme-secondary` are the accents, `-subtle` is an accent softened toward the page (the one to fill a box with), `theme-muted` is quieter text. A hex or CSS color stays fixed in every theme. Leave out `diagram theme:` unless the user asks for a theme; the page lets each reader pick their own.
 
 ### Links
 
