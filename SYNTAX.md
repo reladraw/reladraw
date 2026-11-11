@@ -1,4 +1,4 @@
-# Syntax reference — 0.25.1
+# Syntax reference — 0.26.0
 
 What the language accepts. The changelog at the end lists what changed in each published version; 0.17.0's changes are large, and its entry has a table of every old spelling and what to write instead.
 
@@ -1416,11 +1416,12 @@ Designed and absent from the code.
 
 Pre-1.0, so the minor number is where a breaking change goes. Every removal is refused by name with the replacement quoted, rather than dropped in silence: an older file stops with an error saying what to write instead.
 
-**Unreleased**
+**0.26.0**
 
 - **The arrow keys pan a diagram**, on the `--page` page and in the playground. Press `g` to grab the diagram: a border and a hint show it is held, the arrows pan it a step at a time, and Shift makes the steps bigger. `g` again or Escape lets go, and the arrows go back to whatever else uses them. Clicking into a text field lets go too. `h` `j` `k` `l` pan the same way without a grab.
 - **The `--page` page has a theme picker**, which draws the diagram in any theme without moving anything, and Save SVG and PNG save the theme shown. It starts on the diagram's own theme, which follows the file; a theme the reader picks holds on every page in that browser until they pick the diagram's theme again.
-- **The `--page` page's side panel can be hidden**, with the Panel button or `p`, or set to Auto-hide, showing only while something is selected or the findings are open. A long description now fills the panel's height instead of scrolling in the top part of it.
+- **The `--page` page's side panel can be hidden**, with the Panel button or `p`, or set to Auto-hide, showing only while something is selected or the findings are open. A long description now fills the panel's height instead of scrolling in the top part of it. Closing the findings clears the highlight a finding lit.
+- The agent skill now leaves out `diagram theme:` unless the user asks for a theme.
 
 **0.25.1**
 
