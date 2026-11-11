@@ -43,19 +43,45 @@ export function drawPage(
     // The same diagram drawn in every theme, for the page's theme picker. A
     // theme moves nothing, so only the colors differ between them. A page or
     // text color the file states still holds in each, as in the playground.
-    const themes: Record<string, ThemeView> = {};
-    for (const one of THEME_NAMES) {
-      const drawnIn = { ...options, theme: options.theme && one === current ? options.theme : THEMES[one]! };
-      const theme = themeOf(layout, drawnIn);
-      themes[one] = { ...renderTagged(layout, drawnIn), theme, colors: colorsOf(theme), scheme: schemeOf(theme) };
-    }
-    // A --theme that is not one of the named ones is drawn as given, and offered as such.
-    if (themes[current] === undefined) {
-      const theme = themeOf(layout, options);
-      themes[current] = { ...renderTagged(layout, options), theme, colors: colorsOf(theme), scheme: schemeOf(theme) };
-    }
+    // Guides start as the file or --guides says, and the View menu's switch
+    // shows the drawing the other way. A diagram with no guides draws the
+    // same both ways, so it carries one drawing.
+    const guidesShown = options.guides ?? layout.diagram['guides'] === 'show';
+    const guideCount =
+      layout.nodes.filter((node) => node.guide).length +
+      layout.edges.filter((edge) => edge.guide).length +
+      layout.marks.filter((mark) => mark.guide).length;
+    const drawAll = (guides: boolean): Record<string, ThemeView> => {
+      const themes: Record<string, ThemeView> = {};
+      for (const one of THEME_NAMES) {
+        const drawnIn = { ...options, guides, theme: options.theme && one === current ? options.theme : THEMES[one]! };
+        const theme = themeOf(layout, drawnIn);
+        themes[one] = { ...renderTagged(layout, drawnIn), theme, colors: colorsOf(theme), scheme: schemeOf(theme) };
+      }
+      // A --theme that is not one of the named ones is drawn as given, and offered as such.
+      if (themes[current] === undefined) {
+        const drawnIn = { ...options, guides };
+        const theme = themeOf(layout, drawnIn);
+        themes[current] = { ...renderTagged(layout, drawnIn), theme, colors: colorsOf(theme), scheme: schemeOf(theme) };
+      }
+      return themes;
+    };
+    const themes = drawAll(guidesShown);
+    const flipped = guideCount > 0 ? drawAll(!guidesShown) : null;
     return {
-      html: page({ title, name, drawn, source, findings: found, themes, current, graph: graphOf(layout, themes) }),
+      html: page({
+        title,
+        name,
+        drawn,
+        source,
+        findings: found,
+        themes,
+        flipped,
+        guidesShown,
+        guideCount,
+        current,
+        graph: graphOf(layout, themes),
+      }),
       findings: found,
     };
   };
@@ -75,8 +101,14 @@ interface PageParts {
   /** The `.reladraw` text the page was drawn from, which Save gives back. */
   source: string;
   findings: Finding[];
-  /** The diagram in each theme the picker offers, by name. */
+  /** The diagram in each theme the picker offers, by name, with guides as the page opens. */
   themes: Record<string, ThemeView>;
+  /** The same with guides the other way, or null when the diagram has none. */
+  flipped: Record<string, ThemeView> | null;
+  /** Whether the page opens with guides shown. */
+  guidesShown: boolean;
+  /** How many guides the diagram has, which the View menu shows. */
+  guideCount: number;
   /** The theme the page opens in. */
   current: string;
   graph: Graph;
@@ -201,20 +233,13 @@ function colorsOf(theme: Theme): Record<string, string> {
   };
 }
 
-function page({ title, name, drawn, source, findings, themes, current, graph }: PageParts): string {
+function page({ title, name, drawn, source, findings, themes, flipped, guidesShown, guideCount, current, graph }: PageParts): string {
   const shown = themes[current]!;
-  // First the diagram's own theme, which follows the file; then every theme
-  // as the reader's choice, dark ones together and light together, as the
-  // playground's picker has them, so stepping through the list doesn't flash
-  // between black and white.
-  const group = (light: boolean) =>
-    Object.keys(themes)
-      .filter((one) => (schemeOf(themes[one]!.theme) === 'light') === light)
-      .map((one) => `<option value="${escapeHtml(one)}">${escapeHtml(one)}</option>`)
-      .join('');
-  const picker =
-    `<option value="" selected>Diagram's theme (${escapeHtml(current)})</option>` +
-    `<optgroup label="Dark">${group(false)}</optgroup><optgroup label="Light">${group(true)}</optgroup>`;
+  // The theme list: first the diagram's own theme, which follows the file;
+  // then every theme as the reader's choice, dark ones together and light
+  // together, as the playground's picker has them, so stepping through the
+  // list doesn't flash between black and white.
+  const group = (light: boolean) => Object.keys(themes).filter((one) => (schemeOf(themes[one]!.theme) === 'light') === light);
   // The shown theme goes in whole; another is only the colors that differ
   // from it, when the rest of the drawing is the same, as it is since a theme
   // moves nothing. That keeps the page near its size with one theme.
@@ -224,19 +249,30 @@ function page({ title, name, drawn, source, findings, themes, current, graph }: 
     const same = theirs.length === ours.length && theirs.every((piece, i) => i % 2 === 1 || piece === ours[i]);
     return same ? theirs.filter((_, i) => i % 2 === 1) : other;
   };
+  // Each set of drawings, with guides one way, packed against its own drawing
+  // in the page's first theme: guides add things, so the two sets differ in
+  // more than colors and can't be packed against each other.
+  const packAll = (set: Record<string, ThemeView>) => {
+    const base = set[current]!;
+    return Object.fromEntries(
+      Object.entries(set).map(([one, view]) => [
+        one,
+        one === current
+          ? { svg: view.svg, tagged: view.tagged, colors: view.colors, scheme: view.scheme }
+          : { svg: pack(view.svg, base.svg), tagged: pack(view.tagged, base.tagged), colors: view.colors, scheme: view.scheme },
+      ]),
+    );
+  };
   const data = {
     name,
     source,
     current,
     varies: VARIES.source,
-    themes: Object.fromEntries(
-      Object.entries(themes).map(([one, view]) => [
-        one,
-        one === current
-          ? { svg: view.svg, tagged: view.tagged, colors: view.colors, scheme: view.scheme }
-          : { svg: pack(view.svg, shown.svg), tagged: pack(view.tagged, shown.tagged), colors: view.colors, scheme: view.scheme },
-      ]),
-    ),
+    themeGroups: { dark: group(false), light: group(true) },
+    themes: packAll(themes),
+    flipped: flipped && packAll(flipped),
+    guidesShown,
+    guideCount,
     findings: findings.map((finding) => ({ kind: finding.kind, message: finding.message, line: finding.line })),
     graph,
   };
@@ -253,7 +289,6 @@ function page({ title, name, drawn, source, findings, themes, current, graph }: 
         '--sel: #e0b25a; --up: #22b98c; --down: #e5484d;',
       ].join(' '),
     )
-    .replace('{{themes}}', () => picker)
     .replace('{{drawing}}', () => shown.tagged)
     .replace('{{data}}', () => scriptJson(data));
 }
@@ -354,9 +389,56 @@ const PAGE = `<!doctype html>
     padding: 3px 6px; cursor: pointer;
   }
   select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-  .check { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; cursor: pointer; white-space: nowrap; }
-  .check input { margin: 0; accent-color: var(--accent); cursor: inherit; }
-  .check:has(input:disabled) { opacity: 0.45; cursor: default; }
+
+  /* ---- the menus, and the keys that reach them ----
+     What the keys act on is ringed in amber, and the amber moves down with
+     them: the bar after m, then the open menu and the row the arrows are on,
+     then the theme list. The strip under the bar says where the keys are and
+     how to get out. */
+  .menu > button { position: relative; }
+  kbd {
+    font: 11px ui-monospace, Menlo, Consolas, monospace; padding: 0 5px; border-radius: 3px;
+    border: 1px solid color-mix(in srgb, var(--rule) 70%, transparent); color: var(--muted);
+  }
+  kbd.tag {
+    display: none; position: absolute; top: -8px; right: -7px; z-index: 6;
+    padding: 0 4px; border: 0; font-weight: 700; background: var(--sel); color: #1a1406;
+  }
+  #full { position: relative; }
+  .tools.keyed { outline: 2px solid var(--sel); outline-offset: 4px; border-radius: 6px; }
+  .tools.keyed kbd.tag { display: inline; }
+  .menu > button.open { border-color: var(--sel); background: color-mix(in srgb, var(--sel) 22%, transparent); }
+  .menu-list { min-width: 15rem; }
+  .menu-list .row {
+    display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+    border-color: transparent; padding: 5px 8px;
+  }
+  .menu-list .row .name { flex: 1; }
+  .menu-list .row .value { color: var(--muted); }
+  .menu-list .row.cur { background: color-mix(in srgb, var(--ink) 12%, transparent); box-shadow: inset 3px 0 0 var(--sel); }
+  /* Its rows, not the list, so the theme list inside it stays solid. */
+  .menu-list.behind > .row, .menu-list.behind > hr { opacity: 0.5; }
+  .menu-list.sub { right: calc(100% + 6px); top: 0; max-height: 70vh; overflow: auto; gap: 0; }
+  .menu-list .group { padding: 6px 8px 2px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .menu-list .mark { width: 12px; flex: none; color: var(--up); }
+  /* A switch: green and to the right when on, gray and to the left when off,
+     with the word beside it, so the state never rests on color alone. */
+  .sw { flex: none; position: relative; width: 30px; height: 16px; border-radius: 9px; background: color-mix(in srgb, var(--ink) 25%, transparent); }
+  .sw::after { content: ''; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: color-mix(in srgb, var(--ink) 55%, transparent); }
+  .switch[aria-checked="true"] .sw { background: #2f9e5a; }
+  .switch[aria-checked="true"] .sw::after { left: 16px; background: #fff; }
+  .switch .word { width: 2em; text-align: right; font-size: 12px; color: var(--muted); }
+  .switch[aria-checked="true"] .word { color: var(--up); }
+  .switch[aria-checked="false"] .name { color: var(--muted); }
+  .menu-list .row:disabled { opacity: 0.45; }
+  #strip {
+    display: flex; justify-content: space-between; gap: 16px; padding: 3px 16px; font-size: 12px;
+    background: color-mix(in srgb, var(--sel) 16%, var(--page)); color: var(--ink);
+    border-bottom: 1px solid color-mix(in srgb, var(--sel) 45%, transparent);
+  }
+  #strip[hidden] { display: none; }
+  #strip .crumbs b { color: var(--sel); }
+  #strip .hint { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   /* ---- what is selected ---- */
   #selected { padding: 10px 16px 12px; overflow: auto; flex: 0 1 auto; min-height: 0; }
@@ -414,6 +496,7 @@ const PAGE = `<!doctype html>
     padding: 6px 8px; margin: 2px 0;
   }
   aside li button.chosen { border-color: var(--accent); }
+  aside li.none { padding: 6px 8px; color: var(--muted); font-size: 13px; }
   .where { color: var(--muted); font-variant-numeric: tabular-nums; }
   .kind { color: var(--accent); }
   .note { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
@@ -436,25 +519,35 @@ const PAGE = `<!doctype html>
     <button id="fit" type="button" title="The whole diagram in view (0)">Fit</button>
     <button id="actual" type="button" title="The drawing at its own scale (1)">100%</button>
     <span class="gap"></span>
-    <button id="full" type="button" title="Full screen (f)">Full screen</button>
+    <button id="full" type="button" title="Full screen (f)"><span class="label">Full screen</span><kbd class="tag">f</kbd></button>
     <span class="menu">
-      <button id="save" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="save-list">Save ▾</button>
-      <span id="save-list" class="menu-list" hidden>
-        <button id="save-page" type="button" title="Save this page as one HTML file, to keep or send">This page</button>
-        <button id="save-source" type="button" title="Save the .reladraw file this page was drawn from">.reladraw source</button>
+      <button id="save" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="save-list">Save ▾<kbd class="tag">s</kbd></button>
+      <span id="save-list" class="menu-list" role="menu" hidden>
+        <button id="save-page" class="row" type="button" role="menuitem" data-key="p" title="Save this page as one HTML file, to keep or send"><span class="name">This page</span><kbd>p</kbd></button>
+        <button id="save-source" class="row" type="button" role="menuitem" data-key="r" title="Save the .reladraw file this page was drawn from"><span class="name">.reladraw source</span><kbd>r</kbd></button>
         <hr>
-        <button id="save-svg" type="button" title="Save the picture as an SVG file">SVG</button>
-        <button id="save-png" type="button" title="Save the picture as a PNG, at twice its size">PNG</button>
-        <button id="copy-svg" type="button" title="Copy the picture's SVG to the clipboard">Copy SVG</button>
+        <button id="save-svg" class="row" type="button" role="menuitem" data-key="s" title="Save the picture as an SVG file"><span class="name">SVG</span><kbd>s</kbd></button>
+        <button id="save-png" class="row" type="button" role="menuitem" data-key="n" title="Save the picture as a PNG, at twice its size"><span class="name">PNG</span><kbd>n</kbd></button>
+        <button id="copy-svg" class="row" type="button" role="menuitem" data-key="c" title="Copy the picture's SVG to the clipboard"><span class="name">Copy SVG</span><kbd>c</kbd></button>
       </span>
     </span>
-    <select id="theme" aria-label="Theme" title="Draw the diagram in another theme">{{themes}}</select>
-    <span class="gap"></span>
-    <button id="toggle-panel" type="button" aria-controls="side" title="Show or hide the side panel (p)">Panel</button>
-    <label class="check" title="Show the side panel only while something is selected or the findings are open"><input id="auto-hide" type="checkbox"> Auto-hide</label>
-    <button id="toggle-findings" type="button" aria-controls="findings"></button>
+    <span class="menu">
+      <button id="view-button" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="view-list">View ▾<kbd class="tag">v</kbd></button>
+      <span id="view-list" class="menu-list" role="menu" hidden>
+        <button id="theme-row" class="row" type="button" role="menuitem" data-key="t" aria-haspopup="true" title="Draw the diagram in another theme"><span class="name">Theme <span class="value"></span> ▸</span><kbd>t</kbd></button>
+        <hr>
+        <button id="panel-row" class="row switch" type="button" role="menuitemcheckbox" data-key="p" title="Show or hide the side panel"><span class="sw"></span><span class="name">Side panel</span><span class="word"></span><kbd>p</kbd></button>
+        <button id="auto-row" class="row switch" type="button" role="menuitemcheckbox" data-key="a" title="Show the side panel only while something is selected or the findings are open"><span class="sw"></span><span class="name">Auto-hide panel</span><span class="word"></span><kbd>a</kbd></button>
+        <hr>
+        <button id="findings-row" class="row switch" type="button" role="menuitemcheckbox" data-key="f" title="Show or hide the findings in the side panel"><span class="sw"></span><span class="name">Findings</span><span class="word"></span><kbd>f</kbd></button>
+        <hr>
+        <button id="guides-row" class="row switch" type="button" role="menuitemcheckbox" data-key="g" title="Draw the guides: everything written with guide in front"><span class="sw"></span><span class="name">Guides</span><span class="word"></span><kbd>g</kbd></button>
+        <span id="theme-list" class="menu-list sub" role="menu" hidden></span>
+      </span>
+    </span>
   </div>
 </header>
+<div id="strip" hidden><span class="crumbs"></span><span class="hint"></span></div>
 <main>
   <div id="view">
     <div id="stage">
@@ -487,7 +580,10 @@ const PAGE = `<!doctype html>
   // Another theme is carried as the colors that differ from the first, put
   // back in place the first time it is shown.
   var VARIES = new RegExp(DATA.varies, 'gi');
-  var first = DATA.themes[DATA.current];
+  // Whether guides are drawn, which the View menu's switch changes. The
+  // drawings with guides the other way are a second set, packed the same way
+  // against its own first theme.
+  var guidesShown = DATA.guidesShown;
   function unpack(packed, base) {
     if (typeof packed === 'string') return packed;
     var pieces = base.split(VARIES);
@@ -495,8 +591,10 @@ const PAGE = `<!doctype html>
     return pieces.join('');
   }
   function themed(name) {
-    var view = DATA.themes[name];
+    var set = guidesShown === DATA.guidesShown || !DATA.flipped ? DATA.themes : DATA.flipped;
+    var view = set[name];
     if (!view.unpacked) {
+      var first = set[DATA.current];
       view.svg = unpack(view.svg, first.svg);
       view.tagged = unpack(view.tagged, first.tagged);
       view.unpacked = true;
@@ -524,7 +622,7 @@ const PAGE = `<!doctype html>
   }
   full.onclick = toggleFull;
   document.addEventListener('fullscreenchange', function () {
-    full.textContent = document.fullscreenElement ? 'Exit full screen' : 'Full screen';
+    full.querySelector('.label').textContent = document.fullscreenElement ? 'Exit full screen' : 'Full screen';
   });
 
   /* ---- saving ---- */
@@ -542,9 +640,10 @@ const PAGE = `<!doctype html>
   }
 
   function flash(button, text) {
-    var was = button.textContent;
-    button.textContent = text;
-    setTimeout(function () { button.textContent = was; }, 1200);
+    var label = button.querySelector('.name') || button;
+    var was = label.textContent;
+    label.textContent = text;
+    setTimeout(function () { label.textContent = was; }, 1200);
   }
 
   // Chrome and Edge ask where to save and under what name, as the
@@ -583,17 +682,9 @@ const PAGE = `<!doctype html>
 
   // Every way out of the page is under one Save button: the page, its
   // source, and the picture. The list stays open after a choice, so "Copied"
-  // can be read, and closes on a click elsewhere or Escape.
+  // can be read. It is one of the menus (below), opened by a click or by m s.
   var saveButton = document.getElementById('save');
   var saveList = document.getElementById('save-list');
-  function showSave(open) {
-    saveList.hidden = !open;
-    saveButton.setAttribute('aria-expanded', String(open));
-  }
-  saveButton.onclick = function () { showSave(saveList.hidden); };
-  document.addEventListener('click', function (event) {
-    if (!saveList.hidden && !event.target.closest('.menu')) showSave(false);
-  });
 
   var savePage = document.getElementById('save-page');
   savePage.onclick = function () {
@@ -696,8 +787,19 @@ const PAGE = `<!doctype html>
 
   var panel = document.getElementById('findings');
   var list = document.getElementById('finding-list');
-  var toggle = document.getElementById('toggle-findings');
   var count = DATA.findings.length;
+
+  // A row of the View menu that is on or off: its switch, and the word beside it.
+  function setSwitch(row, on) {
+    row.setAttribute('aria-checked', String(on));
+    row.querySelector('.word').textContent = on ? 'on' : 'off';
+  }
+  var panelRow = document.getElementById('panel-row');
+  var autoRow = document.getElementById('auto-row');
+  var findingsRow = document.getElementById('findings-row');
+  var guidesRow = document.getElementById('guides-row');
+  findingsRow.querySelector('.name').textContent = 'Findings (' + count + ')';
+  guidesRow.querySelector('.name').textContent = 'Guides (' + DATA.guideCount + ')';
 
   /* ---- the side panel: shown, hidden, or shown only when wanted ---- */
 
@@ -705,8 +807,6 @@ const PAGE = `<!doctype html>
   // while something is selected or the findings are open. Both choices are
   // remembered in this browser for every reladraw page.
   var side = document.getElementById('side');
-  var panelButton = document.getElementById('toggle-panel');
-  var autoHideBox = document.getElementById('auto-hide');
   var KEPT = 'reladraw-page-panel';
   var panelOn = true;
   var autoHide = false;
@@ -721,42 +821,41 @@ const PAGE = `<!doctype html>
     side.hidden = !(panelOn && (!autoHide || selection || !panel.hidden));
     // A finding lights what it is about only while the finding can be seen.
     if ((panel.hidden || side.hidden) && lit && lit.length) unlight();
-    panelButton.setAttribute('aria-pressed', String(panelOn));
-    if (!toggle.disabled) toggle.setAttribute('aria-pressed', String(panelOn && !panel.hidden));
-    autoHideBox.checked = autoHide;
-    autoHideBox.disabled = !panelOn;
+    setSwitch(panelRow, panelOn);
+    setSwitch(autoRow, autoHide);
+    autoRow.disabled = !panelOn;
+    setSwitch(findingsRow, panelOn && !panel.hidden);
   }
   function setPanel(on) {
     panelOn = on;
     keepPanel();
     layoutSide();
   }
-  panelButton.onclick = function () { setPanel(!panelOn); };
-  autoHideBox.onchange = function () {
-    autoHide = autoHideBox.checked;
+  function setAutoHide(on) {
+    if (!panelOn) return;
+    autoHide = on;
     keepPanel();
     layoutSide();
-  };
+  }
+  panelRow.onclick = function () { setPanel(!panelOn); };
+  autoRow.onclick = function () { setAutoHide(!autoHide); };
 
   function showPanel(open) {
     panel.hidden = !open;
-    toggle.setAttribute('aria-pressed', String(open));
     layoutSide();
   }
+  // Asking for the findings shows the panel they are in.
+  function flipFindings() {
+    if (!panelOn) { panelOn = true; keepPanel(); showPanel(true); }
+    else showPanel(panel.hidden);
+  }
+  findingsRow.onclick = flipFindings;
   if (count === 0) {
-    toggle.textContent = 'No findings';
-    toggle.disabled = true;
+    list.append(element('li', 'none', 'No findings.'));
     panel.hidden = true;
   } else {
-    toggle.textContent = count === 1 ? '1 finding' : count + ' findings';
-    // Asking for the findings shows the panel they are in.
-    toggle.onclick = function () {
-      if (!panelOn) { panelOn = true; keepPanel(); showPanel(true); }
-      else showPanel(panel.hidden);
-    };
     // Open from the start, unless the panel is to stay out of the way.
     panel.hidden = autoHide;
-    toggle.setAttribute('aria-pressed', String(!autoHide));
   }
 
   var lit = [];
@@ -1014,21 +1113,13 @@ const PAGE = `<!doctype html>
     if (link && svg.contains(link)) event.preventDefault();
   });
 
-  /* ---- the theme picker ---- */
+  /* ---- drawing again: another theme, or guides the other way ---- */
 
-  // "Diagram's theme" follows the file, so an edit to its theme shows on the
-  // next render. Any other choice is the reader's, and holds on every reladraw
-  // page in this browser, whatever its file says, until the diagram's theme
-  // is chosen again.
-  var picker = document.getElementById('theme');
   var schemeMeta = document.querySelector('meta[name="color-scheme"]');
-  var CHOSEN_THEME = 'reladraw-page-theme';
 
-  // The same drawing in other colors: nothing moves, so the view, the
-  // selection and the panel stay as they were.
-  function showTheme(name) {
-    if (!DATA.themes[name] || name === shownTheme) return;
-    shownTheme = name;
+  // Neither a theme nor guides move anything, so the view, the selection and
+  // the panel stay as they were.
+  function redraw() {
     var next = shown();
     Object.keys(next.colors).forEach(function (key) { document.documentElement.style.setProperty(key, next.colors[key]); });
     schemeMeta.setAttribute('content', next.scheme);
@@ -1042,31 +1133,238 @@ const PAGE = `<!doctype html>
     select(selection);
   }
 
-  picker.onchange = function () {
+  function showTheme(name) {
+    if (!DATA.themes[name] || name === shownTheme) return;
+    shownTheme = name;
+    redraw();
+  }
+
+  // Guides start as the file or --guides says, and a flip lasts for this page
+  // only: guides show how one diagram was built, not how a reader likes to
+  // read. With none in the diagram the switch still works, and draws nothing new.
+  function setGuides(on) {
+    if (on === guidesShown) return;
+    guidesShown = on;
+    setSwitch(guidesRow, on);
+    if (DATA.flipped) redraw();
+  }
+  setSwitch(guidesRow, guidesShown);
+  guidesRow.onclick = function () { setGuides(!guidesShown); };
+
+  /* ---- the theme list ---- */
+
+  // "Diagram's theme" follows the file, so an edit to its theme shows on the
+  // next render. Any other choice is the reader's, and holds on every reladraw
+  // page in this browser, whatever its file says, until the diagram's theme
+  // is chosen again.
+  var CHOSEN_THEME = 'reladraw-page-theme';
+  var chosenName = '';
+  var themeRow = document.getElementById('theme-row');
+  var themeList = document.getElementById('theme-list');
+  var themeItems = [];
+
+  function addThemeItem(value, label) {
+    var row = element('button', 'row');
+    row.type = 'button';
+    row.setAttribute('role', 'menuitemradio');
+    row.append(element('span', 'mark'), element('span', 'name', label));
+    row.onclick = function () { keepTheme(value); };
+    themeItems.push({ value: value, row: row });
+    themeList.append(row);
+  }
+  addThemeItem('', "Diagram's theme (" + DATA.current + ')');
+  [['Dark', DATA.themeGroups.dark], ['Light', DATA.themeGroups.light]].forEach(function (group) {
+    if (group[1].length === 0) return;
+    themeList.append(element('span', 'group', group[0]));
+    group[1].forEach(function (name) { addThemeItem(name, name); });
+  });
+
+  function showChosen() {
+    themeRow.querySelector('.value').textContent = '· ' + (chosenName || "Diagram's theme");
+    themeItems.forEach(function (item) {
+      var on = item.value === chosenName;
+      item.row.setAttribute('aria-checked', String(on));
+      item.row.querySelector('.mark').textContent = on ? '\\u25CF' : '';
+    });
+  }
+
+  function keepTheme(value) {
+    chosenName = value;
     try {
-      if (picker.value) localStorage.setItem(CHOSEN_THEME, picker.value);
+      if (value) localStorage.setItem(CHOSEN_THEME, value);
       else localStorage.removeItem(CHOSEN_THEME);
     } catch (e) {}
-    showTheme(picker.value || DATA.current);
-  };
+    showTheme(value || DATA.current);
+    showChosen();
+    if (level === 'theme') setLevel('view', true);
+  }
 
   // A theme chosen on an earlier page, if this page has it.
   try {
-    var chosenTheme = localStorage.getItem(CHOSEN_THEME);
-    if (chosenTheme && DATA.themes[chosenTheme]) {
-      picker.value = chosenTheme;
-      showTheme(chosenTheme);
+    var kept = localStorage.getItem(CHOSEN_THEME);
+    if (kept && DATA.themes[kept]) {
+      chosenName = kept;
+      showTheme(kept);
     }
   } catch (e) {}
+  showChosen();
 
-  /* ---- keys, beyond the zoom's own ---- */
+  /* ---- the menus, by pointer and by key ---- */
 
+  // The keys work in levels: the diagram; m, the bar, each control wearing
+  // its letter; then a menu, View or Save; then, from View, the theme list.
+  // A letter means what the level it is pressed in says, so no letter is used
+  // up however deep the menus go. Keys that aren't letters mean the same at
+  // every level: Backspace steps back one level, and beneath the menus lets
+  // go of a grab, then a lit finding, then the selection; Escape goes straight
+  // back to the plain diagram from anywhere; Enter does what the row the
+  // arrows are on does. Opening a menu with a click puts the keys there too.
+  var tools = document.querySelector('.tools');
+  var viewButton = document.getElementById('view-button');
+  var viewList = document.getElementById('view-list');
+  var strip = document.getElementById('strip');
+  var level = null;
+  var cursor = 0;
+  var themeBefore = null;
+
+  var STRIP = {
+    bar: ['<b>Menu</b>', 'letter to open \\u00B7 \\u232B back \\u00B7 Esc out'],
+    view: ['Menu \\u203A <b>View</b>', 'letter to flip \\u00B7 \\u2191\\u2193 Enter \\u00B7 \\u232B back \\u00B7 Esc out'],
+    save: ['Menu \\u203A <b>Save</b>', 'letter to save \\u00B7 \\u2191\\u2193 Enter \\u00B7 \\u232B back \\u00B7 Esc out'],
+    theme: ['Menu \\u203A View \\u203A <b>Theme</b>', '\\u2191\\u2193 to try \\u00B7 Enter keep \\u00B7 \\u232B back \\u00B7 Esc out'],
+  };
+
+  function rows() {
+    if (level === 'view') return Array.prototype.slice.call(viewList.querySelectorAll(':scope > .row'));
+    if (level === 'save') return Array.prototype.slice.call(saveList.querySelectorAll(':scope > .row'));
+    if (level === 'theme') return themeItems.map(function (item) { return item.row; });
+    return [];
+  }
+
+  function markCursor() {
+    each(document.querySelectorAll('.menu-list .row.cur'), function (row) { row.classList.remove('cur'); });
+    var all = rows();
+    if (!all.length) return;
+    cursor = Math.max(0, Math.min(cursor, all.length - 1));
+    all[cursor].classList.add('cur');
+    if (level === 'theme') all[cursor].scrollIntoView({ block: 'nearest' });
+  }
+
+  // \`kept\`: leaving the theme list keeps the theme moved to, as Enter or a
+  // click does; any other way out goes back to the theme shown before.
+  function setLevel(next, kept) {
+    if (level === 'theme' && next !== 'theme' && !kept && themeBefore !== null) showTheme(themeBefore);
+    if (next === 'theme' && level !== 'theme') {
+      themeBefore = shownTheme;
+      cursor = 0;
+      themeItems.forEach(function (item, i) { if (item.value === chosenName) cursor = i; });
+    } else if (next !== level) {
+      // Back from the theme list, the arrows are on Theme, the first row.
+      cursor = 0;
+    }
+    level = next;
+    tools.classList.toggle('keyed', level === 'bar');
+    saveList.hidden = level !== 'save';
+    saveButton.classList.toggle('open', level === 'save');
+    saveButton.setAttribute('aria-expanded', String(level === 'save'));
+    viewList.hidden = level !== 'view' && level !== 'theme';
+    viewButton.classList.toggle('open', level === 'view' || level === 'theme');
+    viewButton.setAttribute('aria-expanded', String(level === 'view' || level === 'theme'));
+    themeList.hidden = level !== 'theme';
+    viewList.classList.toggle('behind', level === 'theme');
+    strip.hidden = level === null;
+    if (level) {
+      strip.querySelector('.crumbs').innerHTML = STRIP[level][0];
+      strip.querySelector('.hint').textContent = STRIP[level][1];
+    }
+    markCursor();
+  }
+
+  function back() {
+    if (level === 'theme') setLevel('view');
+    else if (level === 'view' || level === 'save') setLevel('bar');
+    else setLevel(null);
+  }
+
+  // Escape: the plain diagram, in one press, whatever was open or lit.
+  function plain() {
+    setLevel(null);
+    zoom.grab(false);
+    unlight();
+    select(null);
+  }
+
+  saveButton.onclick = function () { setLevel(level === 'save' ? null : 'save'); };
+  viewButton.onclick = function () { setLevel(level === 'view' || level === 'theme' ? null : 'view'); };
+  themeRow.onclick = function () { setLevel(level === 'theme' ? 'view' : 'theme'); };
+  document.addEventListener('click', function (event) {
+    if (level && !(event.target.closest && event.target.closest('.menu'))) setLevel(null);
+  });
+
+  function move(by) {
+    var all = rows();
+    if (!all.length) return;
+    cursor = (cursor + by + all.length) % all.length;
+    markCursor();
+    if (level === 'theme') showTheme(themeItems[cursor].value || DATA.current);
+  }
+
+  function enter() {
+    var all = rows();
+    if (!all.length) return;
+    if (level === 'theme') keepTheme(themeItems[cursor].value);
+    else all[cursor].click();
+  }
+
+  var ZOOM_KEYS = { '+': 1, '=': 1, '-': 1, '_': 1, '0': 1, '1': 1 };
+
+  // On the window, before the zoom's own keys, so a menu's letters reach the
+  // menu and not the diagram underneath: g flips guides in View, not a grab.
+  window.addEventListener('keydown', function (event) {
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.target.closest && event.target.closest('input, textarea, select, [contenteditable]')) return;
+    var key = event.key;
+    if (key === 'Escape') plain();
+    else if (level === null) {
+      if (key === 'm' || key === 'M') setLevel('bar');
+      else if (key === 'Backspace') {
+        if (zoom.held()) zoom.grab(false);
+        else if (lit.length) unlight();
+        else if (selection) select(null);
+        else return;
+      } else return;
+    } else {
+      if (ZOOM_KEYS[key] || key === 'Tab') return;
+      if (key === 'Backspace') back();
+      else if (key === 'ArrowDown') move(1);
+      else if (key === 'ArrowUp') move(-1);
+      else if (key === 'Enter' || key === ' ') enter();
+      else if (key.length === 1) {
+        var letter = key.toLowerCase();
+        if (level === 'bar') {
+          if (letter === 'v') setLevel('view');
+          else if (letter === 's') setLevel('save');
+          else if (letter === 'f' && !full.hidden) { setLevel(null); toggleFull(); }
+        } else if (level === 'view' || level === 'save') {
+          rows().forEach(function (row, i) {
+            if (row.getAttribute('data-key') !== letter) return;
+            cursor = i;
+            markCursor();
+            row.click();
+          });
+        }
+      } else if (key.indexOf('Arrow') !== 0) return;
+    }
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }, true);
+
+  // With the menus closed, p and f still show the panel and go full screen.
   document.addEventListener('keydown', function (event) {
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.target.closest && event.target.closest('input, textarea, select')) return;
     if (event.key === 'p') setPanel(!panelOn);
     else if (event.key === 'f' && !full.hidden) toggleFull();
-    else if (event.key === 'Escape') { showSave(false); unlight(); select(null); }
     else return;
     event.preventDefault();
   });

@@ -1284,7 +1284,7 @@ function panZoom(view, stage, label, buttons) {
     event.preventDefault();
   });
 
-  return { show: show, open: open, fit: fit, pan: pan };
+  return { show: show, open: open, fit: fit, pan: pan, grab: grab, held: function () { return held; } };
 }
 
 </script>
