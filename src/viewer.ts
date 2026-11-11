@@ -2,7 +2,8 @@
  * The pan and zoom shared by the page `render --page` writes and the
  * playground, so the two look at a diagram the same way: − and +, Fit, 100%,
  * the zoom always shown and saying "Fit" while fitted, the wheel, a pinch, a
- * drag, a double-click, and the keys + - 0 1.
+ * drag, a double-click, the keys + - 0 1, and g to grab the diagram so the
+ * arrows pan it.
  *
  * It is browser code kept as a string, since it runs in a page, not here: the
  * page writes it into its script, and the playground's build writes it into
@@ -169,9 +170,55 @@ function panZoom(view, stage, label, buttons) {
   // The view's own size, not the window's: a dragged divider changes it too.
   new ResizeObserver(refit).observe(view);
 
+  function typing(target) {
+    return !!(target && target.closest && target.closest('input, textarea, select, [contenteditable]'));
+  }
+
+  // g grabs the diagram, and while it is held the arrows pan it; g again or
+  // Escape lets go, and the arrows go back to whatever else uses them. The
+  // keys are taken before the page's own handlers see them, so a held
+  // diagram's arrows don't also move a list or a divider, and its Escape lets
+  // go without also clearing what is selected.
+  var held = false;
+  var hint = document.createElement('div');
+  hint.className = 'grab-hint';
+  hint.textContent = 'Arrows pan · Shift for bigger steps · g or Esc to let go';
+  hint.hidden = true;
+  view.appendChild(hint);
+
+  function grab(on) {
+    held = on;
+    hint.hidden = !on;
+    view.classList.toggle('grabbed', on);
+  }
+
+  var ARROWS = { ArrowLeft: [1, 0], ArrowRight: [-1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] };
+
   document.addEventListener('keydown', function (event) {
     if (event.ctrlKey || event.metaKey || event.altKey) return;
-    if (event.target.closest && event.target.closest('input, textarea, select, [contenteditable]')) return;
+    if (typing(event.target)) return;
+    var arrow = ARROWS[event.key];
+    if (event.key === 'g' || event.key === 'G') grab(!held);
+    else if (held && event.key === 'Escape') grab(false);
+    else if (held && arrow) {
+      // A tenth of the view a press, half of it with Shift; held down, the
+      // key repeats.
+      var room = size();
+      var part = event.shiftKey ? 0.5 : 0.1;
+      pan(arrow[0] * room.w * part, arrow[1] * room.h * part);
+    } else return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }, true);
+
+  // Starting to type lets go, so the arrows move the cursor again.
+  document.addEventListener('focusin', function (event) {
+    if (held && typing(event.target)) grab(false);
+  });
+
+  document.addEventListener('keydown', function (event) {
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    if (typing(event.target)) return;
     if (event.key === '+' || event.key === '=') zoomMiddle(1.25);
     else if (event.key === '-' || event.key === '_') zoomMiddle(0.8);
     else if (event.key === '0') fit();

@@ -234,6 +234,16 @@ const PAGE = `<!doctype html>
   main { position: relative; flex: 1; display: flex; min-height: 0; }
   #view { position: relative; flex: 1; overflow: hidden; touch-action: none; cursor: grab; }
   #view.dragging { cursor: grabbing; }
+  #view.grabbed::after {
+    content: ''; position: absolute; inset: 0; z-index: 3; pointer-events: none;
+    border: 2px solid var(--accent);
+  }
+  .grab-hint {
+    position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 3;
+    padding: 3px 10px; border-radius: 4px; font-size: 12px; white-space: nowrap; pointer-events: none;
+    background: var(--accent); color: var(--on-accent);
+  }
+  .grab-hint[hidden] { display: none; }
   #stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
   #stage svg { display: block; }
   #view g[data-name].hover { filter: drop-shadow(0 0 3px var(--accent)); }
