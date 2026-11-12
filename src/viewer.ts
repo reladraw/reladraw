@@ -54,7 +54,9 @@ function panZoom(view, stage, label, buttons) {
 
   function fitScale() {
     var room = size();
-    return Math.max(MIN, Math.min((room.w - 32) / natural.w, (room.h - 32) / natural.h));
+    // More room above and below, so a fitted drawing stays clear of the
+    // controls floating in the picture's top-left and bottom-right corners.
+    return Math.max(MIN, Math.min((room.w - 32) / natural.w, (room.h - 112) / natural.h));
   }
 
   function fit() {

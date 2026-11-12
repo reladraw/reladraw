@@ -71,7 +71,8 @@ export function playgroundPage(playground: Playground): string {
   return page(parts, editing, {
     title: folder !== undefined ? `reladraw · ${folder}` : 'reladraw playground: write diagrams in the browser',
     heading: 'reladraw',
-    drawn: folder !== undefined ? `local playground · ${folder} · not saved to a file` : 'a diagram language where you say where things go',
+    // The hosted playground has no line under its name: the page shows what it is.
+    drawn: folder !== undefined ? `local playground · ${folder} · not saved to a file` : '',
     head: playground.head ?? '',
     library: playground.library ?? '',
   });
@@ -150,7 +151,8 @@ const PAGE = `<!doctype html>
     padding: 10px 16px;
     border-bottom: 1px solid color-mix(in srgb, var(--rule) 45%, transparent);
   }
-  .heading { flex: 1 1 16rem; min-width: 0; }
+  .heading { flex: 0 1 auto; min-width: 0; }
+  header .tools { margin-left: auto; }
   h1 { margin: 0; font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
   .drawn { margin: 0; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
   .menu-list hr { width: 100%; margin: 2px 0; border: 0; border-top: 1px solid color-mix(in srgb, var(--rule) 45%, transparent); }
@@ -329,6 +331,10 @@ const PAGE = `<!doctype html>
   @media (prefers-reduced-motion: reduce) { #view g[data-edge] :is(line, path, polyline) { animation: none !important; } }
   aside h2 { margin: 0; padding: 10px 16px 6px; font-size: 13px; font-weight: 600; }
   aside h2 .what { display: block; font-weight: 400; font-size: 12px; color: var(--muted); }
+  /* Close: a small square button, bordered like the buttons beside it. */
+  button.close { width: 24px; height: 24px; padding: 0; font-size: 17px; line-height: 1; color: var(--ink);
+    display: inline-flex; align-items: center; justify-content: center; }
+  aside h2 .close { float: right; margin: -2px -8px 0 8px; }
   aside ol { list-style: none; margin: 0; padding: 0 8px 12px; overflow: auto; }
   aside li button {
     display: block; width: 100%; text-align: left; white-space: normal; border-color: transparent;
@@ -336,6 +342,22 @@ const PAGE = `<!doctype html>
   }
   aside li button.chosen { border-color: var(--accent); }
   aside li.none { padding: 6px 8px; color: var(--muted); font-size: 13px; }
+  /* Findings from an older version of the source: dimmed, not cleared. */
+  aside li.again, #band .again { padding: 6px 8px; color: var(--muted); font-size: 12px; }
+  aside.stale li:not(.again):not(.error), #band.stale .found { opacity: 0.5; }
+  /* While the source is open, the findings sit in a band under the picture,
+     taking height from it, never width. */
+  #picture { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  #band { flex: none; max-height: 35%; overflow: auto; padding: 4px 12px 8px; font-size: 13px;
+    border-top: 1px solid color-mix(in srgb, var(--rule) 45%, transparent); }
+  #band[hidden] { display: none; }
+  #band .head { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
+  #band .head b { font-size: 12px; font-weight: 600; color: var(--muted); }
+  #band .head .gap { flex: 1; }
+  #band .head button:not(.close) { font-size: 12px; padding: 1px 8px; }
+  #band .found button { display: block; width: 100%; text-align: left; white-space: normal; border-color: transparent; padding: 3px 6px; }
+  #band .found button.chosen { border-color: var(--accent); }
+  #band .again { padding: 2px 0; }
   aside li.error { padding: 6px 8px; margin: 2px 0; border-left: 3px solid var(--down); font-size: 13px; }
   aside li.error .kind { color: var(--down); }
   #live {
@@ -353,12 +375,34 @@ const PAGE = `<!doctype html>
     background: color-mix(in srgb, var(--ink) 4%, var(--page));
   }
   #editor[hidden] { display: none; }
-  .src-head { display: flex; align-items: center; gap: 6px; padding: 6px 10px; font-size: 12.5px;
+  /* The picture's controls float over it: Check at its top left, the zoom
+     on a card at its bottom right. They sit beside the view, not in it, so a
+     press on them never starts a pan. */
+  #canvas { position: relative; flex: 1; display: flex; min-height: 0; }
+  .floating { position: absolute; z-index: 4;
+    background: color-mix(in srgb, var(--ink) 7%, var(--page));
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45); }
+  .floating[hidden] { display: none; }
+  #check { left: 12px; top: 12px; padding: 5px 14px; }
+  #check:hover { background: color-mix(in srgb, var(--ink) 14%, var(--page)); }
+  #zoom-card { right: 12px; bottom: 12px; display: flex; align-items: center; gap: 5px; padding: 4px 5px; border-radius: 9px;
+    border: 1px solid color-mix(in srgb, var(--rule) 55%, transparent); }
+  /* The card a shade darker than its buttons, so each reads as a button. */
+  #zoom-card { background: color-mix(in srgb, var(--ink) 4%, var(--page)); }
+  #zoom-card button { background: color-mix(in srgb, var(--ink) 13%, var(--page)); }
+  #zoom-card button:hover { background: color-mix(in srgb, var(--ink) 20%, var(--page)); }
+  #zoom-card button.pm { font-size: 17px; line-height: 1; padding: 2px 9px; min-width: 30px; }
+  #zoom-card .divider { width: 1px; height: 18px; margin: 0 3px; background: color-mix(in srgb, var(--rule) 70%, transparent); }
+  body:has(.tools.keyed) #check kbd.tag { display: inline; }
+  .src-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 10px; font-size: 12.5px;
     border-bottom: 1px solid color-mix(in srgb, var(--rule) 45%, transparent); }
   .src-head .file { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #unsaved { color: var(--sel); }
   #unsaved[hidden] { display: none; }
   .src-head .gap, #changed .gap { flex: 1; }
+  #file-menu[hidden] { display: none; }
+  #file-list { left: 0; right: auto; min-width: 12rem; }
+  #file-button.open { border-color: var(--sel); background: color-mix(in srgb, var(--sel) 22%, transparent); }
   .src-head kbd { font: 11px system-ui, sans-serif; color: var(--muted); margin-left: 4px; }
   #changed { display: flex; align-items: center; gap: 6px; padding: 6px 10px; font-size: 12.5px;
     background: color-mix(in srgb, var(--sel) 18%, var(--page));
@@ -384,7 +428,17 @@ const PAGE = `<!doctype html>
   .t-relation, .t-arrow { color: var(--syn-relation); }
   .t-attribute { color: var(--syn-attribute); }
   .t-value, .t-color { color: var(--syn-value); }
-  #edit[aria-pressed="true"] { border-color: var(--sel); color: var(--sel); }
+  /* Edit | View: which mode the page is in, the one it is in filled. Edit
+     is on the left, the side the source opens on. */
+  .mode { display: inline-flex; position: relative; }
+  .mode[hidden] { display: none; }
+  .mode button { border-radius: 0; color: var(--muted); padding: 4px 12px; }
+  .mode button:first-child { border-radius: 6px 0 0 6px; }
+  .mode button:last-child { border-radius: 0 6px 6px 0; border-left: 0; }
+  .mode button[aria-pressed="true"] { background: color-mix(in srgb, var(--ink) 20%, transparent); color: var(--ink); font-weight: 600; }
+  .mode button[aria-pressed="true"]:hover { cursor: default; }
+  header:has(.tools.keyed) .mode kbd.tag { display: inline; }
+  header:has(.tools.keyed) .mode { outline: 2px solid var(--sel); outline-offset: 4px; border-radius: 6px; }
   .menu-list.wide { min-width: 340px; }
   .menu-list .row .when { color: var(--muted); font-variant-numeric: tabular-nums; width: 3.2em; flex: none; }
   .menu-list .row .who { width: 4.5em; flex: none; }
@@ -400,27 +454,57 @@ const PAGE = `<!doctype html>
   aside li.error .goto { cursor: pointer; text-decoration: underline dotted; }
 
   /* ---- a page with no file: the playground ---- */
-  .links { display: inline-flex; gap: 12px; margin-left: 10px; font-size: 12px; }
-  .heading .drawn { display: inline; }
-  .links a { color: var(--muted); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--rule) 60%, transparent); }
+  /* GitHub, as its mark beside the name. */
+  .heading h1 { display: inline; vertical-align: middle; }
+  .links { display: inline-flex; vertical-align: middle; margin-left: 10px; }
+  .links a { display: inline-flex; color: var(--muted); padding: 2px; border-radius: 4px; }
   .links a:hover { color: var(--ink); }
+  .links a:focus-visible { outline: 2px solid var(--accent); }
+  /* A link as a row of a menu, like the buttons around it. */
+  .menu-list a.row { color: var(--ink); text-decoration: none; font-size: 13px; border: 1px solid transparent; border-radius: 6px; }
+  .menu-list a.row:hover { background: color-mix(in srgb, var(--ink) 10%, transparent); }
+  #help-menu[hidden] { display: none; }
+  .drawn:empty { display: none; }
   /* The divider between the source and the picture: dragged, or moved with the arrows. */
   #split { flex: none; width: 6px; margin: 0 -3px; z-index: 2; cursor: col-resize; touch-action: none; }
   #split[hidden] { display: none; }
   #split:hover, #split.dragging, #split:focus-visible { background: color-mix(in srgb, var(--accent) 45%, transparent); outline: 0; }
   body.dragging { cursor: col-resize; user-select: none; }
-  /* The cheatsheet. Closed it is one line; open it takes height off the
-     source rather than off the diagram, since it answers what to type. */
-  #cheatsheet { flex: none; max-height: 46%; overflow: auto; border-top: 1px solid color-mix(in srgb, var(--rule) 45%, transparent); }
-  #cheatsheet summary { padding: 7px 12px; cursor: pointer; color: var(--muted); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; user-select: none; }
-  #cheatsheet summary:hover { color: var(--ink); }
-  #cheatsheet dl { margin: 0; padding: 0 12px 14px; display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; font-size: 12px; }
-  #cheatsheet dt { color: var(--muted); white-space: nowrap; }
-  #cheatsheet dd { margin: 0; line-height: 1.7; }
-  #cheatsheet code { font: 11.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: nowrap; display: inline-block;
-    padding: 1px 5px; margin-right: 3px; border-radius: 3px; background: color-mix(in srgb, var(--ink) 9%, transparent); }
-  #cheatsheet b { color: var(--syn-relation); font-weight: 400; }
-  #cheatsheet i { color: var(--muted); font-style: normal; }
+  /* The cheatsheet: a button in the source's bar opens a large window, a
+     card per topic, each row an example in the editor's colors beside what
+     it does. The filter narrows the rows as you type. */
+  #cheatsheet { width: min(1180px, calc(100vw - 32px)); height: min(820px, calc(100vh - 32px)); max-width: none; max-height: none; }
+  #cheatsheet[open] { display: flex; flex-direction: column; }
+  #cheatsheet .cs-head { display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+    border-bottom: 1px solid color-mix(in srgb, var(--rule) 45%, transparent); }
+  #cheatsheet .cs-head h2 { font-size: 14px; }
+  #cheat-filter { flex: 0 1 340px; font: inherit; font-size: 13px; color: var(--ink); padding: 4px 10px; border-radius: 6px;
+    background: color-mix(in srgb, var(--ink) 4%, var(--page)); border: 1px solid color-mix(in srgb, var(--rule) 70%, transparent); }
+  #cheat-filter:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  #cheatsheet .cs-head .gap { flex: 1; }
+  #cheatsheet .cs-grid { flex: 1; min-height: 0; overflow: auto; padding: 14px 16px 18px; }
+  /* Cards fill three columns top to bottom; the page fills each column as the
+     window opens, so the columns come out about the same height. */
+  .cs-cols { display: grid; grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr)); gap: 14px; align-items: start; }
+  .cs-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .cs-card { border-radius: 8px; overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--hue) 30%, transparent);
+    background: color-mix(in srgb, var(--ink) 3%, var(--page)); }
+  .cs-card[hidden] { display: none; }
+  .cs-card h3 { margin: 0; padding: 7px 12px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--hue); background: color-mix(in srgb, var(--hue) 12%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--hue) 22%, transparent); }
+  .cs-row { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 4px 12px; padding: 6px 12px; font-size: 12.5px;
+    border-top: 1px solid color-mix(in srgb, var(--rule) 25%, transparent); }
+  .cs-card h3 + .cs-row { border-top: 0; }
+  .cs-row[hidden] { display: none; }
+  .cs-row code { font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: anywhere; color: var(--ink); }
+  .cs-row > span { color: var(--muted); }
+  .cs-note { margin: 0; padding: 7px 12px 9px; font-size: 12px; color: var(--muted);
+    border-top: 1px solid color-mix(in srgb, var(--rule) 25%, transparent); }
+  .cs-note code { font: 11.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--ink); }
+  .cs-none { margin: 0; padding: 24px 16px; color: var(--muted); }
+  .cs-none[hidden] { display: none; }
   dialog { padding: 0; color: var(--ink); background: var(--page); overflow: hidden;
     border: 1px solid color-mix(in srgb, var(--rule) 70%, transparent); border-radius: 6px; }
   dialog::backdrop { background: rgba(0, 0, 0, .6); }
@@ -474,20 +558,14 @@ const PAGE = `<!doctype html>
 <body>
 <header>
   <div class="heading">
-    <h1>{{heading}}</h1>
-    <p class="drawn">{{drawn}}</p>{{links}}
+    <h1>{{heading}}</h1>{{links}}
+    <p class="drawn">{{drawn}}</p>
   </div>
+  <span id="mode" class="mode" role="group" aria-label="Mode" hidden>
+    <button id="edit" type="button" title="The source beside the picture (e)" aria-pressed="false">Edit<kbd class="tag">e</kbd></button>
+    <button id="mode-view" type="button" title="Only the picture (e)" aria-pressed="true">View</button>
+  </span>
   <div class="tools">
-    <button id="browse" type="button" title="Open one of the examples in the editor" aria-haspopup="dialog" hidden>Examples</button>
-    <button id="edit"type="button" title="Show or hide the source (e)" aria-pressed="false" hidden>Edit<kbd class="tag">e</kbd></button>
-    <span class="gap" id="edit-gap" hidden></span>
-    <button id="out" type="button" title="Zoom out (-)" aria-label="Zoom out">−</button>
-    <span id="scale" aria-live="polite">100%</span>
-    <button id="in" type="button" title="Zoom in (+)" aria-label="Zoom in">+</button>
-    <button id="fit" type="button" title="The whole diagram in view (0)">Fit</button>
-    <button id="actual" type="button" title="The drawing at its own scale (1)">100%</button>
-    <span class="gap"></span>
-    <button id="full" type="button" title="Full screen (f)"><span class="label">Full screen</span><kbd class="tag">f</kbd></button>
     <span class="menu" id="versions-menu" hidden>
       <button id="versions-button" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="versions-list">Versions ▾<kbd class="tag">o</kbd></button>
       <span id="versions-list" class="menu-list wide" role="menu" hidden></span>
@@ -504,7 +582,7 @@ const PAGE = `<!doctype html>
       </span>
     </span>
     <span class="menu">
-      <button id="view-button" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="view-list">View ▾<kbd class="tag">v</kbd></button>
+      <button id="view-button" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="view-list">Settings ▾<kbd class="tag">s</kbd></button>
       <span id="view-list" class="menu-list" role="menu" hidden>
         <button id="theme-row" class="row" type="button" role="menuitem" data-key="t" aria-haspopup="true" title="Draw the diagram in another theme"><span class="name">Theme <span class="value"></span> ▸</span><kbd>t</kbd></button>
         <hr>
@@ -512,11 +590,13 @@ const PAGE = `<!doctype html>
         <button id="auto-row" class="row switch" type="button" role="menuitemcheckbox" data-key="a" title="Show the side panel only while something is selected or the findings are open"><span class="sw"></span><span class="name">Auto-hide panel</span><span class="word"></span><kbd>a</kbd></button>
         <hr>
         <button id="findings-row" class="row switch" type="button" role="menuitemcheckbox" data-key="f" title="Show or hide the findings in the side panel"><span class="sw"></span><span class="name">Findings</span><span class="word"></span><kbd>f</kbd></button>
+        <button id="autocheck-row" class="row switch" type="button" role="menuitemcheckbox" data-key="c" title="Look for findings every time the picture is drawn, without pressing Check" hidden><span class="sw"></span><span class="name">Check as I type</span><span class="word"></span><kbd>c</kbd></button>
         <hr>
         <button id="guides-row" class="row switch" type="button" role="menuitemcheckbox" data-key="g" title="Draw the guides: everything written with guide in front"><span class="sw"></span><span class="name">Guides</span><span class="word"></span><kbd>g</kbd></button>
         <span id="theme-list" class="menu-list sub" role="menu" hidden></span>
       </span>
     </span>
+    <button id="full" type="button" title="Full screen (f)"><span class="label">Full screen</span><kbd class="tag">f</kbd></button>
   </div>
 </header>
 <div id="strip" hidden><span class="crumbs"></span><span class="hint"></span></div>
@@ -526,11 +606,26 @@ const PAGE = `<!doctype html>
     <div id="changed" role="alert" hidden><span class="what"></span><span class="gap"></span><button id="load-disk" type="button">Load it</button><button id="keep-mine" type="button">Keep mine</button></div>
     <div class="src-head">
       <span class="file"></span><span id="unsaved" title="Not saved to the file" hidden>●</span><span class="gap"></span>
-      <button id="open-file" type="button" title="Open a .reladraw file into the source" hidden>Open…</button>
+      <span class="menu" id="file-menu" hidden>
+        <button id="file-button" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="file-list"><span class="name">File ▾</span></button>
+        <span id="file-list" class="menu-list" role="menu" hidden>
+          <button id="browse" class="row" type="button" role="menuitem" title="Open one of the examples in the editor" aria-haspopup="dialog"><span class="name">Examples…</span></button>
+          <button id="open-file" class="row" type="button" role="menuitem" title="Open a .reladraw file into the source"><span class="name">Open…</span></button>
+          <hr>
+          <button id="write-row" class="row" type="button" role="menuitem" title="Save the source as a .reladraw file"><span class="name">Save…</span><kbd>⌘S</kbd></button>
+        </span>
+      </span>
       <input id="file-input" type="file" accept=".reladraw,text/plain" hidden>
       <button id="format" type="button" title="Lay the source out again, as reladraw format does, with the nearest .reladraw-format (Shift+Alt+F)"><span class="name">Format</span></button>
       <button id="format-open" type="button" aria-haspopup="dialog" title="How Format lays the source out" hidden>Format settings…</button>
       <button id="write" type="button" title="Write the source to the file (⌘S or Ctrl+S)"><span class="name">Save</span><kbd>⌘S</kbd></button>
+      <span class="menu" id="help-menu" hidden>
+        <button id="help-button" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="help-list"><span class="name">Help ▾</span></button>
+        <span id="help-list" class="menu-list" role="menu" hidden>
+          <button id="cheat-open" class="row" type="button" role="menuitem" title="The language on one screen"><span class="name">Cheatsheet</span><kbd>?</kbd></button>
+          <a id="syntax-link" class="row" role="menuitem" href="https://github.com/reladraw/reladraw/blob/main/SYNTAX.md" target="_blank" rel="noopener" title="The full syntax reference, on GitHub"><span class="name">Syntax reference ↗</span></a>
+        </span>
+      </span>
     </div>
     <div class="code">
       <pre id="paint" aria-hidden="true"></pre>
@@ -538,18 +633,32 @@ const PAGE = `<!doctype html>
     </div>{{cheatsheet}}
   </section>
   <div id="split" role="separator" aria-orientation="vertical" aria-label="Resize the source and the diagram" tabindex="0" title="Drag to resize; double-click to reset" hidden></div>
+  <div id="picture">
+  <div id="canvas">
+  <button id="check" class="floating" type="button" title="Look for overlaps and other places the picture may not read as meant (c)" hidden>Check<kbd class="tag">c</kbd></button>
+  <div id="zoom-card" class="floating">
+    <button id="out" class="pm" type="button" title="Zoom out (-)" aria-label="Zoom out">−</button>
+    <span id="scale" aria-live="polite">100%</span>
+    <button id="in" class="pm" type="button" title="Zoom in (+)" aria-label="Zoom in">+</button>
+    <span class="divider"></span>
+    <button id="fit" type="button" title="The whole diagram in view (0)">Fit</button>
+    <button id="actual" type="button" title="The drawing at its own scale (1)">100%</button>
+  </div>
   <div id="view">
     <div id="stage">
 {{drawing}}
     </div>
     <div id="tip"></div>
   </div>
+  </div>
+  <div id="band" aria-label="Findings" aria-live="polite" hidden></div>
+  </div>
   <div id="side">
     <section id="selected" aria-label="Selected" aria-live="polite">
       <p class="empty">Click a box or a line to see its links and what it connects to.</p>
     </section>
     <aside id="findings" aria-label="Findings">
-      <h2>Findings <span class="what">where the picture, drawn as written, may not read as meant</span></h2>
+      <h2><button id="findings-close" class="close" type="button" title="Close the findings" aria-label="Close the findings">×</button>Findings <span class="what">where the picture, drawn as written, may not read as meant</span></h2>
       <ol id="finding-list"></ol>
     </aside>
   </div>
@@ -574,7 +683,7 @@ const PAGE = `<!doctype html>
   // Another theme is carried as the colors that differ from the first, put
   // back in place the first time it is shown.
   var VARIES = new RegExp(DATA.varies, 'gi');
-  // Whether guides are drawn, which the View menu's switch changes. The
+  // Whether guides are drawn, which the Settings menu's switch changes. The
   // drawings with guides the other way are a second set, packed the same way
   // against its own first theme.
   var guidesShown = DATA.guidesShown;
@@ -788,9 +897,22 @@ const PAGE = `<!doctype html>
 
   var panel = document.getElementById('findings');
   var list = document.getElementById('finding-list');
-  var count = DATA.findings.length;
+  var band = document.getElementById('band');
+  // A page with an editor looks for findings only when Check is pressed,
+  // unless "Check as I type" is on: on a large diagram the checks would hold
+  // up the typing. A page without one carries the findings it was made with.
+  var AUTO_CHECK = 'reladraw-page-autocheck';
+  var autoCheck = false;
+  try { autoCheck = localStorage.getItem(AUTO_CHECK) === 'on'; } catch (e) {}
+  // The text last checked and what was found in it. Findings outlive edits,
+  // dimmed, since they describe the source as it was.
+  var checked = !EDIT || autoCheck ? { text: DATA.source, findings: DATA.findings } : null;
+  var shownText = DATA.source;
+  function found() { return checked ? checked.findings : []; }
+  function stale() { return !!checked && checked.text !== shownText; }
+  var count = found().length;
 
-  // A row of the View menu that is on or off: its switch, and the word beside it.
+  // A row of the Settings menu that is on or off: its switch, and the word beside it.
   function setSwitch(row, on) {
     row.setAttribute('aria-checked', String(on));
     row.querySelector('.word').textContent = on ? 'on' : 'off';
@@ -799,7 +921,6 @@ const PAGE = `<!doctype html>
   var autoRow = document.getElementById('auto-row');
   var findingsRow = document.getElementById('findings-row');
   var guidesRow = document.getElementById('guides-row');
-  findingsRow.querySelector('.name').textContent = 'Findings (' + count + ')';
   guidesRow.querySelector('.name').textContent = 'Guides (' + DATA.guideCount + ')';
 
   /* ---- the side panel: shown, hidden, or shown only when wanted ---- */
@@ -818,8 +939,15 @@ const PAGE = `<!doctype html>
   function keepPanel() {
     try { localStorage.setItem(KEPT, JSON.stringify({ on: panelOn, autoHide: autoHide })); } catch (e) {}
   }
+  // While the source is open the panel would squeeze the picture between two
+  // columns, so it behaves as if auto-hidden: it comes up for a selection or
+  // an error, and for the findings only when asked.
+  function editing() {
+    var pane = document.getElementById('editor');
+    return !!pane && !pane.hidden;
+  }
   function layoutSide() {
-    side.hidden = !(panelOn && (!autoHide || selection || !panel.hidden));
+    side.hidden = !(panelOn && (!(autoHide || editing()) || selection || !panel.hidden));
     // A finding lights what it is about only while the finding can be seen.
     if ((panel.hidden || side.hidden) && lit && lit.length) unlight();
     setSwitch(panelRow, panelOn);
@@ -851,6 +979,7 @@ const PAGE = `<!doctype html>
     else showPanel(panel.hidden);
   }
   findingsRow.onclick = flipFindings;
+  document.getElementById('findings-close').onclick = function () { showPanel(false); };
   if (count === 0) {
     panel.hidden = true;
   } else {
@@ -892,14 +1021,22 @@ const PAGE = `<!doctype html>
     zoom.pan((room.left + room.width / 2) - (r.l + r.r) / 2, (room.top + room.height / 2) - (r.t + r.b) / 2);
   }
 
+  // Whether the source has stopped parsing, and whether that is what opened
+  // the findings, so they close again once it parses.
+  var failing = false;
+  var openedByError = false;
   // The list, made again when a served page redraws. An error the file has
   // stopped parsing with heads it, over the findings of the last drawing that
   // parsed, which is still the one shown.
+  var lastError = null;
   function listFindings(error) {
+    failing = !!error;
+    lastError = error;
     list.textContent = '';
-    count = DATA.findings.length + (error ? 1 : 0);
-    findingsRow.querySelector('.name').textContent = 'Findings (' + count + ')';
+    count = found().length + (error ? 1 : 0);
+    findingsRow.querySelector('.name').textContent = checked || error ? 'Findings (' + count + ')' : 'Findings';
     guidesRow.querySelector('.name').textContent = 'Guides (' + DATA.guideCount + ')';
+    panel.classList.toggle('stale', stale());
     if (error) {
       var wrong = element('li', 'error');
       var head = element('span', 'where', error.line ? 'line ' + error.line + ' ' : '');
@@ -923,11 +1060,88 @@ const PAGE = `<!doctype html>
         document.createTextNode(error.message), element('span', 'note', 'The picture is the last version that drew.'));
       list.append(wrong);
     }
-    if (count === 0) list.append(element('li', 'none', 'No findings.'));
-    DATA.findings.forEach(addFinding);
+    if (!checked) {
+      list.append(element('li', 'none', 'Automatic checking is off. Press Check in the bar above to look for overlaps and other places the picture may not read as meant.'));
+    } else {
+      if (stale()) list.append(element('li', 'again', againText()));
+      if (found().length === 0) list.append(element('li', 'none', 'No findings.'));
+      found().forEach(function (finding) {
+        var item = document.createElement('li');
+        item.append(findingButton(finding));
+        list.append(item);
+      });
+    }
+    showBand();
   }
-  function addFinding(finding) {
-    var item = document.createElement('li');
+  function againText() {
+    return autoCheck ? 'From the last version that drew; the source has changed since.'
+      : 'The source has changed since this check. Press Check again.';
+  }
+
+  // The band under the picture while the source is open: the first few
+  // findings, and View all for the panel with every one.
+  var BAND_ROWS = 3;
+  var bandClosed = false;
+  function showBand() {
+    var list = found();
+    band.textContent = '';
+    band.hidden = !(EDIT && editing() && checked && !bandClosed && (list.length > 0 || !autoCheck));
+    if (band.hidden) return;
+    band.classList.toggle('stale', stale());
+    var head = element('div', 'head');
+    head.append(element('b', '', list.length ? 'Findings \\u00B7 ' + list.length : 'No findings'));
+    head.append(element('span', 'gap'));
+    if (list.length) {
+      var all = element('button', '', list.length > BAND_ROWS ? 'View all ' + list.length : 'View all');
+      all.type = 'button';
+      all.title = 'Open the findings in the side panel';
+      all.onclick = openFindings;
+      head.append(all);
+    }
+    var close = element('button', 'close', '\\u00D7');
+    close.type = 'button';
+    close.title = 'Close until the next check';
+    close.setAttribute('aria-label', 'Close the findings');
+    close.onclick = function () { bandClosed = true; showBand(); };
+    head.append(close);
+    band.append(head);
+    if (stale()) band.append(element('div', 'again', againText()));
+    var rows = element('div', 'found');
+    list.slice(0, BAND_ROWS).forEach(function (finding) { rows.append(findingButton(finding)); });
+    band.append(rows);
+  }
+  // The panel takes the findings over: the band closes until the next check,
+  // and closing the panel doesn't bring it back.
+  function openFindings() {
+    if (!panelOn) { panelOn = true; keepPanel(); }
+    bandClosed = true;
+    showBand();
+    showPanel(true);
+  }
+
+  // Looks for findings in the source as it stands, drawing it again to do so.
+  var checkButton = document.getElementById('check');
+  function runCheck() {
+    if (!EDIT || !lib) return;
+    bandClosed = false;
+    drawnText = null;
+    draw(sourceBox.value, true);
+    // In View mode there is no band, so what was found shows in the panel.
+    if (!editing()) openFindings();
+  }
+  checkButton.onclick = runCheck;
+  var autoCheckRow = document.getElementById('autocheck-row');
+  function setAutoCheck(on) {
+    autoCheck = on;
+    try { localStorage.setItem(AUTO_CHECK, on ? 'on' : 'off'); } catch (e) {}
+    setSwitch(autoCheckRow, on);
+    checkButton.hidden = !EDIT || on;
+    if (on) runCheck();
+    else listFindings(lastError);
+  }
+  autoCheckRow.onclick = function () { setAutoCheck(!autoCheck); };
+
+  function findingButton(finding) {
     var button = document.createElement('button');
     button.type = 'button';
     var where = document.createElement('span');
@@ -948,8 +1162,7 @@ const PAGE = `<!doctype html>
       light(finding, button);
       if (EDIT && !editorPane.hidden) goToLine(finding.line);
     };
-    item.append(button);
-    list.append(item);
+    return button;
   }
   listFindings(null);
 
@@ -1271,14 +1484,14 @@ const PAGE = `<!doctype html>
 
   var STRIP = {
     bar: ['<b>Menu</b>', 'letter to open \\u00B7 \\u232B back \\u00B7 Esc out'],
-    view: ['Menu \\u203A <b>View</b>', 'letter to flip \\u00B7 \\u2191\\u2193 Enter \\u00B7 \\u232B back \\u00B7 Esc out'],
+    view: ['Menu \\u203A <b>Settings</b>', 'letter to flip \\u00B7 \\u2191\\u2193 Enter \\u00B7 \\u232B back \\u00B7 Esc out'],
     save: ['Menu \\u203A <b>Export</b>', 'letter to save \\u00B7 \\u2191\\u2193 Enter \\u00B7 \\u232B back \\u00B7 Esc out'],
     versions: ['Menu \\u203A <b>Versions</b>', '\\u2191\\u2193 Enter to put one in the editor \\u00B7 \\u232B back \\u00B7 Esc out'],
-    theme: ['Menu \\u203A View \\u203A <b>Theme</b>', '\\u2191\\u2193 to try \\u00B7 Enter keep \\u00B7 \\u232B back \\u00B7 Esc out'],
+    theme: ['Menu \\u203A Settings \\u203A <b>Theme</b>', '\\u2191\\u2193 to try \\u00B7 Enter keep \\u00B7 \\u232B back \\u00B7 Esc out'],
   };
 
   function rows() {
-    if (level === 'view') return Array.prototype.slice.call(viewList.querySelectorAll(':scope > .row'));
+    if (level === 'view') return Array.prototype.slice.call(viewList.querySelectorAll(':scope > .row:not([hidden])'));
     if (level === 'save') return Array.prototype.slice.call(saveList.querySelectorAll(':scope > .row'));
     if (level === 'versions') return Array.prototype.slice.call(versionsList.querySelectorAll(':scope > .row'));
     if (level === 'theme') return themeItems.map(function (item) { return item.row; });
@@ -1775,10 +1988,12 @@ const PAGE = `<!doctype html>
   var ZOOM_KEYS = { '+': 1, '=': 1, '-': 1, '_': 1, '0': 1, '1': 1 };
 
   // On the window, before the zoom's own keys, so a menu's letters reach the
-  // menu and not the diagram underneath: g flips guides in View, not a grab.
+  // menu and not the diagram underneath: g flips guides in Settings, not a grab.
   window.addEventListener('keydown', function (event) {
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.target.closest && event.target.closest('input, textarea, select, [contenteditable]')) return;
+    // A window open over the page has the keys, Escape included.
+    if (document.querySelector('dialog[open]')) return;
     var key = event.key;
     if (key === 'Escape') plain();
     else if (level === 'pick' || level === 'filter') {
@@ -1786,6 +2001,8 @@ const PAGE = `<!doctype html>
     } else if (level === null) {
       if (key === 'm' || key === 'M') setLevel('bar');
       else if (key === 'e' && EDIT) toggleEditor();
+      else if (key === 'c' && !checkButton.hidden) runCheck();
+      else if (key === '?' && cheatBox) openCheatsheet();
       else if (key === 's') startHints('all');
       else if (key === '/') startHints('all', true);
       else if (key === 'n') startHints('neighbors');
@@ -1807,10 +2024,11 @@ const PAGE = `<!doctype html>
       else if (key.length === 1) {
         var letter = key.toLowerCase();
         if (level === 'bar') {
-          if (letter === 'v') setLevel('view');
+          if (letter === 's') setLevel('view');
           else if (letter === 'x') setLevel('save');
           else if (letter === 'o' && tiedFile()) setLevel('versions');
           else if (letter === 'e' && EDIT) { setLevel(null); toggleEditor(); }
+          else if (letter === 'c' && !checkButton.hidden) { setLevel(null); runCheck(); }
           else if (letter === 'f' && !full.hidden) { setLevel(null); toggleFull(); }
         } else if (level === 'view' || level === 'save' || level === 'versions') {
           rows().forEach(function (row, i) {
@@ -1870,6 +2088,7 @@ const PAGE = `<!doctype html>
     if (selection && !(selection.kind === 'node' ? graph.nodes[selection.key] : graph.edges[selection.key])) selection = null;
     if (level === 'pick' || level === 'filter') setLevel(null);
     listFindings(null);
+    if (openedByError) { openedByError = false; if (editing()) showPanel(false); }
     redraw();
   }
 
@@ -1895,6 +2114,40 @@ const PAGE = `<!doctype html>
   var paintBox = document.getElementById('paint');
   var unsavedMark = document.getElementById('unsaved');
   var writeButton = document.getElementById('write');
+  // A menu in the source's bar: its button opens and closes its list, and a
+  // row chosen, a click elsewhere or Escape closes it. Returns its closer.
+  function sourceMenu(menu, button, list) {
+    function close() {
+      list.hidden = true;
+      button.classList.remove('open');
+      button.setAttribute('aria-expanded', 'false');
+    }
+    button.onclick = function () {
+      var open = list.hidden;
+      list.hidden = !open;
+      button.classList.toggle('open', open);
+      button.setAttribute('aria-expanded', String(open));
+    };
+    // Choosing a row closes the menu before the row does its work.
+    list.addEventListener('click', function () { close(); }, true);
+    document.addEventListener('click', function (event) {
+      if (!list.hidden && !menu.contains(event.target)) close();
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && !list.hidden) close();
+    }, true);
+    return close;
+  }
+  // A page with no file keeps Examples, Open and Save in a File menu.
+  var fileMenu = document.getElementById('file-menu');
+  var fileButton = document.getElementById('file-button');
+  var closeFileMenu = sourceMenu(fileMenu, fileButton, document.getElementById('file-list'));
+  // Help: the cheatsheet, and the full reference.
+  var helpMenu = document.getElementById('help-menu');
+  sourceMenu(helpMenu, document.getElementById('help-button'), document.getElementById('help-list'));
+  document.getElementById('write-row').onclick = function () { writeButton.click(); };
+  // Where "Saved" flashes: the Save button, or the File menu it is in.
+  function saveFlash(text) { flash(writeButton.hidden ? fileButton : writeButton, text); }
   var formatButton = document.getElementById('format');
   var openButton = document.getElementById('open-file');
   var formatOpen = document.getElementById('format-open');
@@ -1904,30 +2157,45 @@ const PAGE = `<!doctype html>
   function toggleEditor(show, quiet) {
     if (!EDIT) return;
     var on = show === undefined ? editorPane.hidden : show;
+    var changed = editorPane.hidden === on;
     editorPane.hidden = !on;
     splitBar.hidden = !on;
     editButton.setAttribute('aria-pressed', String(on));
+    lookButton.setAttribute('aria-pressed', String(!on));
+    // The findings close with the source open, and come back as the page
+    // first shows them when it closes.
+    if (changed) {
+      openedByError = openedByError && on;
+      showPanel(on ? failing : count > 0 && !autoHide);
+      showBand();
+    }
     if (on) { paintSource(); if (!quiet) sourceBox.focus(); }
     else if (document.activeElement === sourceBox) sourceBox.blur();
   }
-  editButton.onclick = function () { toggleEditor(); };
+  // The View half of the Edit | View switch, apart from the Settings menu.
+  var lookButton = document.getElementById('mode-view');
+  editButton.onclick = function () { toggleEditor(true); };
+  lookButton.onclick = function () { toggleEditor(false); };
 
   function escapeCode(text) { return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
   // The scanner covers each line end to end, so this rebuilds the text exactly
   // and only wraps some of it in spans; a lost character would slide the rest
   // of the line out from under the cursor.
+  // One line of source as colored HTML; the library has to have loaded.
+  function colorLine(line) {
+    var out = '';
+    lib.highlightLine(line).forEach(function (span) {
+      var piece = escapeCode(line.slice(span.start, span.end));
+      out += span.kind === 'plain' ? piece : '<span class="t-' + span.kind + '">' + piece + '</span>';
+    });
+    return out;
+  }
   function paintSource() {
     var text = sourceBox.value;
     var out = '';
     try {
       if (!lib) throw new Error('not loaded');
-      text.split(/\\r?\\n/).forEach(function (line) {
-        lib.highlightLine(line).forEach(function (span) {
-          var piece = escapeCode(line.slice(span.start, span.end));
-          out += span.kind === 'plain' ? piece : '<span class="t-' + span.kind + '">' + piece + '</span>';
-        });
-        out += '\\n';
-      });
+      text.split(/\\r?\\n/).forEach(function (line) { out += colorLine(line) + '\\n'; });
     } catch (e) {
       // Coloring is decoration; the editor has to keep working without it.
       out = escapeCode(text) + '\\n';
@@ -1965,17 +2233,21 @@ const PAGE = `<!doctype html>
   var cost = 0;
   var typing = null;
 
-  function draw(text) {
+  // \`check\` looks for findings this once, as Check does.
+  function draw(text, check) {
     if (text === drawnText || !lib) return;
     drawnText = text;
+    shownText = text;
+    var checking = autoCheck || !!check;
     var started = performance.now();
     var made;
     try {
-      made = lib.pageData(text, fileName, {});
+      made = lib.pageData(text, fileName, checking ? {} : { checks: false });
+      if (checking) checked = { text: text, findings: made.data.findings };
     } catch (error) {
       cost = performance.now() - started;
       listFindings({ message: error.message, line: error.line });
-      if (panelOn && panel.hidden) showPanel(true);
+      if (panelOn && panel.hidden) { openedByError = true; showPanel(true); }
       return;
     }
     cost = performance.now() - started;
@@ -2164,8 +2436,10 @@ const PAGE = `<!doctype html>
     fileName = file.split('/').pop();
     disk = text;
     base = text;
-    browseButton.hidden = true;
-    openButton.hidden = true;
+    // A page tied to a file has only Save, so it is a button, not a File menu.
+    closeFileMenu();
+    fileMenu.hidden = true;
+    writeButton.hidden = false;
     formatOpen.hidden = true;
     document.getElementById('versions-menu').hidden = false;
     writeButton.querySelector('.name').textContent = 'Save';
@@ -2237,9 +2511,9 @@ const PAGE = `<!doctype html>
       base = text;
       changedStrip.hidden = true;
       markUnsaved();
-      flash(writeButton, 'Saved');
+      saveFlash('Saved');
     }).catch(function (error) {
-      flash(writeButton, 'Not saved');
+      saveFlash('Not saved');
       liveNote.textContent = 'Couldn\\u2019t save ' + file + ': ' + error.message;
       liveNote.hidden = false;
     });
@@ -2377,7 +2651,7 @@ const PAGE = `<!doctype html>
         return handle.createWritable().then(function (out) {
           return out.write(text).then(function () { return out.close(); }).then(function () {
             keep(text, handle.name);
-            flash(writeButton, 'Saved');
+            saveFlash('Saved');
           });
         });
       })
@@ -2415,7 +2689,7 @@ const PAGE = `<!doctype html>
         keep(text, told.file.split('/').pop());
         history.replaceState(null, '', '/' + told.file.split('/').map(encodeURIComponent).join('/'));
         tie(told.file, text);
-        flash(writeButton, 'Saved');
+        saveFlash('Saved');
       });
     }).catch(function (error) {
       problem.textContent = 'Couldn\\u2019t save: ' + error.message + '. Is reladraw serve still running?';
@@ -2581,11 +2855,90 @@ const PAGE = `<!doctype html>
     };
   }
 
+  /* ---- the cheatsheet ---- */
+
+  // A window of cards, each row an example colored as the editor colors it.
+  // The filter keeps the rows holding every word typed, matching the card's
+  // name too, so "placement" keeps a whole card.
+  var cheatBox = document.getElementById('cheatsheet');
+  var openCheatsheet = function () {};
+  if (cheatBox) {
+    var cheatFilter = document.getElementById('cheat-filter');
+    var cheatNone = cheatBox.querySelector('.cs-none');
+    var cheatColored = false;
+    var cheatGrid = cheatBox.querySelector('.cs-grid');
+    var cheatCards = Array.prototype.slice.call(cheatGrid.querySelectorAll('.cs-card'));
+    var cheatCols = element('div', 'cs-cols');
+    cheatGrid.append(cheatCols);
+    // Each card, in order, goes to the shortest column so far.
+    var layoutCheat = function () {
+      var width = cheatGrid.clientWidth;
+      var count = width >= 1000 ? 3 : width >= 640 ? 2 : 1;
+      cheatCols.style.setProperty('--cols', String(count));
+      cheatCols.textContent = '';
+      var cols = [];
+      var heights = [];
+      for (var i = 0; i < count; i++) {
+        cols.push(element('div', 'cs-col'));
+        heights.push(0);
+        cheatCols.append(cols[i]);
+      }
+      cheatCards.forEach(function (card) {
+        var at = heights.indexOf(Math.min.apply(null, heights));
+        cols[at].append(card);
+        if (!card.hidden) heights[at] += card.offsetHeight + 14;
+      });
+    };
+    window.addEventListener('resize', function () { if (cheatBox.open) layoutCheat(); });
+    openCheatsheet = function () {
+      if (!cheatColored && lib) {
+        cheatColored = true;
+        each(cheatBox.querySelectorAll('.cs-row code'), function (code) {
+          try { code.innerHTML = colorLine(code.textContent); } catch (e) {}
+        });
+      }
+      cheatBox.showModal();
+      layoutCheat();
+      cheatFilter.focus();
+      cheatFilter.select();
+    };
+    helpMenu.hidden = false;
+    document.getElementById('cheat-open').onclick = openCheatsheet;
+    closeOnBackdrop(cheatBox);
+    cheatFilter.addEventListener('input', function () {
+      var words = cheatFilter.value.toLowerCase().split(/\\s+/).filter(Boolean);
+      var matches = function (text) {
+        text = text.toLowerCase();
+        return words.every(function (word) { return text.indexOf(word) >= 0; });
+      };
+      var any = false;
+      each(cheatBox.querySelectorAll('.cs-card'), function (card) {
+        var title = card.querySelector('h3').textContent;
+        var shown = false;
+        each(card.querySelectorAll('.cs-row'), function (row) {
+          row.hidden = !matches(title + ' ' + row.textContent);
+          if (!row.hidden) shown = true;
+        });
+        var note = card.querySelector('.cs-note');
+        if (note) {
+          note.hidden = !matches(title + ' ' + note.textContent);
+          if (!note.hidden) shown = true;
+        }
+        card.hidden = !shown;
+        if (shown) any = true;
+      });
+      cheatNone.hidden = any;
+      layoutCheat();
+    });
+  }
+
   /* ---- the start ---- */
 
   if (EDIT) {
-    editButton.hidden = false;
-    document.getElementById('edit-gap').hidden = false;
+    document.getElementById('mode').hidden = false;
+    checkButton.hidden = autoCheck;
+    autoCheckRow.hidden = false;
+    setSwitch(autoCheckRow, autoCheck);
     try {
       var share = parseFloat(localStorage.getItem(SPLIT));
       if (share > 0 && share < 1) divide(share, false);
@@ -2594,8 +2947,8 @@ const PAGE = `<!doctype html>
       sourceBox.value = DATA.source;
       tie(EDIT.file, DATA.source);
     } else {
-      browseButton.hidden = false;
-      openButton.hidden = false;
+      fileMenu.hidden = false;
+      writeButton.hidden = true;
       formatOpen.hidden = false;
       writeButton.querySelector('.name').textContent = 'Save\\u2026';
       writeButton.title = EDIT.kind === 'local'
@@ -2633,146 +2986,125 @@ const PAGE = `<!doctype html>
 
 /** What a page with an editor shows under its source: the language on one screen. */
 const CHEATSHEET = `
-<details id="cheatsheet">
-  <summary>Cheatsheet</summary>
-  <dl>
-    <dt>Statements</dt>
-    <dd>
-      <code>node <i>name</i> <i>["text"]</i> <i>[placements]</i> <i>[key: value …]</i></code><br />
-      <code>edge <i>a</i> -&gt; <i>b</i> <i>["text"]</i> <i>[key: value …]</i></code>
-      &nbsp;<i>(<code>&lt;-</code> to write the target first, <code>&lt;-&gt;</code> for both ends)</i><br />
-      <code>point <i>name</i> <i>where</i></code> &nbsp;<code>region <i>name</i> <i>a</i> top-left to <i>b</i> bottom-right</code><br />
-      <code>bundle <i>name</i> via: <i>…</i></code> &nbsp;<i>(a path lines share)</i>
-      &nbsp;<code><b>guide</b> node|edge|point|region …</code> <i>(reference only; turn on Guides in View to see them)</i><br />
-      <code>style <i>name</i> <i>key: value …</i></code><br />
-      <code>diagram theme: nord  background: #1e2229  text: (color: #e0e0e0)</code><br />
-      <code>default node|leaf|container|edge <i>key: value …</i></code>
-      &nbsp;<i>(a style every one of that kind wears; the more specific wins)</i><br />
-      <i>The picture is drawn exactly as written: nothing is moved to make room, and lines go only
-      where they are told. Anything that overlaps is drawn as written; the findings beside the diagram report it, as <code>reladraw check</code> does.</i>
-    </dd>
-
-    <dt>Labels</dt>
-    <dd>
-      <code>node parser</code> — no text, so the node takes its name as its text.<br />
-      <code>node parser ""</code> — deliberately blank.<br />
-      <code>"two / lines"</code> — <code> / </code> with spaces either side breaks a line.
-    </dd>
-
-    <dt>Containment</dt>
-    <dd>
-      <code>node server.docker "Docker"</code> — a dotted name is a child. Declare the parent first. With no text of its own, it reads "docker".<br />
-      <code>layout: column</code> or <code>row</code> — the children in written order, with
-      <code>(gap: tight, widths: match, align-children: left)</code>.
-      Without a layout, one child is unplaced and the rest are placed against it.<br />
-      <code>layout: deck</code> — a stack of cards, the first child in front.<br />
-      <code>gather-children: left</code> — where the children sit in spare room.
-      <code>shape: none</code> on a container draws no box.
-    </dd>
-
-    <dt>Placement</dt>
-    <dd>
-      <code><b>above</b> X</code> <code><b>below</b> X</code>
-      <code><b>left of</b> X</code> <code><b>right of</b> X</code>
-      <code><b>above-left of</b> X</code> … <code><b>below-right of</b> X</code><br />
-      <code><b>even with</b> X</code> — share a center line;
-      <code><b>top</b>|<b>bottom</b>|<b>left</b>|<b>right</b> <b>even with</b> X</code> shares that edge.<br />
-      <code>right of A <b>and</b> B</code> — against the box that just bounds them both.<br />
-      <code><b>inside</b> X top-right</code> <code><b>outside</b> X right</code>
-      <code><b>on</b> X bottom-left</code> — against a part of X. The parts are
-      <code>text</code>, the sides <code>top</code> <code>bottom</code> <code>left</code> <code>right</code>,
-      and <code>top-left</code> <code>top-center</code> <code>top-right</code>
-      <code>left-center</code> <code>center</code> <code>right-center</code>
-      <code>bottom-left</code> <code>bottom-center</code> <code>bottom-right</code>.<br />
-      <code><b>on</b> between A and B</code> <code>below down from A and left from B</code> — at a point.<br />
-      <i>One node is unplaced; every other is placed against something. One direction on its own
-      also centers on its target. Each axis is said once.</i>
-    </dd>
-
-    <dt>Gaps</dt>
-    <dd>
-      <code>right of X <b>(gap: wide)</b></code> or <code><b>2</b> right of X</code>, on the placement.
-      One of <code>none</code> <code>tight</code> <code>normal</code> <code>wide</code> (0, 2, 4, 8 units),
-      or a number of units; a box is about 4 units tall. A gap is <i>exact</i>.
-    </dd>
-
-    <dt>Sizes</dt>
-    <dd>
-      <code>width: 30</code> <code>height: menu</code> <code>height: 0.5 menu height</code>
-      <code>height: a top to c bottom</code> <code>min-width: 10</code>
-    </dd>
-
-    <dt>Appearance</dt>
-    <dd>
-      <code>style: <i>name</i></code>
-      <code>fill: #191728</code>
-      <code>border: none</code>
-      <code>corners: sharp</code> <i>(a box; rounded unless told)</i>
-      <code>line: #d2904e</code> <i>(an edge)</i>
-      <code>overlap: allow</code>
-      <code>url: "https://example.com"</code>
-      <code>description: "What it does"</code> <i>(shown on the page; never drawn)</i>
-    </dd>
-
-    <dt>Lines</dt>
-    <dd>
-      <code>line: (path: square, corners: rounded)</code> — everything about an edge's line.
-      <code>path:</code> takes <code>straight</code> (the default) <code>square</code> <code>curved</code>;
-      <code>corners:</code> <code>sharp</code> <code>rounded</code>;
-      <code>crossing:</code> <code>gap</code> <code>arc</code> <code>square</code> <code>none</code>;
-      <code>pattern:</code> <code>solid</code> <code>dashed</code> <code>dotted</code> <code>dash-dot</code>;
-      <code>thickness:</code> <code>thin</code> <code>normal</code> <code>thick</code>, a multiple, or <code>3px</code>;
-      <code>turn: 1/3</code> <code>step-out: tight</code> <code>curve: subtle</code>.
-      <i><code>default edge  line: (path: square)</code> sets every edge.</i>
-    </dd>
-
-    <dt>Body</dt>
-    <dd>
-      <code>shape: rectangle|document|circle|none</code> — the outline the node is drawn with;
-      <code>none</code> is text with no box, which is what an annotation is.<br />
-      <code>icon: <i>name</i></code> — the node <i>is</i> that picture, with no box.<br />
-      <code>badge: <i>name</i></code> — the picture is part of the label, beside the text, and the node keeps its box.<br />
-      <code>layout: deck  cards: "text" <i>["text" …]</i></code> — a stack of cards, front first, one per text.<br />
-      Pictures: <code>disk</code> <code>desktop</code> <code>laptop</code>
-      <code>package</code> <code>cubes</code> <code>cube</code> <code>database</code>.<br />
-      Your own: <code>icon <i>name</i> """&lt;svg …&gt;…&lt;/svg&gt;"""</code> declares one,
-      and <code>icon: <i>name</i></code> or <code>badge: <i>name</i></code> uses it.
-    </dd>
-
-    <dt>Text</dt>
-    <dd>
-      Everything a text says about itself goes in brackets after it:
-      <code>(color: theme-muted)</code>
-      <code>(size: small|normal|large)</code>
-      <code>(wrap: 24)</code> <i>(characters, folds the text)</i>.
-      A title says which side it sits against: <code>"Server" (inside top, align: left)</code>,
-      <code>(on top)</code>, <code>(outside top)</code>, <code>(center)</code>.
-      In a style, which has no text of its own, the bracket hangs off the key:
-      <code>text: (color: theme-muted)</code>.<br />
-      <code>" / "</code> in any text is a line break; <code>\\/</code> is a literal slash.<br />
-      <code>"name / <b>[dim]</b>quieter<b>[/dim]</b>"</code> draws those words in the
-      text color of <code>style dim</code>; <code>\\[</code> is a literal bracket.
-    </dd>
-
-    <dt>Links</dt>
-    <dd>
-      A line is straight between its two boxes, through anything in between, unless told otherwise.<br />
-      <code>from: right</code> <code>to: left</code> name a side;
-      <code>to: bottom-center</code> or <code>to: left 3/4 down</code> a point on it.<br />
-      <code>via: c top, between a and b</code> — the places the line passes, in order:
-      just outside a side, a point, a box's center, <code>through <i>region</i> horizontal</code>.<br />
-      <code>"text" (at: start)</code> <code>(at: 1/4)</code> <code>(above edge)</code>
-      <code>(on: longest level)</code> — where a line's text sits; the middle by default.
-    </dd>
-
-    <dt>Comments</dt>
-    <dd><code>// to the end of the line</code>, anywhere, including after a statement.</dd>
-  </dl>
-</details>
+<dialog id="cheatsheet" aria-label="Cheatsheet">
+  <div class="cs-head">
+    <h2>Cheatsheet</h2>
+    <input id="cheat-filter" type="search" placeholder="Filter: above, gap, color…" autocomplete="off" spellcheck="false" aria-label="Filter the cheatsheet">
+    <span class="gap"></span>
+    <button class="close" type="button" data-close title="Close (Esc)" aria-label="Close the cheatsheet">×</button>
+  </div>
+  <div class="cs-grid">
+    <section class="cs-card" style="--hue: var(--syn-keyword)"><h3>Statements</h3>
+      <div class="cs-row"><code>node api "API"</code><span>a box, with its text</span></div>
+      <div class="cs-row"><code>edge a -&gt; b</code><span>a line from a to b</span></div>
+      <div class="cs-row"><code>edge a &lt;- b</code><span>the same line, written target first</span></div>
+      <div class="cs-row"><code>edge a &lt;-&gt; b</code><span>arrows at both ends</span></div>
+      <div class="cs-row"><code>point p  2 above a top-center</code><span>a named spot, to place against or pass through</span></div>
+      <div class="cs-row"><code>region r  a top-left to c bottom-right</code><span>a named area, from one corner to another</span></div>
+      <div class="cs-row"><code>bundle trunk  via: through r horizontal</code><span>a path that lines share</span></div>
+      <div class="cs-row"><code>guide node g  right of a</code><span>for reference only; Guides in Settings shows it</span></div>
+      <div class="cs-row"><code>style hot  fill: red</code><span>a named look, worn with style: hot</span></div>
+      <div class="cs-row"><code>default edge  line: (path: square)</code><span>a look every edge wears; also node, leaf, container; the more specific wins</span></div>
+      <div class="cs-row"><code>diagram theme: nord  background: #1e2229</code><span>the whole diagram's theme and colors</span></div>
+      <p class="cs-note">The picture is drawn exactly as written: nothing moves to make room, and lines go only where they are told. Check reports anything that overlaps.</p>
+    </section>
+    <section class="cs-card" style="--hue: var(--syn-relation)"><h3>Placement</h3>
+      <div class="cs-row"><code>node b  right of a</code><span>beside a, centered on it; also above, below, left of</span></div>
+      <div class="cs-row"><code>node b  above-left of a</code><span>diagonally, corner to corner; also above-right, below-left, below-right</span></div>
+      <div class="cs-row"><code>node b  3 left of a and 2 above a</code><span>3 units left of a, and 2 above it</span></div>
+      <div class="cs-row"><code>node c  right of a and b</code><span>against the box that just bounds a and b</span></div>
+      <div class="cs-row"><code>node b  even with a</code><span>on a's center line</span></div>
+      <div class="cs-row"><code>node b  top even with a</code><span>tops in line; also bottom, left, right</span></div>
+      <div class="cs-row"><code>node f  inside box top-right</code><span>in a corner of box</span></div>
+      <div class="cs-row"><code>node g  outside box right</code><span>just outside a side of box</span></div>
+      <div class="cs-row"><code>node h  on box bottom-left</code><span>centered on a part of box</span></div>
+      <div class="cs-row"><code>node i  on between a and c</code><span>midway between a and c</span></div>
+      <div class="cs-row"><code>node j  below down from b and left from a</code><span>at the point straight down from b and left from a</span></div>
+      <p class="cs-note">The parts of a box: <code>text</code>, the sides <code>top</code> <code>bottom</code> <code>left</code> <code>right</code>, and <code>top-left</code> <code>top-center</code> <code>top-right</code> <code>left-center</code> <code>center</code> <code>right-center</code> <code>bottom-left</code> <code>bottom-center</code> <code>bottom-right</code>. One node is unplaced; every other is placed against something. Each axis is said once.</p>
+    </section>
+    <section class="cs-card" style="--hue: var(--syn-value)"><h3>Gaps</h3>
+      <div class="cs-row"><code>node b  2 right of a</code><span>exactly 2 units apart</span></div>
+      <div class="cs-row"><code>node b  right of a (gap: wide)</code><span>none, tight, normal or wide: 0, 2, 4 or 8 units</span></div>
+      <p class="cs-note">A box is about 4 units tall. A gap is exact.</p>
+    </section>
+    <section class="cs-card" style="--hue: var(--syn-string)"><h3>Labels</h3>
+      <div class="cs-row"><code>node parser</code><span>no text, so its name is its text</span></div>
+      <div class="cs-row"><code>node parser ""</code><span>deliberately blank</span></div>
+      <div class="cs-row"><code>node a "two / lines"</code><span>a space, slash and space breaks the line</span></div>
+    </section>
+    <section class="cs-card" style="--hue: var(--syn-name)"><h3>Containment</h3>
+      <div class="cs-row"><code>node server.docker "Docker"</code><span>a dotted name is a child; declare the parent first</span></div>
+      <div class="cs-row"><code>node server  layout: column</code><span>children top to bottom, in written order; or row</span></div>
+      <div class="cs-row"><code>layout: column (gap: tight, widths: match, align-children: left)</code><span>how the children line up</span></div>
+      <div class="cs-row"><code>layout: deck</code><span>a stack of cards, the first child in front</span></div>
+      <div class="cs-row"><code>gather-children: left</code><span>where the children sit in spare room</span></div>
+      <div class="cs-row"><code>shape: none</code><span>on a container, draws no box</span></div>
+      <p class="cs-note">Without a layout, one child is unplaced and the rest are placed against it.</p>
+    </section>
+    <section class="cs-card" style="--hue: var(--syn-attribute)"><h3>Sizes</h3>
+      <div class="cs-row"><code>width: 30</code><span>30 units wide</span></div>
+      <div class="cs-row"><code>height: menu</code><span>as tall as menu</span></div>
+      <div class="cs-row"><code>height: 0.5 menu height</code><span>half as tall as menu</span></div>
+      <div class="cs-row"><code>height: a top to c bottom</code><span>from a's top to c's bottom</span></div>
+      <div class="cs-row"><code>min-width: 10</code><span>at least 10 units wide</span></div>
+    </section>
+    <section class="cs-card" style="--hue: var(--syn-keyword)"><h3>Appearance</h3>
+      <div class="cs-row"><code>style: hot</code><span>wear a named style</span></div>
+      <div class="cs-row"><code>fill: #191728</code><span>a box's color</span></div>
+      <div class="cs-row"><code>border: none</code><span>no outline</span></div>
+      <div class="cs-row"><code>corners: sharp</code><span>square corners; boxes are rounded unless told</span></div>
+      <div class="cs-row"><code>line: #d2904e</code><span>a line's color</span></div>
+      <div class="cs-row"><code>overlap: allow</code><span>this one may overlap without a finding</span></div>
+      <div class="cs-row"><code>url: "https://example.com"</code><span>a link, shown on the page</span></div>
+      <div class="cs-row"><code>description: "What it does"</code><span>shown on the page; never drawn</span></div>
+    </section>
+    <section class="cs-card" style="--hue: var(--syn-string)"><h3>Lines</h3>
+      <div class="cs-row"><code>line: (path: square, corners: rounded)</code><span>everything about a line goes in line:</span></div>
+      <div class="cs-row"><code>line: (path: curved, curve: subtle)</code><span>straight (the default), square or curved</span></div>
+      <div class="cs-row"><code>line: (path: square, turn: 1/3, step-out: tight)</code><span>where a square line turns, and how far it steps out</span></div>
+      <div class="cs-row"><code>line: (crossing: arc)</code><span>where lines cross: gap, arc, square or none</span></div>
+      <div class="cs-row"><code>line: (pattern: dashed)</code><span>solid, dashed, dotted or dash-dot</span></div>
+      <div class="cs-row"><code>line: (thickness: thick)</code><span>thin, normal, thick, a multiple, or 3px</span></div>
+    </section>
+    <section class="cs-card" style="--hue: var(--syn-relation)"><h3>Where lines go</h3>
+      <div class="cs-row"><code>from: right  to: left</code><span>leave and arrive at a side</span></div>
+      <div class="cs-row"><code>to: bottom-center</code><span>arrive at a point on a side</span></div>
+      <div class="cs-row"><code>to: left 3/4 down</code><span>a fraction of the way along a side</span></div>
+      <div class="cs-row"><code>via: c top, between a and b</code><span>the places a line passes, in order</span></div>
+      <div class="cs-row"><code>via: through r horizontal</code><span>straight through a region</span></div>
+      <div class="cs-row"><code>edge a -&gt; b "calls" (at: start)</code><span>where a line's text sits: start, 1/4, the middle by default</span></div>
+      <div class="cs-row"><code>edge a -&gt; b "calls" (above edge)</code><span>text beside the line rather than on it</span></div>
+      <div class="cs-row"><code>edge a -&gt; b "calls" (on: longest level)</code><span>text on the longest level stretch</span></div>
+      <p class="cs-note">A line runs straight between its two boxes, through anything in between, unless told otherwise.</p>
+    </section>
+    <section class="cs-card" style="--hue: var(--syn-name)"><h3>Body</h3>
+      <div class="cs-row"><code>shape: document</code><span>rectangle, document, circle or none</span></div>
+      <div class="cs-row"><code>node note "a note"  right of a  shape: none</code><span>just text: an annotation</span></div>
+      <div class="cs-row"><code>icon: database</code><span>the node is the picture, with no box</span></div>
+      <div class="cs-row"><code>badge: database</code><span>the picture beside the text, in the box</span></div>
+      <div class="cs-row"><code>layout: deck  cards: "v1" "v2"</code><span>a stack of cards, one per text, front first</span></div>
+      <div class="cs-row"><code>icon logo """&lt;svg …&gt;…&lt;/svg&gt;"""</code><span>your own picture, used as icon: logo</span></div>
+      <p class="cs-note">Pictures: <code>disk</code> <code>desktop</code> <code>laptop</code> <code>package</code> <code>cubes</code> <code>cube</code> <code>database</code>.</p>
+    </section>
+    <section class="cs-card" style="--hue: var(--syn-value)"><h3>Text</h3>
+      <div class="cs-row"><code>node a "Server" (size: large)</code><span>small, normal or large</span></div>
+      <div class="cs-row"><code>node a "Server" (color: theme-muted)</code><span>the text's color</span></div>
+      <div class="cs-row"><code>node a "A long label" (wrap: 24)</code><span>folds at 24 characters</span></div>
+      <div class="cs-row"><code>node a "Server" (inside top, align: left)</code><span>where a container's title sits: on top, outside top, center</span></div>
+      <div class="cs-row"><code>style dim  text: (color: theme-muted)</code><span>in a style, the bracket hangs off text:</span></div>
+      <div class="cs-row"><code>node a "name / [dim]quieter[/dim]"</code><span>those words in style dim's text color</span></div>
+      <div class="cs-row"><code>node a "a \\/ b"</code><span>a slash that doesn't break the line; \\[ for a bracket</span></div>
+    </section>
+    <section class="cs-card" style="--hue: var(--syn-comment)"><h3>Comments</h3>
+      <div class="cs-row"><code>// to the end of the line</code><span>anywhere, including after a statement</span></div>
+    </section>
+  </div>
+  <p class="cs-none" hidden>Nothing matches. Try one word, such as above, gap or color.</p>
+</dialog>
 `;
 
 /** Where a page with no file sends someone who wants more than the cheatsheet. */
-const LINKS = `<nav class="links"><a href="https://github.com/reladraw/reladraw">GitHub</a><a href="https://github.com/reladraw/reladraw/blob/main/SYNTAX.md">Syntax</a></nav>`;
+const LINKS = `<nav class="links"><a href="https://github.com/reladraw/reladraw" title="reladraw on GitHub" aria-label="reladraw on GitHub"><svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a></nav>`;
 
 /**
  * A page with no file's dialogs: the examples, the format settings, which a
