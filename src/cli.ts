@@ -10,6 +10,7 @@ import { format } from './format.js';
 import { DEFAULT_FORMAT, readFormatSettings, SETTINGS_FILE, settingsFileText, type FormatSettings } from './format-settings.js';
 import { draw, type DrawOptions } from './index.js';
 import { drawPage } from './page.js';
+import { noteCommand, serve } from './serve.js';
 import { THEME_NAMES, THEMES } from './themes.js';
 
 const USAGE = `reladraw — draw a diagram from stated placement
@@ -20,6 +21,8 @@ const USAGE = `reladraw — draw a diagram from stated placement
   reladraw format <input.reladraw>... [--check]
   reladraw format - [--check]
   reladraw format --init
+  reladraw serve [<input.reladraw>] [--no-open]
+  reladraw note <input.reladraw> "<what changed>"
   reladraw install-skill [--claude] [--agents]
 
   render      draw the diagram to an SVG, and print any findings: places
@@ -36,6 +39,13 @@ const USAGE = `reladraw — draw a diagram from stated placement
               folder up.
               --init writes a .reladraw-format here, every setting at its
               default with what it does.
+  serve       open a page for the diagram, served on this machine, that
+              redraws whenever the file changes, and edits and saves it. One
+              server serves the folder it was started in, until Ctrl-C;
+              serving another file there opens a page on it. --no-open
+              prints the address.
+  note        describe the change just made to a served file; the page's
+              Versions menu shows it as the agent's, with the note.
   install-skill
               install the agent skill that came with this version of
               reladraw, so it teaches what this tool accepts, for every
@@ -62,7 +72,7 @@ const USAGE = `reladraw — draw a diagram from stated placement
   -h, --help  print this.
 `;
 
-const COMMANDS = ['render', 'check', 'format', 'install-skill'] as const;
+const COMMANDS = ['render', 'check', 'format', 'serve', 'note', 'install-skill'] as const;
 
 // The version of skills this was tried with, so a change there can't break it.
 const SKILLS_PACKAGE = 'skills@1.7.6';
@@ -196,6 +206,8 @@ type Command = (typeof COMMANDS)[number];
 async function main(argv: string[]): Promise<number> {
   // install-skill reads its own flags, -h included.
   if (argv[0] === 'install-skill') return installSkill(argv.slice(1));
+  if (argv[0] === 'serve') return serve(argv.slice(1));
+  if (argv[0] === 'note') return noteCommand(argv.slice(1));
   if (argv.length === 0 || argv.includes('-h') || argv.includes('--help')) {
     process.stdout.write(USAGE);
     return argv.length === 0 ? 1 : 0;

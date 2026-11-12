@@ -27,10 +27,39 @@ export function drawPage(
   file: string,
   options: DrawOptions = {},
   at: Date = new Date(),
+  live?: Live,
 ): { html: string; findings: Finding[] } {
+  const parts = partsOf(source, file, options, at);
+  return { html: page(parts, live), findings: parts.findings };
+}
+
+/**
+ * What a page served by `reladraw serve` needs to follow its file: the file's
+ * path inside the folder served, which the page asks the server about.
+ */
+export interface Live {
+  file: string;
+}
+
+/**
+ * The page's data for `source`, as a served page takes it when its file
+ * changes or its editor is typed in: the same parse, layout, drawings and
+ * findings `drawPage` puts in the page it writes. Runs in the browser too.
+ */
+export function pageData(
+  source: string,
+  file: string,
+  options: DrawOptions = {},
+  at: Date = new Date(),
+): { title: string; drawn: string; data: PageData } {
+  const parts = partsOf(source, file, options, at);
+  return { title: parts.title, drawn: parts.drawn, data: dataOf(parts) };
+}
+
+function partsOf(source: string, file: string, options: DrawOptions, at: Date): PageParts {
   const name = file.replace(/\.[^.]+$/, '') || file;
   const drawn = `drawn from ${file}, ${stamp(at)}`;
-  const run = (text: string) => {
+  const run = (text: string): PageParts => {
     const layout = resolve(parse(text), options);
     const found =
       options.checks === false ? [] : findings(layout, options.checks ? options.checks(fileChecks(layout)) : fileChecks(layout));
@@ -69,20 +98,17 @@ export function drawPage(
     const themes = drawAll(guidesShown);
     const flipped = guideCount > 0 ? drawAll(!guidesShown) : null;
     return {
-      html: page({
-        title,
-        name,
-        drawn,
-        source,
-        findings: found,
-        themes,
-        flipped,
-        guidesShown,
-        guideCount,
-        current,
-        graph: graphOf(layout, themes),
-      }),
+      title,
+      name,
+      drawn,
+      source,
       findings: found,
+      themes,
+      flipped,
+      guidesShown,
+      guideCount,
+      current,
+      graph: graphOf(layout, themes),
     };
   };
   try {
@@ -285,8 +311,31 @@ function colorsOf(theme: Theme): Record<string, string> {
   };
 }
 
-function page({ title, name, drawn, source, findings, themes, flipped, guidesShown, guideCount, current, graph }: PageParts): string {
+/** What the page's script is given as `DATA`, and what a served page swaps in when it redraws. */
+type PageData = ReturnType<typeof dataOf>;
+
+function page(parts: PageParts, live?: Live): string {
+  const { title, drawn, themes, current } = parts;
   const shown = themes[current]!;
+  const data = { ...dataOf(parts), live: live ?? null };
+  // Replaced by functions, so a `$` in a title or a drawing is taken as written.
+  // The zoom's code goes in first, so nothing a diagram says can be taken for its marker.
+  return PAGE.replace('{{panzoom}}', () => PAN_ZOOM)
+    .replace('{{scheme}}', () => shown.scheme)
+    .replace('{{title}}', () => escapeHtml(title))
+    .replace('{{heading}}', () => escapeHtml(title))
+    .replace('{{drawn}}', () => escapeHtml(drawn))
+    .replace('{{colors}}', () =>
+      [
+        ...Object.entries(shown.colors).map(([key, value]) => `${key}: ${value};`),
+        '--sel: #e0b25a; --up: #22b98c; --down: #e5484d;',
+      ].join(' '),
+    )
+    .replace('{{drawing}}', () => shown.tagged)
+    .replace('{{data}}', () => scriptJson(data));
+}
+
+function dataOf({ name, source, findings, themes, flipped, guidesShown, guideCount, current, graph }: PageParts) {
   // The theme list: first the diagram's own theme, which follows the file;
   // then every theme as the reader's choice, dark ones together and light
   // together, as the playground's picker has them, so stepping through the
@@ -315,7 +364,7 @@ function page({ title, name, drawn, source, findings, themes, flipped, guidesSho
       ]),
     );
   };
-  const data = {
+  return {
     name,
     source,
     current,
@@ -328,21 +377,6 @@ function page({ title, name, drawn, source, findings, themes, flipped, guidesSho
     findings: findings.map((finding) => ({ kind: finding.kind, message: finding.message, line: finding.line })),
     graph,
   };
-  // Replaced by functions, so a `$` in a title or a drawing is taken as written.
-  // The zoom's code goes in first, so nothing a diagram says can be taken for its marker.
-  return PAGE.replace('{{panzoom}}', () => PAN_ZOOM)
-    .replace('{{scheme}}', () => shown.scheme)
-    .replace('{{title}}', () => escapeHtml(title))
-    .replace('{{heading}}', () => escapeHtml(title))
-    .replace('{{drawn}}', () => escapeHtml(drawn))
-    .replace('{{colors}}', () =>
-      [
-        ...Object.entries(shown.colors).map(([key, value]) => `${key}: ${value};`),
-        '--sel: #e0b25a; --up: #22b98c; --down: #e5484d;',
-      ].join(' '),
-    )
-    .replace('{{drawing}}', () => shown.tagged)
-    .replace('{{data}}', () => scriptJson(data));
 }
 
 function escapeHtml(text: string): string {
@@ -564,6 +598,62 @@ const PAGE = `<!doctype html>
   }
   aside li button.chosen { border-color: var(--accent); }
   aside li.none { padding: 6px 8px; color: var(--muted); font-size: 13px; }
+  aside li.error { padding: 6px 8px; margin: 2px 0; border-left: 3px solid var(--down); font-size: 13px; }
+  aside li.error .kind { color: var(--down); }
+  #live {
+    padding: 5px 16px; font-size: 12.5px;
+    background: color-mix(in srgb, var(--down) 18%, var(--page)); color: var(--ink);
+    border-bottom: 1px solid color-mix(in srgb, var(--down) 45%, transparent);
+  }
+  #live[hidden] { display: none; }
+
+  /* The editor: a colored layer under a transparent textarea, every property
+     that can move a character the same on both, as in the playground. */
+  #editor {
+    width: 38%; min-width: 280px; max-width: 760px; display: flex; flex-direction: column;
+    border-right: 1px solid color-mix(in srgb, var(--rule) 45%, transparent);
+    background: color-mix(in srgb, var(--ink) 4%, var(--page));
+  }
+  #editor[hidden] { display: none; }
+  .src-head { display: flex; align-items: center; gap: 6px; padding: 6px 10px; font-size: 12.5px;
+    border-bottom: 1px solid color-mix(in srgb, var(--rule) 45%, transparent); }
+  .src-head .file { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #unsaved { color: var(--sel); }
+  #unsaved[hidden] { display: none; }
+  .src-head .gap, #changed .gap { flex: 1; }
+  .src-head kbd { font: 11px system-ui, sans-serif; color: var(--muted); margin-left: 4px; }
+  #changed { display: flex; align-items: center; gap: 6px; padding: 6px 10px; font-size: 12.5px;
+    background: color-mix(in srgb, var(--sel) 18%, var(--page));
+    border-bottom: 1px solid color-mix(in srgb, var(--sel) 45%, transparent); }
+  #changed[hidden] { display: none; }
+  .code { position: relative; flex: 1; min-height: 0; }
+  .code > * {
+    position: absolute; inset: 0; margin: 0; border: 0; padding: 12px 14px;
+    font: 12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace;
+    tab-size: 2; white-space: pre-wrap; overflow-wrap: break-word; word-break: normal;
+  }
+  #paint { overflow: hidden; color: var(--ink); pointer-events: none; }
+  #source { resize: none; outline: 0; background: transparent; color: transparent; caret-color: var(--ink); overflow-y: auto; }
+  #source::selection { background: rgba(130, 170, 240, 0.28); color: transparent; }
+  :root { --syn-comment: #6a6a78; --syn-string: #9ec99a; --syn-keyword: #82aaf0; --syn-name: #b8c9e8;
+    --syn-relation: #c79bdc; --syn-attribute: #6fb3ac; --syn-value: #d3a05f; }
+  :root[data-scheme="light"] { --syn-comment: #8a8a96; --syn-string: #3f7a3a; --syn-keyword: #2f5fb8; --syn-name: #34495e;
+    --syn-relation: #8a3fa8; --syn-attribute: #217a72; --syn-value: #a0601a; }
+  .t-comment, .t-bracket, .t-markup { color: var(--syn-comment); }
+  .t-string { color: var(--syn-string); }
+  .t-keyword { color: var(--syn-keyword); }
+  .t-name { color: var(--syn-name); }
+  .t-relation, .t-arrow { color: var(--syn-relation); }
+  .t-attribute { color: var(--syn-attribute); }
+  .t-value, .t-color { color: var(--syn-value); }
+  #edit[aria-pressed="true"] { border-color: var(--sel); color: var(--sel); }
+  .menu-list.wide { min-width: 340px; }
+  .menu-list .row .when { color: var(--muted); font-variant-numeric: tabular-nums; width: 3.2em; flex: none; }
+  .menu-list .row .who { width: 4.5em; flex: none; }
+  .menu-list .row .who.you { color: #8fb3ff; }
+  .menu-list .row .who.agent { color: var(--up); }
+  .menu-list .row .who.disk, .menu-list .row .who.opened { color: var(--muted); }
+  .menu-list .row .about { flex: 1; text-align: left; white-space: normal; }
   .where { color: var(--muted); font-variant-numeric: tabular-nums; }
   .kind { color: var(--accent); }
   .note { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
@@ -580,6 +670,8 @@ const PAGE = `<!doctype html>
     <p class="drawn">{{drawn}}</p>
   </div>
   <div class="tools">
+    <button id="edit" type="button" title="Show or hide the source (e)" aria-pressed="false" hidden>Edit<kbd class="tag">e</kbd></button>
+    <span class="gap" id="edit-gap" hidden></span>
     <button id="out" type="button" title="Zoom out (-)" aria-label="Zoom out">−</button>
     <span id="scale" aria-live="polite">100%</span>
     <button id="in" type="button" title="Zoom in (+)" aria-label="Zoom in">+</button>
@@ -587,8 +679,12 @@ const PAGE = `<!doctype html>
     <button id="actual" type="button" title="The drawing at its own scale (1)">100%</button>
     <span class="gap"></span>
     <button id="full" type="button" title="Full screen (f)"><span class="label">Full screen</span><kbd class="tag">f</kbd></button>
+    <span class="menu" id="versions-menu" hidden>
+      <button id="versions-button" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="versions-list">Versions ▾<kbd class="tag">o</kbd></button>
+      <span id="versions-list" class="menu-list wide" role="menu" hidden></span>
+    </span>
     <span class="menu">
-      <button id="save" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="save-list">Save ▾<kbd class="tag">s</kbd></button>
+      <button id="save" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="save-list">Export ▾<kbd class="tag">x</kbd></button>
       <span id="save-list" class="menu-list" role="menu" hidden>
         <button id="save-page" class="row" type="button" role="menuitem" data-key="p" title="Save this page as one HTML file, to keep or send"><span class="name">This page</span><kbd>p</kbd></button>
         <button id="save-source" class="row" type="button" role="menuitem" data-key="r" title="Save the .reladraw file this page was drawn from"><span class="name">.reladraw source</span><kbd>r</kbd></button>
@@ -615,7 +711,20 @@ const PAGE = `<!doctype html>
   </div>
 </header>
 <div id="strip" hidden><span class="crumbs"></span><span class="hint"></span></div>
+<div id="live" role="status" hidden></div>
 <main>
+  <section id="editor" aria-label="Source" hidden>
+    <div id="changed" role="alert" hidden><span class="what"></span><span class="gap"></span><button id="load-disk" type="button">Load it</button><button id="keep-mine" type="button">Keep mine</button></div>
+    <div class="src-head">
+      <span class="file"></span><span id="unsaved" title="Not saved to the file" hidden>●</span><span class="gap"></span>
+      <button id="format" type="button" title="Lay the source out again, as reladraw format does, with the nearest .reladraw-format"><span class="name">Format</span></button>
+      <button id="write" type="button" title="Write the source to the file (⌘S or Ctrl+S)"><span class="name">Save</span><kbd>⌘S</kbd></button>
+    </div>
+    <div class="code">
+      <pre id="paint" aria-hidden="true"></pre>
+      <textarea id="source" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Source"></textarea>
+    </div>
+  </section>
   <div id="view">
     <div id="stage">
 {{drawing}}
@@ -638,6 +747,7 @@ const PAGE = `<!doctype html>
   // page saves what reladraw wrote rather than the current zoom and highlights.
   var written = '<!doctype html>\\n' + document.documentElement.outerHTML + '\\n';
   var DATA = {{data}};
+  document.documentElement.setAttribute('data-scheme', DATA.themes[DATA.current].scheme === 'light' ? 'light' : 'dark');
   var view = document.getElementById('view');
   var stage = document.getElementById('stage');
   var svg = stage.querySelector('svg');
@@ -747,9 +857,10 @@ const PAGE = `<!doctype html>
     return Promise.resolve(blob);
   }
 
-  // Every way out of the page is under one Save button: the page, its
+  // Every way out of the page is under one Export button: the page, its
   // source, and the picture. The list stays open after a choice, so "Copied"
-  // can be read. It is one of the menus (below), opened by a click or by m s.
+  // can be read. It is one of the menus (below), opened by a click or by m x.
+  // Save is the served page's writing of the file, so this is Export everywhere.
   var saveButton = document.getElementById('save');
   var saveList = document.getElementById('save-list');
 
@@ -763,7 +874,7 @@ const PAGE = `<!doctype html>
   var saveSource = document.getElementById('save-source');
   saveSource.onclick = function () {
     saveFile(saveSource, DATA.name + '.reladraw', 'reladraw source', 'text/plain', function () {
-      return ready(new Blob([DATA.source], { type: 'text/plain' }));
+      return ready(new Blob([editedText !== null ? editedText : DATA.source], { type: 'text/plain' }));
     });
   };
 
@@ -918,7 +1029,6 @@ const PAGE = `<!doctype html>
   }
   findingsRow.onclick = flipFindings;
   if (count === 0) {
-    list.append(element('li', 'none', 'No findings.'));
     panel.hidden = true;
   } else {
     // Open from the start, unless the panel is to stay out of the way.
@@ -959,7 +1069,25 @@ const PAGE = `<!doctype html>
     zoom.pan((room.left + room.width / 2) - (r.l + r.r) / 2, (room.top + room.height / 2) - (r.t + r.b) / 2);
   }
 
-  DATA.findings.forEach(function (finding) {
+  // The list, made again when a served page redraws. An error the file has
+  // stopped parsing with heads it, over the findings of the last drawing that
+  // parsed, which is still the one shown.
+  function listFindings(error) {
+    list.textContent = '';
+    count = DATA.findings.length + (error ? 1 : 0);
+    findingsRow.querySelector('.name').textContent = 'Findings (' + count + ')';
+    guidesRow.querySelector('.name').textContent = 'Guides (' + DATA.guideCount + ')';
+    if (error) {
+      var wrong = element('li', 'error');
+      var head = element('span', 'where', error.line ? 'line ' + error.line + ' ' : '');
+      wrong.append(head, element('span', 'kind', 'error'), document.createElement('br'),
+        document.createTextNode(error.message), element('span', 'note', 'The picture is the last version that drew.'));
+      list.append(wrong);
+    }
+    if (count === 0) list.append(element('li', 'none', 'No findings.'));
+    DATA.findings.forEach(addFinding);
+  }
+  function addFinding(finding) {
     var item = document.createElement('li');
     var button = document.createElement('button');
     button.type = 'button';
@@ -979,7 +1107,8 @@ const PAGE = `<!doctype html>
     button.onclick = function () { light(finding, button); };
     item.append(button);
     list.append(item);
-  });
+  }
+  listFindings(null);
 
   /* ---- selecting a box or a line ---- */
 
@@ -1190,6 +1319,7 @@ const PAGE = `<!doctype html>
     var next = shown();
     Object.keys(next.colors).forEach(function (key) { document.documentElement.style.setProperty(key, next.colors[key]); });
     schemeMeta.setAttribute('content', next.scheme);
+    document.documentElement.setAttribute('data-scheme', next.scheme === 'light' ? 'light' : 'dark');
     unlight();
     hovered = null;
     tip.style.display = 'none';
@@ -1289,6 +1419,8 @@ const PAGE = `<!doctype html>
   var tools = document.querySelector('.tools');
   var viewButton = document.getElementById('view-button');
   var viewList = document.getElementById('view-list');
+  var versionsButton = document.getElementById('versions-button');
+  var versionsList = document.getElementById('versions-list');
   var strip = document.getElementById('strip');
   var level = null;
   var cursor = 0;
@@ -1297,13 +1429,15 @@ const PAGE = `<!doctype html>
   var STRIP = {
     bar: ['<b>Menu</b>', 'letter to open \\u00B7 \\u232B back \\u00B7 Esc out'],
     view: ['Menu \\u203A <b>View</b>', 'letter to flip \\u00B7 \\u2191\\u2193 Enter \\u00B7 \\u232B back \\u00B7 Esc out'],
-    save: ['Menu \\u203A <b>Save</b>', 'letter to save \\u00B7 \\u2191\\u2193 Enter \\u00B7 \\u232B back \\u00B7 Esc out'],
+    save: ['Menu \\u203A <b>Export</b>', 'letter to save \\u00B7 \\u2191\\u2193 Enter \\u00B7 \\u232B back \\u00B7 Esc out'],
+    versions: ['Menu \\u203A <b>Versions</b>', '\\u2191\\u2193 Enter to put one in the editor \\u00B7 \\u232B back \\u00B7 Esc out'],
     theme: ['Menu \\u203A View \\u203A <b>Theme</b>', '\\u2191\\u2193 to try \\u00B7 Enter keep \\u00B7 \\u232B back \\u00B7 Esc out'],
   };
 
   function rows() {
     if (level === 'view') return Array.prototype.slice.call(viewList.querySelectorAll(':scope > .row'));
     if (level === 'save') return Array.prototype.slice.call(saveList.querySelectorAll(':scope > .row'));
+    if (level === 'versions') return Array.prototype.slice.call(versionsList.querySelectorAll(':scope > .row'));
     if (level === 'theme') return themeItems.map(function (item) { return item.row; });
     return [];
   }
@@ -1334,6 +1468,9 @@ const PAGE = `<!doctype html>
     saveList.hidden = level !== 'save';
     saveButton.classList.toggle('open', level === 'save');
     saveButton.setAttribute('aria-expanded', String(level === 'save'));
+    versionsList.hidden = level !== 'versions';
+    versionsButton.classList.toggle('open', level === 'versions');
+    versionsButton.setAttribute('aria-expanded', String(level === 'versions'));
     viewList.hidden = level !== 'view' && level !== 'theme';
     viewButton.classList.toggle('open', level === 'view' || level === 'theme');
     viewButton.setAttribute('aria-expanded', String(level === 'view' || level === 'theme'));
@@ -1350,7 +1487,7 @@ const PAGE = `<!doctype html>
 
   function back() {
     if (level === 'theme') setLevel('view');
-    else if (level === 'view' || level === 'save') setLevel('bar');
+    else if (level === 'view' || level === 'save' || level === 'versions') setLevel('bar');
     else setLevel(null);
   }
 
@@ -1764,6 +1901,7 @@ const PAGE = `<!doctype html>
   }
 
   saveButton.onclick = function () { setLevel(level === 'save' ? null : 'save'); };
+  versionsButton.onclick = function () { setLevel(level === 'versions' ? null : 'versions'); };
   viewButton.onclick = function () { setLevel(level === 'view' || level === 'theme' ? null : 'view'); };
   themeRow.onclick = function () { setLevel(level === 'theme' ? 'view' : 'theme'); };
   document.addEventListener('click', function (event) {
@@ -1798,6 +1936,7 @@ const PAGE = `<!doctype html>
       if (!hintKey(event)) return;
     } else if (level === null) {
       if (key === 'm' || key === 'M') setLevel('bar');
+      else if (key === 'e' && DATA.live) toggleEditor();
       else if (key === 's') startHints('all');
       else if (key === '/') startHints('all', true);
       else if (key === 'n') startHints('neighbors');
@@ -1820,9 +1959,11 @@ const PAGE = `<!doctype html>
         var letter = key.toLowerCase();
         if (level === 'bar') {
           if (letter === 'v') setLevel('view');
-          else if (letter === 's') setLevel('save');
+          else if (letter === 'x') setLevel('save');
+          else if (letter === 'o' && DATA.live) setLevel('versions');
+          else if (letter === 'e' && DATA.live) { setLevel(null); toggleEditor(); }
           else if (letter === 'f' && !full.hidden) { setLevel(null); toggleFull(); }
-        } else if (level === 'view' || level === 'save') {
+        } else if (level === 'view' || level === 'save' || level === 'versions') {
           rows().forEach(function (row, i) {
             if (row.getAttribute('data-key') !== letter) return;
             cursor = i;
@@ -1845,6 +1986,271 @@ const PAGE = `<!doctype html>
     else return;
     event.preventDefault();
   });
+
+  /* ---- a served page: following the file ---- */
+
+  // Served by reladraw serve, the page follows its file: each time the file
+  // changes on disk, the server sends its text, and the page draws it here
+  // with the library the server also serves, keeping the view, the theme and
+  // whatever is still there to be selected. A text that doesn't draw leaves
+  // the last picture that did, with the error at the head of the findings.
+  var heading = document.querySelector('header h1');
+  var drawnLine = document.querySelector('header .drawn');
+  var liveNote = document.getElementById('live');
+
+  function adopt(next, title) {
+    next.live = DATA.live;
+    DATA = next;
+    graph = DATA.graph;
+    shownTheme = chosenName && DATA.themes[chosenName] ? chosenName : DATA.current;
+    heading.textContent = title;
+    document.title = title;
+    themeItems[0].row.querySelector('.name').textContent = "Diagram's theme (" + DATA.current + ')';
+    if (selection && !(selection.kind === 'node' ? graph.nodes[selection.key] : graph.edges[selection.key])) selection = null;
+    if (level === 'pick' || level === 'filter') setLevel(null);
+    listFindings(null);
+    redraw();
+  }
+
+  function clock(at) {
+    return ('0' + at.getHours()).slice(-2) + ':' + ('0' + at.getMinutes()).slice(-2);
+  }
+
+  // The editor's text when it differs from what was drawn last, for Export's source.
+  var editedText = null;
+  var editorPane = document.getElementById('editor');
+  var editButton = document.getElementById('edit');
+  function toggleEditor(show) {
+    if (!DATA.live) return;
+    var on = show === undefined ? editorPane.hidden : show;
+    editorPane.hidden = !on;
+    editButton.setAttribute('aria-pressed', String(on));
+    if (on) { paintSource(); sourceBox.focus(); }
+    else if (document.activeElement === sourceBox) sourceBox.blur();
+  }
+  editButton.onclick = function () { toggleEditor(); };
+  var sourceBox = document.getElementById('source');
+  var paintBox = document.getElementById('paint');
+  var colorLine = null;
+  function escapeText(text) { return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  // The scanner covers each line end to end, so this rebuilds the text exactly
+  // and only wraps some of it in spans; a lost character would slide the rest
+  // of the line out from under the cursor.
+  function paintSource() {
+    var text = sourceBox.value;
+    var out = '';
+    try {
+      if (!colorLine) throw new Error('not loaded');
+      text.split(/\\r?\\n/).forEach(function (line) {
+        colorLine(line).forEach(function (span) {
+          var piece = escapeText(line.slice(span.start, span.end));
+          out += span.kind === 'plain' ? piece : '<span class="t-' + span.kind + '">' + piece + '</span>';
+        });
+        out += '\\n';
+      });
+    } catch (e) {
+      out = escapeText(text) + '\\n';
+    }
+    paintBox.innerHTML = out;
+    paintBox.style.width = sourceBox.clientWidth + 'px';
+    paintBox.scrollTop = sourceBox.scrollTop;
+  }
+  sourceBox.addEventListener('scroll', function () { paintBox.scrollTop = sourceBox.scrollTop; });
+  window.addEventListener('resize', function () { if (!editorPane.hidden) paintSource(); });
+
+  if (DATA.live) (function () {
+    var file = DATA.live.file;
+    var name = file.split('/').pop();
+    // What the file holds, as last heard from the server; and what the
+    // editor's text was loaded or saved from, which a save checks the file
+    // against, so a change on disk the person kept their text over is asked
+    // about rather than written over.
+    var disk = DATA.source;
+    var base = DATA.source;
+    var drawnText = DATA.source;
+    var versions = [];
+    var down = false;
+    var libs = Promise.all(['/lib/page.js', '/lib/grammar.js', '/lib/format.js', '/lib/format-settings.js'].map(function (path) { return import(path); }));
+    libs.then(function (all) { colorLine = all[1].highlightLine; paintSource(); });
+
+    editButton.hidden = false;
+    document.getElementById('edit-gap').hidden = false;
+    document.getElementById('versions-menu').hidden = false;
+    editorPane.querySelector('.file').textContent = file;
+    sourceBox.value = DATA.source;
+    drawnLine.textContent = file + ' \\u00b7 live, read ' + clock(new Date());
+
+    var unsavedMark = document.getElementById('unsaved');
+    var changedStrip = document.getElementById('changed');
+    function unsaved() { return sourceBox.value !== disk || base !== disk; }
+    function markUnsaved() { unsavedMark.hidden = sourceBox.value === disk; }
+
+    function draw(text) {
+      if (text === drawnText) return Promise.resolve();
+      drawnText = text;
+      return libs.then(function (all) {
+        var made;
+        try {
+          made = all[0].pageData(text, name, {});
+        } catch (error) {
+          editedText = text;
+          listFindings({ message: error.message, line: error.line });
+          if (panelOn && panel.hidden) showPanel(true);
+          return;
+        }
+        editedText = null;
+        adopt(made.data, made.title);
+      });
+    }
+
+    var typing = null;
+    sourceBox.addEventListener('input', function () {
+      paintSource();
+      markUnsaved();
+      clearTimeout(typing);
+      typing = setTimeout(function () { draw(sourceBox.value); }, 250);
+    });
+    sourceBox.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') { sourceBox.blur(); event.preventDefault(); }
+    });
+
+    function load(text) {
+      sourceBox.value = text;
+      paintSource();
+      markUnsaved();
+      draw(text);
+    }
+
+    function who(version) {
+      if (version.who === 'you') return 'you';
+      if (version.who === 'agent') return 'agent' + (version.note ? ': \\u201c' + version.note + '\\u201d' : '');
+      return 'changed on disk';
+    }
+
+    // A change on disk loads at once, unless the editor holds text that isn't
+    // in the file: then the text stays and a strip offers the file instead.
+    function heard(message) {
+      var clean = sourceBox.value === disk && base === disk;
+      disk = message.text;
+      versions = message.versions || [];
+      listVersions();
+      if (clean || sourceBox.value === disk) {
+        base = disk;
+        changedStrip.hidden = true;
+        load(disk);
+      } else {
+        var last = versions[versions.length - 1];
+        changedStrip.querySelector('.what').textContent =
+          name + ' changed on disk at ' + clock(new Date(message.at)) + (last ? ' (' + who(last) + ')' : '');
+        changedStrip.hidden = false;
+        if (editorPane.hidden) toggleEditor(true);
+      }
+      markUnsaved();
+    }
+    document.getElementById('load-disk').onclick = function () {
+      base = disk;
+      changedStrip.hidden = true;
+      load(disk);
+    };
+    document.getElementById('keep-mine').onclick = function () { changedStrip.hidden = true; };
+
+    var writeButton = document.getElementById('write');
+    function write(replace) {
+      var text = sourceBox.value;
+      return fetch('/save?file=' + encodeURIComponent(file), {
+        method: 'POST',
+        body: JSON.stringify({ text: text, base: base, replace: !!replace }),
+      }).then(function (answer) {
+        if (answer.status === 409) {
+          return answer.json().then(function (now) {
+            var what = name + ' changed on disk at ' + clock(new Date(now.at)) +
+              (now.who === 'agent' ? ' (agent' + (now.note ? ': \\u201c' + now.note + '\\u201d' : '') + ')' : '') +
+              ' after you started editing. Saving puts your text in its place; the version on disk stays in Versions.\\n\\nReplace the file on disk?';
+            if (confirm(what)) return write(true);
+          });
+        }
+        if (!answer.ok) throw new Error('the server said ' + answer.status);
+        disk = text;
+        base = text;
+        changedStrip.hidden = true;
+        markUnsaved();
+        flash(writeButton, 'Saved');
+      }).catch(function (error) {
+        flash(writeButton, 'Not saved');
+        liveNote.textContent = 'Couldn\\u2019t save ' + file + ': ' + error.message;
+        liveNote.hidden = false;
+      });
+    }
+    writeButton.onclick = function () { write(false); };
+    // Save on the keyboard works wherever the focus is, and never saves the page.
+    window.addEventListener('keydown', function (event) {
+      if ((event.metaKey || event.ctrlKey) && !event.altKey && (event.key === 's' || event.key === 'S')) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        write(false);
+      }
+    }, true);
+    window.addEventListener('beforeunload', function (event) {
+      if (sourceBox.value !== disk) { event.preventDefault(); event.returnValue = ''; }
+    });
+
+    var formatButton = document.getElementById('format');
+    formatButton.onclick = function () {
+      Promise.all([libs, fetch('/format-settings?file=' + encodeURIComponent(file)).then(function (r) { return r.text(); })])
+        .then(function (got) {
+          var all = got[0];
+          var text = all[2].format(sourceBox.value, all[3].readFormatSettings(got[1]));
+          if (text === sourceBox.value) { flash(formatButton, 'Already formatted'); return; }
+          load(text);
+        })
+        .catch(function (error) { flash(formatButton, 'Can\\u2019t format: ' + error.message.split('\\n')[0]); });
+    };
+
+    // Newest first. Picking one puts it in the editor as unsaved text.
+    function listVersions() {
+      versionsList.textContent = '';
+      versions.slice().reverse().forEach(function (version, i) {
+        var row = element('button', 'row');
+        row.type = 'button';
+        row.setAttribute('role', 'menuitem');
+        var label = version.who === 'opened' ? 'opened' : version.who === 'disk' ? 'on disk' : version.who;
+        var about = version.who === 'opened' ? 'as the server first read it'
+          : version.who === 'disk' ? 'changed on disk'
+          : version.who === 'agent' ? (version.note || 'changed by an agent')
+          : 'saved from this page';
+        row.append(element('span', 'when', clock(new Date(version.at))), element('span', 'who ' + version.who, label),
+          element('span', 'about', about + (i === 0 ? ' (in the file now)' : '')));
+        row.onclick = function () {
+          setLevel(null);
+          toggleEditor(true);
+          load(version.text);
+        };
+        versionsList.append(row);
+      });
+      if (!versions.length) versionsList.append(element('span', 'none', 'No versions yet.'));
+    }
+
+    var events = new EventSource('/events?file=' + encodeURIComponent(file));
+    events.addEventListener('source', function (event) {
+      var message = JSON.parse(event.data);
+      if (down) {
+        down = false;
+        liveNote.hidden = true;
+        writeButton.disabled = false;
+      }
+      drawnLine.textContent = file + ' \\u00b7 live, ' + (message.changed ? 'changed ' : 'read ') + clock(new Date(message.at));
+      heard(message);
+    });
+    events.onerror = function () {
+      if (down) return;
+      down = true;
+      writeButton.disabled = true;
+      drawnLine.textContent = file + ' \\u00b7 not live';
+      liveNote.textContent = 'The server has stopped, so this page can\\u2019t save or follow ' + file +
+        '. Start it again with reladraw serve ' + file + ' in the same folder, and this page picks the file up again. Export \\u25BE still saves what you typed.';
+      liveNote.hidden = false;
+    };
+  })();
 
   layoutSide();
   zoom.show();
