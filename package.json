@@ -11,6 +11,7 @@
   "files": [
     ".claude/skills",
     "dist",
+    "examples/*.reladraw",
     "NOTICE",
     "SYNTAX.md"
   ],

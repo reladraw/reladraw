@@ -1021,7 +1021,7 @@ guide node column ""  below a  width: 10  height: 20
 
 **A guide does everything its kind does except draw.** It places things, holds children, is placed against, and shapes the lines through it. A `guide node` container's children are drawn; only its box and title aren't. That gives a reserved empty space, a column to align against, or a group with no outline.
 
-Guides are shown by whoever renders the file, not by the file: `--guides` on the command line, the Guides box in the playground. A file that explains its own construction, such as a tutorial, may say `diagram  guides: show`. Shown guides are dashed, in the theme's secondary color, and unfilled. Their look changes per kind with `default guide node`, `default guide edge`, `default guide point` and `default guide region`; a bare `default guide` is refused, listing the four.
+Guides are shown by whoever renders the file, not by the file: `--guides` on the command line, the Guides switch in View on the page and in the playground. A file that explains its own construction, such as a tutorial, may say `diagram  guides: show`. Shown guides are dashed, in the theme's secondary color, and unfilled. Their look changes per kind with `default guide node`, `default guide edge`, `default guide point` and `default guide region`; a bare `default guide` is refused, listing the four.
 
 A container styled with no border is different: the same picture with guides hidden, but showing guides never reveals it. A guide box draws nothing, so it is left out of the overlap and overflow findings.
 
@@ -1257,7 +1257,7 @@ The file and line of the statement at fault, `warning` in a fixed spot, the kind
 
 Kinds are turned on or off by name, in the file or on the command line: `diagram  checks: (edge-crossings: on, crowded-edge-ends: off)`, or `--checks "edge-crossings: on"`. A kind not mentioned keeps its default. A deliberate overlap is stated on the thing itself (`overlap: allow`), not turned off for the whole file.
 
-In the playground, where you are looking at the picture, checks run only when you press Check. The findings are listed under the diagram, apart from errors, and clicking one selects its line.
+On the page and in the playground, the findings are listed in the side panel and redone as you type; an error that stops the diagram drawing heads the list. Clicking a finding lights what its statement drew, and, with the source shown, selects its line.
 
 ## The command line
 
@@ -1278,7 +1278,7 @@ reladraw check diagram.reladraw
 | `--no-checks` | print no findings; errors still print |
 | `-v`, `--version` | print the version |
 
-`reladraw serve diagram.reladraw` opens a page for the diagram that redraws whenever the file changes and can edit and save it, and `reladraw note` describes a change made to a served file; see [A page that follows its file](#a-page-that-follows-its-file).
+`reladraw serve diagram.reladraw` opens a page for the diagram that redraws whenever the file changes and can edit and save it, `reladraw serve` with no file opens the playground on this machine, and `reladraw note` describes a change made to a served file; see [A page that follows its file](#a-page-that-follows-its-file).
 
 `reladraw install-skill` installs the agent skill that came with this version of reladraw, for every project, by running `npx skills add` on it with `--copy`. `--claude` installs it in `~/.claude/skills`, `--agents` in `~/.agents/skills` (Codex and others), and both may be given; with neither, it asks, or, with no terminal to ask in, refuses and names them. For any other agent it prints the `skills` command to run.
 
@@ -1310,13 +1310,21 @@ reladraw serve arch.reladraw
 
 `serve` opens the same page in the browser, served from this machine and tied to the file: whenever the file changes on disk, whoever changed it, the page draws it again, keeping the view, the theme and the selection. Under the title it says the page is live, and when the file was last read or changed. A file that stops drawing keeps the last picture that drew, with the error at the head of the findings, and draws again as soon as the file does.
 
-**Edit** (or `e`) shows the source beside the picture, colored as in the playground, and the picture redraws as you type. **Save** (or ⌘S, Ctrl+S) writes the file, and nothing else does; a dot beside the file's name means there is text the file doesn't have. **Format** lays the source out as `reladraw format` would, with the nearest `.reladraw-format`.
+**Edit** (or `e`) shows the source beside the picture, colored as in the playground, with the cheatsheet under it, and the picture redraws as you type. The divider between them can be dragged. **Save** (or ⌘S, Ctrl+S) writes the file, and nothing else does; a dot beside the file's name means there is text the file doesn't have. **Format** lays the source out as `reladraw format` would, with the nearest `.reladraw-format`.
 
 If the file changes on disk while the editor holds unsaved text, the text stays, and a strip says the file changed, by whom when that is known, with **Load it** to replace the text with the file's and **Keep mine** to carry on. Saving over a change made since you started editing asks first.
 
 **Versions** (or `o` from the bar) lists the file's versions since the server started, newest first: each one saved from the page, each change on disk, and each change an agent described with `reladraw note`, with its note. Picking one puts it in the editor as unsaved text, to save if you want it back. They are kept only while the server runs.
 
 One server serves the folder it was started in, and only `.reladraw` files inside it, to this machine only. Serving another file from that folder opens its page on the server already running and returns at once. Ctrl-C stops the server, and an open page then says so; it follows the file again when a server is started in the same folder. `--no-open` prints the page's address instead of opening it.
+
+**Export ▾ ▸ This page** saves the diagram as `reladraw render --page` would write it: a page to send, not one tied to the file.
+
+```
+reladraw serve
+```
+
+With no file, `serve` opens the playground, served from this machine: the source shown, the examples, Open…, and the format settings, with your text kept in the browser. Its first **Save** asks for a path inside the folder, such as `docs/flow.reladraw`, and asks before replacing a file already there. From then on the page is tied to that file, as if `serve` had been given it.
 
 ```
 reladraw note arch.reladraw "moved the cache under the API"
@@ -1447,7 +1455,9 @@ Pre-1.0, so the minor number is where a breaking change goes. Every removal is r
 **Unreleased**
 
 - **`reladraw serve` opens a page that follows its file.** The page redraws whenever the file changes on disk, edits it beside the picture, and writes it on Save or ⌘S. Unsaved text is never replaced by a change on disk without asking, and a Versions menu keeps the file's recent versions, saved from the page, changed on disk, or described by an agent with **`reladraw note`**. One server serves a folder. See [A page that follows its file](#a-page-that-follows-its-file).
-- **The page's Save menu is now Export**, opened by `x` from the bar, so that Save can mean writing the file on a served page.
+- **`reladraw serve` with no file opens the playground** on this machine; its first Save names a file in the folder, and the page then follows that file.
+- **The playground is the page.** It gains selection, the side panel, View and the keys. The Guides box and the theme picker are now in View, and the theme picked there no longer writes a `diagram theme:` line into the source. Check is gone: the findings are in the side panel and redone as you type. Examples, Open…, Save…, Format settings, the cheatsheet and the text kept in your browser are as they were.
+- **The page's Save menu is now Export**, opened by `x` from the bar, so that Save can mean writing the file on a served page. On a page with an editor, Export's This page saves a snapshot, as `render --page` writes it.
 
 **0.27.0**
 

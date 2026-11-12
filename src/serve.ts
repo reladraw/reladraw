@@ -2,10 +2,12 @@ import { spawn } from 'node:child_process';
 import { watch, type FSWatcher } from 'node:fs';
 import { readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { createServer, request, type IncomingMessage, type ServerResponse } from 'node:http';
+import { homedir } from 'node:os';
 import { basename, dirname, extname, isAbsolute, join, relative, resolve as resolvePath, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { OFFERED, START } from './examples.js';
 import { SETTINGS_FILE } from './format-settings.js';
-import { drawPage } from './page.js';
+import { drawPage, playgroundPage, type Example } from './page.js';
 
 /**
  * `reladraw serve`: a page for one diagram, served on this machine and tied to
@@ -26,15 +28,37 @@ const PORTS = 20;
 const HELP = `reladraw serve [<file.reladraw>] [--no-open]
 
 Serves a page for the diagram on this machine and opens it in the browser.
-The page redraws whenever the file changes on disk. One server serves the
-folder it was started in: serving another file in that folder opens a page on
-the server already running. Ctrl-C stops it.
+The page redraws whenever the file changes on disk, and its Save writes the
+file. With no file, the page is a playground: the examples, and a Save that
+names a file in the folder, after which the page follows that file. One
+server serves the folder it was started in: serving another file in that
+folder opens a page on the server already running. Ctrl-C stops it.
 
   --no-open   print the page's address instead of opening it.
 `;
 
 /** Where the library lives: the compiled files beside this one. */
 const LIB = dirname(fileURLToPath(import.meta.url));
+
+/** The examples a page with no file offers, which the package carries beside the library. */
+async function examples(): Promise<Example[]> {
+  const offered: Example[] = [START];
+  for (const [file, name, about] of OFFERED) {
+    try {
+      offered.push({ name, about, source: await readFile(join(LIB, '..', 'examples', `${file}.reladraw`), 'utf8') });
+    } catch {
+      // A copy of the package without its examples still has a playground.
+    }
+  }
+  return offered;
+}
+
+/** A folder as the page names it: from the home folder, as ~/proj, when it is inside it. */
+function shown(folder: string): string {
+  const home = homedir();
+  const rel = relative(home, folder);
+  return rel === '' ? '~' : !rel.startsWith('..') && !isAbsolute(rel) ? `~/${rel.split(sep).join('/')}` : folder;
+}
 
 interface Followed {
   /** The file's text as last read, or null before the first read. */
@@ -281,6 +305,7 @@ async function handle(root: string, followed: Map<string, Followed>, req: Incomi
   }
 
   if (path === '/save' && req.method === 'POST') return save(root, followed, url, req, res);
+  if (path === '/create' && req.method === 'POST') return create(root, followed, url, req, res);
   if (path === '/note' && req.method === 'POST') return note(root, followed, url, req, res);
 
   if (path === '/format-settings') {
@@ -292,8 +317,8 @@ async function handle(root: string, followed: Map<string, Followed>, req: Incomi
   }
 
   if (path === '/') {
-    res.writeHead(200, { 'content-type': TYPES['.html']! });
-    res.end(`<!doctype html><meta charset="utf-8"><title>reladraw serve</title><body style="font:14px system-ui;padding:24px">reladraw is serving ${escape(root)}. Open a diagram by its path inside that folder, such as /diagram.reladraw.</body>`);
+    res.writeHead(200, { 'content-type': TYPES['.html']!, 'cache-control': 'no-store' });
+    res.end(playgroundPage({ examples: await examples(), folder: shown(root) }));
     return;
   }
 
@@ -302,19 +327,15 @@ async function handle(root: string, followed: Map<string, Followed>, req: Incomi
   const text = await readFile(join(root, inside), 'utf8');
   let html: string;
   try {
-    html = drawPage(text, basename(inside), {}, new Date(), { file: inside }).html;
+    html = drawPage(text, basename(inside), {}, new Date(), { kind: 'file', file: inside }).html;
   } catch {
     // A file that doesn't draw yet still gets its page, drawn empty. The
     // file's text arrives with the page's first event, fails there too, and
     // the page shows the error, then draws as soon as the file does.
-    html = drawPage('', basename(inside), {}, new Date(), { file: inside }).html;
+    html = drawPage('', basename(inside), {}, new Date(), { kind: 'file', file: inside }).html;
   }
   res.writeHead(200, { 'content-type': TYPES['.html']!, 'cache-control': 'no-store' });
   res.end(html);
-}
-
-function escape(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;');
 }
 
 function notFound(res: ServerResponse, path: string): void {
@@ -413,6 +434,49 @@ async function save(root: string, followed: Map<string, Followed>, url: URL, req
   await writeFile(full, asked.text, 'utf8');
   record(entry, asked.text, 'you');
   reply(res, 200, { at: entry.at });
+  broadcast(entry);
+}
+
+/**
+ * The first Save of a page with no file: a new file at a path inside the
+ * folder, typed on the page. Its folder must already be there. A file already
+ * at that path is replaced only when the page says to, which it asks the
+ * person first. From then on the page saves through `save`, as a page opened
+ * with the file does.
+ */
+async function create(root: string, followed: Map<string, Followed>, url: URL, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const asked = JSON.parse(await body(req)) as { text: string; replace?: boolean };
+  if (typeof asked.text !== 'string') return reply(res, 400, { error: 'text is wanted' });
+  const typed = (url.searchParams.get('file') ?? '').trim();
+  if (extname(typed) !== '.reladraw') return reply(res, 400, { error: `${typed || 'The path'} isn't a .reladraw file` });
+  if (isAbsolute(typed) || typed.split(/[\\/]/).includes('..')) {
+    return reply(res, 400, { error: `Give a path inside ${shown(root)}, such as diagram.reladraw or docs/flow.reladraw` });
+  }
+  const full = resolvePath(root, typed);
+  let folder: string;
+  try {
+    folder = await realpath(dirname(full));
+  } catch {
+    return reply(res, 400, { error: `There is no folder ${relative(root, dirname(full)).split(sep).join('/')} in ${shown(root)}` });
+  }
+  const within = relative(root, folder);
+  if (within.startsWith('..') || isAbsolute(within)) return reply(res, 403, { error: `That folder is outside ${shown(root)}` });
+  const there = await stat(full).then(
+    (found) => found,
+    () => null,
+  );
+  if (there !== null) {
+    const inside = await insideRoot(root, full);
+    if (typeof inside !== 'string') return reply(res, inside.status, { error: inside.problem });
+    if (!asked.replace) return reply(res, 409, { exists: true, file: inside });
+  }
+  await writeFile(full, asked.text, 'utf8');
+  const inside = await insideRoot(root, full);
+  if (typeof inside !== 'string') return reply(res, inside.status, { error: inside.problem });
+  const entry = followed.get(inside) ?? newEntry();
+  followed.set(inside, entry);
+  record(entry, asked.text, 'you');
+  reply(res, 200, { file: inside, at: entry.at });
   broadcast(entry);
 }
 

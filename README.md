@@ -47,7 +47,7 @@ npm install -g reladraw
 reladraw render diagram.reladraw -o diagram.svg
 ```
 
-`reladraw check diagram.reladraw` prints the warnings without writing a picture, and `reladraw format diagram.reladraw` lines its statements up in columns. `reladraw serve diagram.reladraw` opens it in a browser on a page with pan, zoom, full screen and the warnings beside it, which redraws whenever the file changes and can edit and save it, so you and an agent can work on the one file. `reladraw render diagram.reladraw --page` writes the same page as one file to send to someone.
+`reladraw check diagram.reladraw` prints the warnings without writing a picture, and `reladraw format diagram.reladraw` lines its statements up in columns. `reladraw serve diagram.reladraw` opens it in a browser on a page with pan, zoom, full screen and the warnings beside it, which redraws whenever the file changes and can edit and save it, so you and an agent can work on the one file. `reladraw serve` with no file opens the playground on your machine, and its first Save makes the file. `reladraw render diagram.reladraw --page` writes the same page as one file to send to someone.
 
 Or from a clone, which also gets you the examples:
 
