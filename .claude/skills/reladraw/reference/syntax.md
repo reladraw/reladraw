@@ -1,4 +1,4 @@
-# Syntax reference — 0.28.0
+# Syntax reference — 0.29.0
 
 What the language accepts. The changelog at the end lists what changed in each published version; 0.17.0's changes are large, and its entry has a table of every old spelling and what to write instead.
 
@@ -1452,7 +1452,7 @@ Designed and absent from the code.
 
 Pre-1.0, so the minor number is where a breaking change goes. Every removal is refused by name with the replacement quoted, rather than dropped in silence: an older file stops with an error saying what to write instead.
 
-**Unreleased**
+**0.29.0**
 
 - **The playground and `serve`'s page check only when Check is pressed**, as the playground did before 0.28.0, with **Check as I type** in Settings to check on every redraw. While the source is shown, the findings appear in a band under the picture, with View all to open the side panel. See [Errors and findings](#errors-and-findings).
 - **Edit is now an Edit | View switch** beside the title, and the side panel stays out of the way while the source is shown.
