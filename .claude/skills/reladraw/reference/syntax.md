@@ -1,4 +1,4 @@
-# Syntax reference — 0.27.0
+# Syntax reference — 0.28.0
 
 What the language accepts. The changelog at the end lists what changed in each published version; 0.17.0's changes are large, and its entry has a table of every old spelling and what to write instead.
 
@@ -1452,7 +1452,7 @@ Designed and absent from the code.
 
 Pre-1.0, so the minor number is where a breaking change goes. Every removal is refused by name with the replacement quoted, rather than dropped in silence: an older file stops with an error saying what to write instead.
 
-**Unreleased**
+**0.28.0**
 
 - **`reladraw serve` opens a page that follows its file.** The page redraws whenever the file changes on disk, edits it beside the picture, and writes it on Save or ⌘S. Unsaved text is never replaced by a change on disk without asking, and a Versions menu keeps the file's recent versions, saved from the page, changed on disk, or described by an agent with **`reladraw note`**. One server serves a folder. See [A page that follows its file](#a-page-that-follows-its-file).
 - **`reladraw serve` with no file opens the playground** on this machine; its first Save names a file in the folder, and the page then follows that file.
