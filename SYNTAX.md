@@ -1,4 +1,4 @@
-# Syntax reference — 0.29.0
+# Syntax reference — 0.30.0
 
 What the language accepts. The changelog at the end lists what changed in each published version; 0.17.0's changes are large, and its entry has a table of every old spelling and what to write instead.
 
@@ -1452,7 +1452,7 @@ Designed and absent from the code.
 
 Pre-1.0, so the minor number is where a breaking change goes. Every removal is refused by name with the replacement quoted, rather than dropped in silence: an older file stops with an error saying what to write instead.
 
-**Unreleased**
+**0.30.0**
 
 - **Selecting a box or a line with the source open marks the line that states it**, scrolled into view, while the keyboard stays with the picture.
 - **`serve`'s page has Format settings**, read from the nearest `.reladraw-format`. Its Save writes them back to that file, keeping its comments, or makes one beside the diagram when there is none in the served folder.
