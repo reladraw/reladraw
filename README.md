@@ -40,6 +40,12 @@ The tool draws what the file says and nothing else: a gap is the gap you wrote, 
 
 See also [SYNTAX.md](SYNTAX.md) and [examples/](examples/).
 
+## Write it and see it, side by side
+
+`reladraw serve diagram.reladraw` opens the diagram on a page beside its source. The picture redraws whenever the file changes, whether you saved it from the page or an agent edited it. Click a box and its statement is marked in the source, what feeds it lights green and what it feeds red, and its links and description show in the side panel.
+
+![The served page: the source, the diagram with Collector selected, and its panel](https://raw.githubusercontent.com/reladraw/reladraw/main/docs/page.png)
+
 ## Install
 
 ```

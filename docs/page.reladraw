@@ -1,0 +1,16 @@
+diagram  title: "Weather station"
+
+node sensor     "Rooftop sensor"
+node gateway    "Gateway"    below sensor (gap: 6)
+node collector  "Collector"  below gateway (gap: 6)
+    url: "https://example.com/collector"
+    description: "Checks each reading, then stores it, files it away, and raises an **alert** when it's out of range."
+node db         "Readings"   below collector (gap: 8)  icon: database
+node alerts     "Alerts"     left of db (gap: 9)  even with db
+node archive    "Archive"    right of db (gap: 9)  even with db
+
+edge sensor -> gateway     "radio" (right of edge)
+edge gateway -> collector  "MQTT" (right of edge)
+edge collector -> alerts   "too hot" (left of edge)
+edge collector -> db       "every minute" (at: 3/4, right of edge)
+edge collector -> archive  "nightly" (right of edge)
