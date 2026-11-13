@@ -276,6 +276,28 @@ export function settingsFileText(): string {
   return `${header}\n\n${blocks.join('\n\n')}\n`;
 }
 
+/**
+ * A `.reladraw-format`'s text with these values written in. A setting already
+ * there keeps its line, its place and any comment after it; one not there is
+ * added at the end; everything else stays as it was. The result is read
+ * back, so a value the file would refuse is refused here, by name.
+ */
+export function withSettings(text: string, values: Record<string, string>): string {
+  const left = new Map(Object.entries(values).filter(([name]) => SETTING_BY_NAME.has(name as keyof FormatSettings)));
+  const lines = text.split(/\r?\n/).map((raw) => {
+    const found = raw.match(/^(\s*)([a-z-]+)(\s*:\s*)(.*?)(\s*\/\/.*)?$/);
+    if (!found || !left.has(found[2]!)) return raw;
+    const value = left.get(found[2]!)!;
+    left.delete(found[2]!);
+    return `${found[1]}${found[2]}${found[3]}${value}${found[5] ?? ''}`;
+  });
+  while (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
+  for (const [name, value] of left) lines.push(`${name}: ${value}`);
+  const out = `${lines.join('\n')}\n`;
+  readFormatSettings(out);
+  return out;
+}
+
 function orList(words: string[]): string {
   return words.length < 2 ? words.join('') : `${words.slice(0, -1).join(', ')} or ${words[words.length - 1]}`;
 }

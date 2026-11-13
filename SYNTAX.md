@@ -1452,6 +1452,15 @@ Designed and absent from the code.
 
 Pre-1.0, so the minor number is where a breaking change goes. Every removal is refused by name with the replacement quoted, rather than dropped in silence: an older file stops with an error saying what to write instead.
 
+**Unreleased**
+
+- **Selecting a box or a line with the source open marks the line that states it**, scrolled into view, while the keyboard stays with the picture.
+- **`serve`'s page has Format settings**, read from the nearest `.reladraw-format`. Its Save writes them back to that file, keeping its comments, or makes one beside the diagram when there is none in the served folder.
+- **Hovering on the page shows only the name** of what is under the pointer; a description or a list of links is in the side panel. The SVG itself still carries them as hover text.
+- **The side panel can be made wider or narrower** by dragging its left edge, or with the arrows once it has the focus; a double-click puts it back. The width is kept in the browser.
+- **The strip that `s`, `m` and the other keys bring up floats over the foot of the picture**, so it no longer moves the drawing down.
+- `reladraw serve` for a folder already served says plainly that it used the server already running and that nothing else needs starting.
+
 **0.29.0**
 
 - **The playground and `serve`'s page check only when Check is pressed**, as the playground did before 0.28.0, with **Check as I type** in Settings to check on every redraw. While the source is shown, the findings appear in a band under the picture, with View all to open the side panel. See [Errors and findings](#errors-and-findings).

@@ -6,7 +6,7 @@ import { homedir } from 'node:os';
 import { basename, dirname, extname, isAbsolute, join, relative, resolve as resolvePath, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { OFFERED, START } from './examples.js';
-import { SETTINGS_FILE } from './format-settings.js';
+import { SETTINGS_FILE, settingsFileText, withSettings } from './format-settings.js';
 import { drawPage, playgroundPage, type Example } from './page.js';
 
 /**
@@ -162,7 +162,12 @@ export async function serve(args: string[]): Promise<number> {
     if (there === null) continue;
     if (there.root === root) {
       const address = pageAddress(port, path);
-      process.stdout.write(`reladraw is already serving ${root} at http://127.0.0.1:${port}/\n${address}\n`);
+      // Said so an agent reading it takes it as done, not as a failure to retry.
+      process.stdout.write(
+        `reladraw is already serving ${root} at http://127.0.0.1:${port}/, so this uses that server; nothing else needs starting.\n` +
+          `${open ? 'Opened ' : 'The page is '}${address}\n` +
+          `It redraws whenever the file changes.\n`,
+      );
       if (open) openInBrowser(address);
       return 0;
     }
@@ -311,8 +316,14 @@ async function handle(root: string, followed: Map<string, Followed>, req: Incomi
   if (path === '/format-settings') {
     const inside = await insideRoot(root, url.searchParams.get('file') ?? '');
     if (typeof inside !== 'string') return refuse(res, inside);
-    res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' });
-    res.end(await nearestSettings(dirname(join(root, inside))));
+    const settings = await settingsFor(root, inside);
+    if (req.method === 'POST') return saveSettings(root, settings, req, res);
+    res.writeHead(200, {
+      'content-type': 'text/plain; charset=utf-8',
+      'cache-control': 'no-store',
+      'x-reladraw-format-file': encodeURIComponent(relative(root, settings.target).split(sep).join('/')),
+    });
+    res.end(settings.text);
     return;
   }
 
@@ -500,15 +511,52 @@ async function note(root: string, followed: Map<string, Followed>, url: URL, req
   broadcast(entry);
 }
 
-/** The text of the nearest .reladraw-format from this folder up, or nothing. */
-async function nearestSettings(folder: string): Promise<string> {
+/** The nearest .reladraw-format from this folder up, or nothing. */
+async function nearestSettings(folder: string): Promise<{ path: string; text: string } | null> {
   for (let at = folder; ; at = dirname(at)) {
+    const path = join(at, SETTINGS_FILE);
     try {
-      return await readFile(join(at, SETTINGS_FILE), 'utf8');
+      return { path, text: await readFile(path, 'utf8') };
     } catch {
-      if (dirname(at) === at) return '';
+      if (dirname(at) === at) return null;
     }
   }
+}
+
+/**
+ * The settings Format uses for a file, as `reladraw format` finds them, and
+ * the file the page's Format settings writes: the nearest .reladraw-format
+ * when it is inside the served folder, or else a new one beside the diagram,
+ * since the page writes nothing outside the folder.
+ */
+async function settingsFor(root: string, inside: string): Promise<{ text: string; target: string; there: string | null }> {
+  const folder = dirname(join(root, inside));
+  const nearest = await nearestSettings(folder);
+  const within = nearest !== null && !relative(root, nearest.path).startsWith('..');
+  return {
+    text: nearest?.text ?? '',
+    target: within ? nearest.path : join(folder, SETTINGS_FILE),
+    there: within ? nearest.text : null,
+  };
+}
+
+/** The page's Format settings, written into the file Format reads them from. */
+async function saveSettings(
+  root: string,
+  settings: { target: string; there: string | null },
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  const asked = JSON.parse(await body(req)) as { values?: Record<string, string> };
+  if (typeof asked.values !== 'object' || asked.values === null) return reply(res, 400, { error: 'values are wanted' });
+  let text: string;
+  try {
+    text = withSettings(settings.there ?? settingsFileText(), asked.values);
+  } catch (error) {
+    return reply(res, 400, { error: (error as Error).message });
+  }
+  await writeFile(settings.target, text, 'utf8');
+  reply(res, 200, { file: relative(root, settings.target).split(sep).join('/') });
 }
 
 const NOTE_HELP = `reladraw note <file.reladraw> "<what changed>"

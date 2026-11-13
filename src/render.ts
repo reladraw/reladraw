@@ -227,10 +227,6 @@ export function themeOf(layout: Layout, options: RenderOptions = {}): Theme {
 }
 
 /**
- * `<g data-name="api" data-line="12">` round each thing drawn: what a page
- * shows on hover, and what a finding about that line lights up.
- */
-/**
  * A box or a line with a description carries it, marks stripped, as hover
  * text. A `<title>` is the tooltip of the element it opens, so the drawing is
  * wrapped in a group of its own; one without a description draws as before.
@@ -242,6 +238,11 @@ function described(layout: Layout, item: Drawn, svg: string): string {
   return `  <g>\n  <title>${escapeXml(markdownPlain(text))}</title>\n${svg}\n  </g>`;
 }
 
+/**
+ * `<g data-name="api" data-line="12">` round each thing drawn: what a page
+ * shows on hover, which line of the source it marks when selected, and what
+ * a finding about that line lights up.
+ */
 function tag(layout: Layout, item: Drawn, svg: string): string {
   let name: string;
   let line: number;

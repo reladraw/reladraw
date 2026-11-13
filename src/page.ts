@@ -106,7 +106,7 @@ function page(parts: PageParts, editing: Editing | null, framing?: Framing): str
       '--sel: #e0b25a; --up: #22b98c; --down: #e5484d;',
     ].join(' '),
     cheatsheet: editing ? CHEATSHEET : '',
-    dialogs: noFile ? DIALOGS : '',
+    dialogs: (editing ? FORMAT_DIALOG : '') + (noFile ? DIALOGS : ''),
     drawing: shown.tagged,
     // A literal </script> in the library's text would end its tag early.
     library: framing?.library ? `<script>\n${framing.library.replace(/<\/script/gi, '<\\/script')}\n</script>` : '',
@@ -200,9 +200,12 @@ const PAGE = `<!doctype html>
     background: var(--accent); color: var(--on-accent);
   }
   #side {
-    width: min(24rem, 36vw); display: flex; flex-direction: column; min-height: 0;
+    width: min(24rem, 36vw); display: flex; flex-direction: column; min-height: 0; position: relative;
     border-left: 1px solid color-mix(in srgb, var(--rule) 45%, transparent);
   }
+  /* Its left edge is dragged, or moved with the arrows, to make it wider. */
+  #side-split { position: absolute; left: -4px; top: 0; bottom: 0; width: 7px; z-index: 5; cursor: col-resize; touch-action: none; }
+  #side-split:hover, #side-split.dragging, #side-split:focus-visible { background: color-mix(in srgb, var(--accent) 45%, transparent); outline: 0; }
   #side[hidden] { display: none; }
   /* What is selected takes the room it needs and the findings the rest; when
      both want more than there is, each gives up room and scrolls. */
@@ -219,7 +222,7 @@ const PAGE = `<!doctype html>
   /* ---- the menus, and the keys that reach them ----
      What the keys act on is ringed in amber, and the amber moves down with
      them: the bar after m, then the open menu and the row the arrows are on,
-     then the theme list. The strip under the bar says where the keys are and
+     then the theme list. The strip at the foot of the picture says where the keys are and
      how to get out. */
   .menu > button { position: relative; }
   kbd {
@@ -257,11 +260,15 @@ const PAGE = `<!doctype html>
   .switch[aria-checked="true"] .word { color: var(--up); }
   .switch[aria-checked="false"] .name { color: var(--muted); }
   .menu-list .row:disabled { opacity: 0.45; }
+  /* Floats over the bottom of the picture, left of the zoom card, so going
+     into a keyboard mode never moves the drawing. */
   #strip {
-    display: flex; justify-content: space-between; gap: 16px; padding: 3px 16px; font-size: 12px;
+    left: 12px; bottom: 12px; max-width: calc(100% - 290px); box-sizing: border-box;
+    display: flex; gap: 16px; padding: 5px 12px; font-size: 12px; border-radius: 7px; pointer-events: none;
     background: color-mix(in srgb, var(--sel) 16%, var(--page)); color: var(--ink);
-    border-bottom: 1px solid color-mix(in srgb, var(--sel) 45%, transparent);
+    border: 1px solid color-mix(in srgb, var(--sel) 45%, transparent);
   }
+  #strip .crumbs { white-space: nowrap; }
   #strip[hidden] { display: none; }
   #strip .crumbs b { color: var(--sel); }
   #strip .hint { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -415,6 +422,9 @@ const PAGE = `<!doctype html>
     tab-size: 2; white-space: pre-wrap; overflow-wrap: break-word; word-break: normal;
   }
   #paint { overflow: hidden; color: var(--ink); pointer-events: none; }
+  /* The line stating what is selected in the picture, in the selection's amber. */
+  #paint .src-mark { display: block; margin: 0 -14px; padding: 0 11px; border-left: 3px solid var(--sel);
+    background: color-mix(in srgb, var(--sel) 18%, transparent); }
   #source { resize: none; outline: 0; background: transparent; color: transparent; caret-color: var(--ink); overflow-y: auto; }
   #source::selection { background: rgba(130, 170, 240, 0.28); color: transparent; }
   :root { --syn-comment: #6a6a78; --syn-string: #9ec99a; --syn-keyword: #82aaf0; --syn-name: #b8c9e8;
@@ -529,6 +539,8 @@ const PAGE = `<!doctype html>
   #format-settings, #save-as { width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 32px); }
   #format-settings[open], #save-as[open] { display: flex; flex-direction: column; }
   dialog .about { margin: 0; padding: 10px 16px; font-size: 12px; color: var(--muted); }
+  dialog .about[hidden] { display: none; }
+  #format-save[hidden] { display: none; }
   #format-fields { overflow-y: auto; padding: 4px 16px; }
   #format-fields label { display: grid; grid-template-columns: 190px 1fr; gap: 2px 12px; align-items: center; padding: 8px 0; font-size: 13px;
     border-bottom: 1px solid color-mix(in srgb, var(--rule) 30%, transparent); }
@@ -551,7 +563,8 @@ const PAGE = `<!doctype html>
     #editor { width: auto !important; max-width: none; min-width: 0; height: 45%; border-right: 0;
       border-bottom: 1px solid color-mix(in srgb, var(--rule) 45%, transparent); }
     main { flex-direction: column; }
-    #side { width: auto; max-height: 45%; border-left: 0; border-top: 1px solid color-mix(in srgb, var(--rule) 45%, transparent); }
+    #side-split { display: none; }
+    #side { width: auto !important; max-height: 45%; border-left: 0; border-top: 1px solid color-mix(in srgb, var(--rule) 45%, transparent); }
   }
 </style>
 </head>
@@ -599,7 +612,6 @@ const PAGE = `<!doctype html>
     <button id="full" type="button" title="Full screen (f)"><span class="label">Full screen</span><kbd class="tag">f</kbd></button>
   </div>
 </header>
-<div id="strip" hidden><span class="crumbs"></span><span class="hint"></span></div>
 <div id="live" role="status" hidden></div>
 <main>
   <section id="editor" aria-label="Source" hidden>
@@ -635,6 +647,7 @@ const PAGE = `<!doctype html>
   <div id="split" role="separator" aria-orientation="vertical" aria-label="Resize the source and the diagram" tabindex="0" title="Drag to resize; double-click to reset" hidden></div>
   <div id="picture">
   <div id="canvas">
+  <div id="strip" class="floating" hidden><span class="crumbs"></span><span class="hint"></span></div>
   <button id="check" class="floating" type="button" title="Look for overlaps and other places the picture may not read as meant (c)" hidden>Check<kbd class="tag">c</kbd></button>
   <div id="zoom-card" class="floating">
     <button id="out" class="pm" type="button" title="Zoom out (-)" aria-label="Zoom out">−</button>
@@ -654,6 +667,7 @@ const PAGE = `<!doctype html>
   <div id="band" aria-label="Findings" aria-live="polite" hidden></div>
   </div>
   <div id="side">
+    <div id="side-split" role="separator" aria-orientation="vertical" aria-label="Resize the side panel" tabindex="0" title="Drag to resize; double-click to reset"></div>
     <section id="selected" aria-label="Selected" aria-live="polite">
       <p class="empty">Click a box or a line to see its links and what it connects to.</p>
     </section>
@@ -978,6 +992,55 @@ const PAGE = `<!doctype html>
     if (!panelOn) { panelOn = true; keepPanel(); showPanel(true); }
     else showPanel(panel.hidden);
   }
+
+  // The panel's width, dragged from its left edge, is kept in pixels for
+  // every page in this browser: a description reads at the same width
+  // whatever the window.
+  var SIDE_WIDTH = 'reladraw.side';
+  var sideSplit = document.getElementById('side-split');
+  function sizeSide(width, keep) {
+    if (width === null) side.style.removeProperty('width');
+    else side.style.width = Math.round(Math.max(200, Math.min(window.innerWidth * 0.7, width))) + 'px';
+    if (!keep) return;
+    try {
+      if (width === null) localStorage.removeItem(SIDE_WIDTH);
+      else localStorage.setItem(SIDE_WIDTH, String(parseFloat(side.style.width)));
+    } catch (e) {}
+  }
+  try {
+    var keptWidth = parseFloat(localStorage.getItem(SIDE_WIDTH));
+    if (keptWidth > 0) sizeSide(keptWidth, false);
+  } catch (e) {}
+  var sizing = false;
+  sideSplit.addEventListener('pointerdown', function (event) {
+    if (event.button !== 0) return;
+    sizing = true;
+    try { sideSplit.setPointerCapture(event.pointerId); } catch (e) {}
+    sideSplit.classList.add('dragging');
+    document.body.classList.add('dragging');
+    event.preventDefault();
+  });
+  sideSplit.addEventListener('pointermove', function (event) {
+    if (sizing) sizeSide(side.getBoundingClientRect().right - event.clientX, false);
+  });
+  function sideLetGo(event) {
+    if (!sizing) return;
+    sizing = false;
+    sideSplit.classList.remove('dragging');
+    document.body.classList.remove('dragging');
+    sizeSide(side.getBoundingClientRect().right - event.clientX, true);
+    zoom.show();
+  }
+  sideSplit.addEventListener('pointerup', sideLetGo);
+  sideSplit.addEventListener('pointercancel', sideLetGo);
+  sideSplit.addEventListener('dblclick', function () { sizeSide(null, true); zoom.show(); });
+  sideSplit.addEventListener('keydown', function (event) {
+    var step = { ArrowLeft: 24, ArrowRight: -24 }[event.key];
+    if (!step) return;
+    sizeSide(side.getBoundingClientRect().width + step, true);
+    event.preventDefault();
+    event.stopPropagation();
+  });
   findingsRow.onclick = flipFindings;
   document.getElementById('findings-close').onclick = function () { showPanel(false); };
   if (count === 0) {
@@ -1182,6 +1245,11 @@ const PAGE = `<!doctype html>
 
   // Run on each drawing the stage is given: at the start, and after a theme change.
   function prepare() {
+    // The drawing's own hover texts (its title, a description, a list of
+    // links) are for the bare SVG. Here the heading has the title, the tip
+    // names what is under the pointer and the panel holds the rest, so the
+    // browser's tooltip would only cover them. Exports draw from the data.
+    each(svg.querySelectorAll('title'), function (title) { title.remove(); });
     // A line is too thin to hit, so each gets an unseen wider copy along it.
     each(svg.querySelectorAll('g[data-edge]'), function (group) {
       each(group.querySelectorAll('line, path[fill="none"], polyline'), function (stroke) {
@@ -1233,7 +1301,7 @@ const PAGE = `<!doctype html>
   function select(next) {
     selection = next;
     clearMarks();
-    if (!next) { showSelected(); return; }
+    if (!next) { showSelected(); markSource(null); return; }
     svg.classList.add('selecting');
     var lit;
     if (next.kind === 'node') {
@@ -1257,6 +1325,29 @@ const PAGE = `<!doctype html>
       each(nodeGroups(name), function (group) { if (!group.classList.contains('up')) group.classList.add('down'); });
     });
     showSelected();
+    markSource(next.kind === 'node' ? nodeGroups(next.key) : edgeGroups(next.key));
+  }
+
+  // With the source open, what is selected has the line that states it
+  // marked there, scrolled into view, without taking the keyboard from the
+  // picture.
+  var markedLine = 0;
+  function markSource(groups) {
+    if (!EDIT) return;
+    var line = groups && groups[0] ? Number(groups[0].getAttribute('data-line')) || 0 : 0;
+    if (line === markedLine) return;
+    markedLine = line;
+    // Declared further down; a selection made before then paints on opening.
+    if (editorPane && !editorPane.hidden) { paintSource(); showMarked(); }
+  }
+  function showMarked() {
+    var mark = paintBox.querySelector('.src-mark');
+    if (!mark) return;
+    var top = mark.offsetTop;
+    var bottom = top + mark.offsetHeight;
+    if (top < sourceBox.scrollTop || bottom > sourceBox.scrollTop + sourceBox.clientHeight) {
+      sourceBox.scrollTop = Math.max(0, top - sourceBox.clientHeight / 3);
+    }
   }
 
   function sample(color) {
@@ -2169,7 +2260,7 @@ const PAGE = `<!doctype html>
       showPanel(on ? failing : count > 0 && !autoHide);
       showBand();
     }
-    if (on) { paintSource(); if (!quiet) sourceBox.focus(); }
+    if (on) { paintSource(); showMarked(); if (!quiet) sourceBox.focus(); }
     else if (document.activeElement === sourceBox) sourceBox.blur();
   }
   // The View half of the Edit | View switch, apart from the Settings menu.
@@ -2195,7 +2286,11 @@ const PAGE = `<!doctype html>
     var out = '';
     try {
       if (!lib) throw new Error('not loaded');
-      text.split(/\\r?\\n/).forEach(function (line) { out += colorLine(line) + '\\n'; });
+      text.split(/\\r?\\n/).forEach(function (line, index) {
+        // A block of its own, so the mark runs the width of the editor; the
+        // block ends the line, so it has no line break of its own.
+        out += index + 1 === markedLine ? '<span class="src-mark">' + colorLine(line) + '</span>' : colorLine(line) + '\\n';
+      });
     } catch (e) {
       // Coloring is decoration; the editor has to keep working without it.
       out = escapeCode(text) + '\\n';
@@ -2440,7 +2535,8 @@ const PAGE = `<!doctype html>
     closeFileMenu();
     fileMenu.hidden = true;
     writeButton.hidden = false;
-    formatOpen.hidden = true;
+    // Its settings are now the nearest .reladraw-format's, which the panel edits.
+    formatOpen.hidden = false;
     document.getElementById('versions-menu').hidden = false;
     writeButton.querySelector('.name').textContent = 'Save';
     writeButton.title = 'Write the source to the file (\\u2318S or Ctrl+S)';
@@ -2776,18 +2872,27 @@ const PAGE = `<!doctype html>
     closeOnBackdrop(saveAs);
   }
 
-  /* ---- format settings, for a page with no file ---- */
+  /* ---- format settings ---- */
 
   // The settings as \`name: value\` lines, the way a .reladraw-format holds
   // them, so the panel, the stored copy and the copied file are one text and
-  // the library's own reader refuses what it would refuse in a file.
+  // the library's own reader refuses what it would refuse in a file. With no
+  // file they are kept in this browser; on a file's page they are read from
+  // its nearest .reladraw-format each time the panel opens, and written back
+  // only by its Save.
   var FORMAT = 'reladraw.format';
   var formatPanel = document.getElementById('format-settings');
-  var formatValues = {};
-  (stored(FORMAT) || '').split('\\n').forEach(function (line) {
-    var colon = line.indexOf(':');
-    if (colon > 0) formatValues[line.slice(0, colon).trim()] = line.slice(colon + 1).trim();
-  });
+  var formatTied = false;
+  function settingValues(text) {
+    var values = {};
+    (text || '').split(/\\r?\\n/).forEach(function (line) {
+      line = line.replace(/\\/\\/.*$/, '');
+      var colon = line.indexOf(':');
+      if (colon > 0) values[line.slice(0, colon).trim()] = line.slice(colon + 1).trim();
+    });
+    return values;
+  }
+  var formatValues = settingValues(stored(FORMAT));
   function formatText() {
     if (!lib) return '';
     return lib.SETTINGS.map(function (setting) {
@@ -2826,7 +2931,7 @@ const PAGE = `<!doctype html>
       control.addEventListener(words ? 'change' : 'input', function () {
         formatValues[setting.name] = control.value.trim();
         checkSettings();
-        store(FORMAT, formatText());
+        if (!formatTied) store(FORMAT, formatText());
       });
       label.append(control, element('span', '', setting.about.replace(/\\n/g, ' ') + ' ' +
         setting.values.map(function (value) { return value[0] + ': ' + value[1].replace(/\\n/g, ' '); }).join('; ') + '.'));
@@ -2834,19 +2939,53 @@ const PAGE = `<!doctype html>
     });
     checkSettings();
   }
+  var formatSave = document.getElementById('format-save');
   function openFormatSettings() {
-    libReady.then(function () {
+    var file = tiedFile();
+    var reading = file
+      ? fetch('/format-settings?file=' + encodeURIComponent(file)).then(function (r) {
+        if (!r.ok) throw new Error('the server refused');
+        var target = decodeURIComponent(r.headers.get('x-reladraw-format-file') || '.reladraw-format');
+        return r.text().then(function (text) { return { text: text, target: target }; });
+      })
+      : null;
+    Promise.all([libReady, reading]).then(function (got) {
+      formatTied = !!got[1];
+      formatValues = formatTied ? settingValues(got[1].text) : settingValues(stored(FORMAT));
+      each(formatPanel.querySelectorAll('.about'), function (about) {
+        about.hidden = about.getAttribute('data-for') !== (formatTied ? 'file' : 'browser');
+      });
+      if (formatTied) formatPanel.querySelector('.target').textContent = got[1].target;
+      formatSave.hidden = !formatTied;
+      formatSave.textContent = 'Save';
       buildFormatFields();
       formatPanel.showModal();
-    });
+    }).catch(function (error) { flash(formatOpen, 'Can\\u2019t read them: ' + error.message); });
   }
   if (formatPanel) {
     formatOpen.onclick = openFormatSettings;
     closeOnBackdrop(formatPanel);
+    // In the file, a default is written out, so the file says so too.
     document.getElementById('format-reset').onclick = function () {
       formatValues = {};
-      store(FORMAT, formatText());
+      if (formatTied) lib.SETTINGS.forEach(function (setting) { formatValues[setting.name] = setting.written; });
+      else store(FORMAT, formatText());
       buildFormatFields();
+    };
+    formatSave.onclick = function () {
+      var values = {};
+      Object.keys(formatValues).forEach(function (name) { if (formatValues[name] !== '') values[name] = formatValues[name]; });
+      fetch('/format-settings?file=' + encodeURIComponent(tiedFile()), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ values: values }),
+      }).then(function (r) {
+        return r.json().then(function (answer) {
+          if (!r.ok) throw new Error(answer.error || 'the server refused');
+          formatSave.textContent = 'Saved';
+          setTimeout(function () { formatPanel.close(); }, 500);
+        });
+      }).catch(function (error) { document.getElementById('format-problem').textContent = error.message; });
     };
     var formatCopy = document.getElementById('format-copy');
     formatCopy.onclick = function () {
@@ -3107,9 +3246,23 @@ const CHEATSHEET = `
 const LINKS = `<nav class="links"><a href="https://github.com/reladraw/reladraw" title="reladraw on GitHub" aria-label="reladraw on GitHub"><svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a></nav>`;
 
 /**
- * A page with no file's dialogs: the examples, the format settings, which a
- * file's page takes from its nearest .reladraw-format instead, and, served,
- * the name of the file a first Save writes.
+ * How Format lays the source out, on any page with an editor. With no file
+ * the settings are kept in the browser; on a file's page they are the
+ * nearest .reladraw-format, and Save writes them there.
+ */
+const FORMAT_DIALOG = `
+<dialog id="format-settings" aria-label="Format settings">
+  <div class="bar"><h2>Format settings</h2><button type="button" data-close>Close</button></div>
+  <p class="about" data-for="browser">How Format lays the source out. These are remembered in this browser only; for a project, put them in a <code>.reladraw-format</code> file beside its diagrams.</p>
+  <p class="about" data-for="file" hidden>How Format lays the source out, as <code>reladraw format</code> does. Save writes them to <code class="target"></code>, keeping its comments; nothing changes until you save.</p>
+  <form id="format-fields"></form>
+  <p id="format-problem" role="alert"></p>
+  <footer><button type="button" id="format-reset">Reset to defaults</button><span class="gap"></span><button type="button" id="format-copy" title="Copy these settings as the text of a .reladraw-format file">Copy as .reladraw-format</button><button type="button" id="format-save" hidden>Save</button></footer>
+</dialog>`;
+
+/**
+ * A page with no file's dialogs: the examples and, served, the name of the
+ * file a first Save writes.
  */
 const DIALOGS = `
 <dialog id="examples" aria-label="Examples">
@@ -3118,13 +3271,6 @@ const DIALOGS = `
   <p id="about" aria-live="polite"></p>
   <div id="preview"></div>
   <footer><span class="keys"><kbd>↑</kbd> <kbd>↓</kbd> to preview · <kbd>Enter</kbd> to open · <kbd>Esc</kbd> to close</span><span class="gap"></span><button type="button" id="choose">Open in editor</button></footer>
-</dialog>
-<dialog id="format-settings" aria-label="Format settings">
-  <div class="bar"><h2>Format settings</h2><button type="button" data-close>Close</button></div>
-  <p class="about">How Format lays the source out. These are remembered in this browser only; for a project, put them in a <code>.reladraw-format</code> file beside its diagrams.</p>
-  <form id="format-fields"></form>
-  <p id="format-problem" role="alert"></p>
-  <footer><button type="button" id="format-reset">Reset to defaults</button><span class="gap"></span><button type="button" id="format-copy" title="Copy these settings as the text of a .reladraw-format file">Copy as .reladraw-format</button></footer>
 </dialog>
 <dialog id="save-as" aria-label="Save as a file">
   <form method="dialog" id="save-form">
