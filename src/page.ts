@@ -2286,10 +2286,22 @@ const PAGE = `<!doctype html>
     var out = '';
     try {
       if (!lib) throw new Error('not loaded');
-      text.split(/\\r?\\n/).forEach(function (line, index) {
+      var lines = text.split(/\\r?\\n/);
+      // The mark covers the whole statement: its first line, and every line
+      // after it that starts with whitespace or a """ string, as the parser
+      // reads one; a blank line ends it.
+      var first = markedLine - 1;
+      var last = first;
+      if (first >= 0) {
+        while (last + 1 < lines.length && /^([ \\t]|""")/.test(lines[last + 1]) && lines[last + 1].trim() !== '') last++;
+      }
+      lines.forEach(function (line, index) {
         // A block of its own, so the mark runs the width of the editor; the
-        // block ends the line, so it has no line break of its own.
-        out += index + 1 === markedLine ? '<span class="src-mark">' + colorLine(line) + '</span>' : colorLine(line) + '\\n';
+        // block ends its last line, so that line has no line break of its own.
+        if (index === first) out += '<span class="src-mark">';
+        out += colorLine(line);
+        if (index === last && first >= 0) out += '</span>';
+        else out += '\\n';
       });
     } catch (e) {
       // Coloring is decoration; the editor has to keep working without it.

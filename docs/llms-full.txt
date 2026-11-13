@@ -1696,6 +1696,10 @@ Designed and absent from the code.
 
 Pre-1.0, so the minor number is where a breaking change goes. Every removal is refused by name with the replacement quoted, rather than dropped in silence: an older file stops with an error saying what to write instead.
 
+**Unreleased**
+
+- Selecting something whose statement runs over several lines marks every line of it in the source, not just the first.
+
 **0.30.0**
 
 - **Selecting a box or a line with the source open marks the line that states it**, scrolled into view, while the keyboard stays with the picture.
