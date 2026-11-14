@@ -217,6 +217,12 @@
   #view g[data-node].up > a > :is(rect, path, circle, ellipse, polygon)[stroke]:not([stroke="none"]) { stroke: var(--up); stroke-width: 2; }
   #view g[data-node].down > :is(rect, path, circle, ellipse, polygon)[stroke]:not([stroke="none"]),
   #view g[data-node].down > a > :is(rect, path, circle, ellipse, polygon)[stroke]:not([stroke="none"]) { stroke: var(--down); stroke-width: 2; }
+  /* Bare text has no outline for the glow to follow, and a glow round each
+     letter only blurs them, so its text takes the color instead. */
+  #view g[data-node].bare { filter: none; }
+  #view g[data-node].bare.sel text { fill: var(--sel); }
+  #view g[data-node].bare.up text { fill: var(--up); }
+  #view g[data-node].bare.down text { fill: var(--down); }
   #view g[data-edge].sel :is(line, path[fill="none"], polyline):not(.target) { stroke: var(--sel); stroke-width: 2; }
   #view g[data-edge].up :is(line, path[fill="none"], polyline):not(.target) { stroke: var(--up); stroke-dasharray: 8 5; animation: run .9s linear infinite; }
   #view g[data-edge].down :is(line, path[fill="none"], polyline):not(.target) { stroke: var(--down); stroke-dasharray: 8 5; animation: run .9s linear infinite; }
@@ -18313,6 +18319,12 @@ const PAGE = `<!doctype html>
   #view g[data-node].up > a > :is(rect, path, circle, ellipse, polygon)[stroke]:not([stroke="none"]) { stroke: var(--up); stroke-width: 2; }
   #view g[data-node].down > :is(rect, path, circle, ellipse, polygon)[stroke]:not([stroke="none"]),
   #view g[data-node].down > a > :is(rect, path, circle, ellipse, polygon)[stroke]:not([stroke="none"]) { stroke: var(--down); stroke-width: 2; }
+  /* Bare text has no outline for the glow to follow, and a glow round each
+     letter only blurs them, so its text takes the color instead. */
+  #view g[data-node].bare { filter: none; }
+  #view g[data-node].bare.sel text { fill: var(--sel); }
+  #view g[data-node].bare.up text { fill: var(--up); }
+  #view g[data-node].bare.down text { fill: var(--down); }
   #view g[data-edge].sel :is(line, path[fill="none"], polyline):not(.target) { stroke: var(--sel); stroke-width: 2; }
   #view g[data-edge].up :is(line, path[fill="none"], polyline):not(.target) { stroke: var(--up); stroke-dasharray: 8 5; animation: run .9s linear infinite; }
   #view g[data-edge].down :is(line, path[fill="none"], polyline):not(.target) { stroke: var(--down); stroke-dasharray: 8 5; animation: run .9s linear infinite; }
@@ -19259,6 +19271,10 @@ const PAGE = `<!doctype html>
         wide.classList.add('target');
         stroke.parentNode.insertBefore(wide, stroke.nextSibling);
       });
+    });
+    // A node drawn as text alone, with no shape round it, is lit differently.
+    each(svg.querySelectorAll('g[data-node]'), function (group) {
+      if (!group.querySelector(':scope > :is(rect, path, circle, ellipse, polygon, image), :scope > a > :is(rect, path, circle, ellipse, polygon, image)')) group.classList.add('bare');
     });
     Object.keys(graph.nodes).forEach(function (name) {
       if (graph.nodes[name].links.length > 0) each(nodeGroups(name), function (group) { group.classList.add('has-links'); });
@@ -22093,6 +22109,10 @@ function panZoom(view, stage, label, buttons) {
         wide.classList.add('target');
         stroke.parentNode.insertBefore(wide, stroke.nextSibling);
       });
+    });
+    // A node drawn as text alone, with no shape round it, is lit differently.
+    each(svg.querySelectorAll('g[data-node]'), function (group) {
+      if (!group.querySelector(':scope > :is(rect, path, circle, ellipse, polygon, image), :scope > a > :is(rect, path, circle, ellipse, polygon, image)')) group.classList.add('bare');
     });
     Object.keys(graph.nodes).forEach(function (name) {
       if (graph.nodes[name].links.length > 0) each(nodeGroups(name), function (group) { group.classList.add('has-links'); });
