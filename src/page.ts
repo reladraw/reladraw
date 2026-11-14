@@ -479,14 +479,13 @@ const PAGE = `<!doctype html>
   /* A link as a row of a menu, like the buttons around it. */
   .menu-list a.row { color: var(--ink); text-decoration: none; font-size: 13px; border: 1px solid transparent; border-radius: 6px; }
   .menu-list a.row:hover { background: color-mix(in srgb, var(--ink) 10%, transparent); }
-  #help-menu[hidden] { display: none; }
   .drawn:empty { display: none; }
   /* The divider between the source and the picture: dragged, or moved with the arrows. */
   #split { flex: none; width: 6px; margin: 0 -3px; z-index: 2; cursor: col-resize; touch-action: none; }
   #split[hidden] { display: none; }
   #split:hover, #split.dragging, #split:focus-visible { background: color-mix(in srgb, var(--accent) 45%, transparent); outline: 0; }
   body.dragging { cursor: col-resize; user-select: none; }
-  /* The cheatsheet: a button in the source's bar opens a large window, a
+  /* The cheatsheet: a row of the Help menu opens a large window, a
      card per topic, each row an example in the editor's colors beside what
      it does. The filter narrows the rows as you type. */
   #cheatsheet { width: min(1180px, calc(100vw - 32px)); height: min(820px, calc(100vh - 32px)); max-width: none; max-height: none; }
@@ -521,6 +520,13 @@ const PAGE = `<!doctype html>
   .cs-note code { font: 11.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--ink); }
   .cs-none { margin: 0; padding: 24px 16px; color: var(--muted); }
   .cs-none[hidden] { display: none; }
+  /* The keyboard shortcuts: the cheatsheet's cards, for the page's keys. */
+  #keys-sheet { width: min(820px, calc(100vw - 32px)); max-width: none; max-height: calc(100vh - 32px); }
+  #keys-sheet[open] { display: flex; flex-direction: column; }
+  #keys-sheet .ks-grid { min-height: 0; overflow: auto; padding: 14px 16px 4px; columns: 300px 2; column-gap: 14px; }
+  #keys-sheet .cs-card { break-inside: avoid; margin-bottom: 14px; }
+  #keys-sheet .cs-row { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); }
+  #keys-sheet .cs-row > div kbd { color: var(--ink); margin-right: 3px; }
   dialog { padding: 0; color: var(--ink); background: var(--page); overflow: hidden;
     border: 1px solid color-mix(in srgb, var(--rule) 70%, transparent); border-radius: 6px; }
   dialog::backdrop { background: rgba(0, 0, 0, .6); }
@@ -615,6 +621,15 @@ const PAGE = `<!doctype html>
         <span id="theme-list" class="menu-list sub" role="menu" hidden></span>
       </span>
     </span>
+    <span class="menu">
+      <button id="help-button" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="help-list">Help ▾<kbd class="tag">h</kbd></button>
+      <span id="help-list" class="menu-list" role="menu" hidden>
+        <button id="cheat-open" class="row" type="button" role="menuitem" data-key="?" title="The language on one screen" hidden><span class="name">Language cheatsheet</span><kbd>?</kbd></button>
+        <button id="keys-open" class="row" type="button" role="menuitem" data-key="k" title="Every key the page answers to"><span class="name">Keyboard shortcuts</span><kbd>k</kbd></button>
+        <hr>
+        <a id="syntax-link" class="row" role="menuitem" data-key="r" href="https://github.com/reladraw/reladraw/blob/main/SYNTAX.md" target="_blank" rel="noopener" title="The full syntax reference, on GitHub"><span class="name">Syntax reference ↗</span><kbd>r</kbd></a>
+      </span>
+    </span>
     <button id="full" type="button" title="Full screen (f)"><span class="label">Full screen</span><kbd class="tag">f</kbd></button>
   </div>
 </header>
@@ -637,13 +652,6 @@ const PAGE = `<!doctype html>
       <button id="format" type="button" title="Lay the source out again, as reladraw format does, with the nearest .reladraw-format (Shift+Alt+F)"><span class="name">Format</span></button>
       <button id="format-open" type="button" aria-haspopup="dialog" title="How Format lays the source out" hidden>Format settings…</button>
       <button id="write" type="button" title="Write the source to the file (⌘S or Ctrl+S)"><span class="name">Save</span><kbd>⌘S</kbd></button>
-      <span class="menu" id="help-menu" hidden>
-        <button id="help-button" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="help-list"><span class="name">Help ▾</span></button>
-        <span id="help-list" class="menu-list" role="menu" hidden>
-          <button id="cheat-open" class="row" type="button" role="menuitem" title="The language on one screen"><span class="name">Cheatsheet</span><kbd>?</kbd></button>
-          <a id="syntax-link" class="row" role="menuitem" href="https://github.com/reladraw/reladraw/blob/main/SYNTAX.md" target="_blank" rel="noopener" title="The full syntax reference, on GitHub"><span class="name">Syntax reference ↗</span></a>
-        </span>
-      </span>
     </div>
     <div class="code">
       <pre id="paint" aria-hidden="true"></pre>
@@ -683,6 +691,45 @@ const PAGE = `<!doctype html>
     </aside>
   </div>
 </main>{{dialogs}}
+<dialog id="keys-sheet" aria-label="Keyboard shortcuts">
+  <div class="bar"><h2>Keyboard shortcuts</h2><button type="button" data-close>Close</button></div>
+  <div class="ks-grid">
+    <section class="cs-card" style="--hue: var(--syn-keyword)"><h3>The picture</h3>
+      <div class="cs-row"><div><kbd>+</kbd><kbd>−</kbd></div><span>zoom in, zoom out</span></div>
+      <div class="cs-row"><div><kbd>0</kbd></div><span>fit the diagram to the window</span></div>
+      <div class="cs-row"><div><kbd>1</kbd></div><span>100%</span></div>
+      <div class="cs-row"><div><kbd>g</kbd></div><span>grab the diagram, then pan it with the arrows or <kbd>h</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd>; Shift pans further</span></div>
+      <div class="cs-row"><div><kbd>p</kbd></div><span>show or hide the side panel</span></div>
+      <div class="cs-row"><div><kbd>f</kbd></div><span>full screen</span></div>
+    </section>
+    <section class="cs-card" style="--hue: var(--syn-relation)"><h3>Selecting</h3>
+      <div class="cs-row"><div><kbd>s</kbd></div><span>a letter on every box and line; type one to select it</span></div>
+      <div class="cs-row"><div><kbd>/</kbd></div><span>filter what gets a letter: words in its text, or is:node, is:edge, is:container, style:name</span></div>
+      <div class="cs-row"><div><kbd>n</kbd></div><span>letters on what the selection connects to</span></div>
+      <div class="cs-row"><div><kbd>i</kbd></div><span>letters on what is inside the selection, and the box it is in</span></div>
+      <div class="cs-row"><div><kbd>l</kbd></div><span>letters on the selection's links, to open one</span></div>
+      <div class="cs-row"><div><kbd>⌫</kbd></div><span>step back: let go of a grab, then a lit finding, then the selection</span></div>
+      <div class="cs-row"><div><kbd>Esc</kbd></div><span>back to the plain diagram, from anywhere</span></div>
+    </section>
+    <section class="cs-card" style="--hue: var(--syn-value)"><h3>Menus</h3>
+      <div class="cs-row"><div><kbd>m</kbd></div><span>the bar: each control shows its letter</span></div>
+      <div class="cs-row"><div><kbd>m</kbd> <kbd>s</kbd></div><span>Settings</span></div>
+      <div class="cs-row"><div><kbd>m</kbd> <kbd>x</kbd></div><span>Export</span></div>
+      <div class="cs-row" data-on="file"><div><kbd>m</kbd> <kbd>o</kbd></div><span>Versions</span></div>
+      <div class="cs-row"><div><kbd>m</kbd> <kbd>h</kbd></div><span>Help</span></div>
+      <div class="cs-row"><div><kbd>↑</kbd><kbd>↓</kbd> <kbd>Enter</kbd></div><span>in a menu, choose a row; or press the row's letter</span></div>
+      <div class="cs-row"><div><kbd>⌫</kbd></div><span>up one level</span></div>
+    </section>
+    <section class="cs-card" style="--hue: var(--syn-attribute)" data-on="edit"><h3>Editing</h3>
+      <div class="cs-row"><div><kbd>e</kbd></div><span>show or hide the source</span></div>
+      <div class="cs-row"><div><kbd>c</kbd></div><span>Check: look for overlaps and other places the picture may not read as meant, unless Check as I type is on</span></div>
+      <div class="cs-row"><div><kbd>?</kbd></div><span>the language cheatsheet</span></div>
+      <div class="cs-row"><div><kbd>⌘S</kbd> or <kbd>Ctrl+S</kbd></div><span>save</span></div>
+      <div class="cs-row"><div><kbd>Shift+Alt+F</kbd></div><span>format the source</span></div>
+      <div class="cs-row"><div><kbd>Esc</kbd></div><span>in the source, leave it so the keys above work again</span></div>
+    </section>
+  </div>
+</dialog>
 {{library}}
 <script>
 (function () {
@@ -1566,7 +1613,8 @@ const PAGE = `<!doctype html>
   /* ---- the menus, by pointer and by key ---- */
 
   // The keys work in levels: the diagram; m, the bar, each control wearing
-  // its letter; then a menu, View or Save; then, from View, the theme list.
+  // its letter; then a menu, Settings, Export, Versions or Help; then, from
+  // Settings, the theme list.
   // A letter means what the level it is pressed in says, so no letter is used
   // up however deep the menus go. Keys that aren't letters mean the same at
   // every level: Backspace steps back one level, and beneath the menus lets
@@ -1578,6 +1626,8 @@ const PAGE = `<!doctype html>
   var viewList = document.getElementById('view-list');
   var versionsButton = document.getElementById('versions-button');
   var versionsList = document.getElementById('versions-list');
+  var helpButton = document.getElementById('help-button');
+  var helpList = document.getElementById('help-list');
   var strip = document.getElementById('strip');
   var level = null;
   var cursor = 0;
@@ -1588,6 +1638,7 @@ const PAGE = `<!doctype html>
     view: ['Menu \\u203A <b>Settings</b>', 'letter to flip \\u00B7 \\u2191\\u2193 Enter \\u00B7 \\u232B back \\u00B7 Esc out'],
     save: ['Menu \\u203A <b>Export</b>', 'letter to save \\u00B7 \\u2191\\u2193 Enter \\u00B7 \\u232B back \\u00B7 Esc out'],
     versions: ['Menu \\u203A <b>Versions</b>', '\\u2191\\u2193 Enter to put one in the editor \\u00B7 \\u232B back \\u00B7 Esc out'],
+    help: ['Menu \\u203A <b>Help</b>', 'letter to open \\u00B7 \\u2191\\u2193 Enter \\u00B7 \\u232B back \\u00B7 Esc out'],
     theme: ['Menu \\u203A Settings \\u203A <b>Theme</b>', '\\u2191\\u2193 to try \\u00B7 Enter keep \\u00B7 \\u232B back \\u00B7 Esc out'],
   };
 
@@ -1595,6 +1646,7 @@ const PAGE = `<!doctype html>
     if (level === 'view') return Array.prototype.slice.call(viewList.querySelectorAll(':scope > .row:not([hidden])'));
     if (level === 'save') return Array.prototype.slice.call(saveList.querySelectorAll(':scope > .row'));
     if (level === 'versions') return Array.prototype.slice.call(versionsList.querySelectorAll(':scope > .row'));
+    if (level === 'help') return Array.prototype.slice.call(helpList.querySelectorAll(':scope > .row:not([hidden])'));
     if (level === 'theme') return themeItems.map(function (item) { return item.row; });
     return [];
   }
@@ -1628,6 +1680,9 @@ const PAGE = `<!doctype html>
     versionsList.hidden = level !== 'versions';
     versionsButton.classList.toggle('open', level === 'versions');
     versionsButton.setAttribute('aria-expanded', String(level === 'versions'));
+    helpList.hidden = level !== 'help';
+    helpButton.classList.toggle('open', level === 'help');
+    helpButton.setAttribute('aria-expanded', String(level === 'help'));
     viewList.hidden = level !== 'view' && level !== 'theme';
     viewButton.classList.toggle('open', level === 'view' || level === 'theme');
     viewButton.setAttribute('aria-expanded', String(level === 'view' || level === 'theme'));
@@ -1644,7 +1699,7 @@ const PAGE = `<!doctype html>
 
   function back() {
     if (level === 'theme') setLevel('view');
-    else if (level === 'view' || level === 'save' || level === 'versions') setLevel('bar');
+    else if (level === 'view' || level === 'save' || level === 'versions' || level === 'help') setLevel('bar');
     else setLevel(null);
   }
 
@@ -2065,6 +2120,11 @@ const PAGE = `<!doctype html>
 
   saveButton.onclick = function () { setLevel(level === 'save' ? null : 'save'); };
   versionsButton.onclick = function () { setLevel(level === 'versions' ? null : 'versions'); };
+  helpButton.onclick = function () { setLevel(level === 'help' ? null : 'help'); };
+  // Help's rows open a window or a link, so choosing one closes the menu.
+  helpList.addEventListener('click', function (event) {
+    if (event.target.closest('.row')) setLevel(null);
+  });
   viewButton.onclick = function () { setLevel(level === 'view' || level === 'theme' ? null : 'view'); };
   themeRow.onclick = function () { setLevel(level === 'theme' ? 'view' : 'theme'); };
   document.addEventListener('click', function (event) {
@@ -2128,10 +2188,11 @@ const PAGE = `<!doctype html>
           if (letter === 's') setLevel('view');
           else if (letter === 'x') setLevel('save');
           else if (letter === 'o' && tiedFile()) setLevel('versions');
+          else if (letter === 'h') setLevel('help');
           else if (letter === 'e' && EDIT) { setLevel(null); toggleEditor(); }
           else if (letter === 'c' && !checkButton.hidden) { setLevel(null); runCheck(); }
           else if (letter === 'f' && !full.hidden) { setLevel(null); toggleFull(); }
-        } else if (level === 'view' || level === 'save' || level === 'versions') {
+        } else if (level === 'view' || level === 'save' || level === 'versions' || level === 'help') {
           rows().forEach(function (row, i) {
             if (row.getAttribute('data-key') !== letter) return;
             cursor = i;
@@ -2243,9 +2304,6 @@ const PAGE = `<!doctype html>
   var fileMenu = document.getElementById('file-menu');
   var fileButton = document.getElementById('file-button');
   var closeFileMenu = sourceMenu(fileMenu, fileButton, document.getElementById('file-list'));
-  // Help: the cheatsheet, and the full reference.
-  var helpMenu = document.getElementById('help-menu');
-  sourceMenu(helpMenu, document.getElementById('help-button'), document.getElementById('help-list'));
   document.getElementById('write-row').onclick = function () { writeButton.click(); };
   // Where "Saved" flashes: the Save button, or the File menu it is in.
   function saveFlash(text) { flash(writeButton.hidden ? fileButton : writeButton, text); }
@@ -3063,8 +3121,9 @@ const PAGE = `<!doctype html>
       cheatFilter.focus();
       cheatFilter.select();
     };
-    helpMenu.hidden = false;
-    document.getElementById('cheat-open').onclick = openCheatsheet;
+    var cheatRow = document.getElementById('cheat-open');
+    cheatRow.hidden = false;
+    cheatRow.onclick = openCheatsheet;
     closeOnBackdrop(cheatBox);
     cheatFilter.addEventListener('input', function () {
       var words = cheatFilter.value.toLowerCase().split(/\\s+/).filter(Boolean);
@@ -3092,6 +3151,18 @@ const PAGE = `<!doctype html>
       layoutCheat();
     });
   }
+
+  /* ---- the keyboard shortcuts ---- */
+
+  // Every page has them; rows for editing and for a served file's versions
+  // show only where those are.
+  var keysBox = document.getElementById('keys-sheet');
+  each(keysBox.querySelectorAll('[data-on]'), function (part) {
+    var on = part.getAttribute('data-on');
+    part.hidden = on === 'edit' ? !EDIT : on === 'file' ? !tiedFile() : false;
+  });
+  closeOnBackdrop(keysBox);
+  document.getElementById('keys-open').onclick = function () { keysBox.showModal(); };
 
   /* ---- the start ---- */
 
