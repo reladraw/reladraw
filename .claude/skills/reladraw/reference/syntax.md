@@ -1280,6 +1280,8 @@ reladraw check diagram.reladraw
 
 `reladraw serve diagram.reladraw` opens a page for the diagram that redraws whenever the file changes and can edit and save it, `reladraw serve` with no file opens the playground on this machine, and `reladraw note` describes a change made to a served file; see [A page that follows its file](#a-page-that-follows-its-file).
 
+`render --page`, `check` and `serve` also take a page spec, a folder, or several diagrams, and make one page of them all; see [A page of several diagrams](#a-page-of-several-diagrams).
+
 `reladraw install-skill` installs the agent skill that came with this version of reladraw, for every project, by running `npx skills add` on it with `--copy`. `--claude` installs it in `~/.claude/skills`, `--agents` in `~/.agents/skills` (Codex and others), and both may be given; with neither, it asks, or, with no terminal to ask in, refuses and names them. For any other agent it prints the `skills` command to run.
 
 The output is a standalone SVG: every picture is drawn into it as path data, never from a font or a linked file. A web page can draw a diagram in place with `<reladraw-diagram>`; see "In a web page" in the README.
@@ -1332,6 +1334,46 @@ reladraw note arch.reladraw "moved the cache under the API"
 
 `note` describes the change just made to a served file, for its Versions list, which shows it as an agent's. With no server serving the folder, it notes nothing, says so, and succeeds.
 
+### A page of several diagrams
+
+```
+reladraw render --page library.reladraw-page
+reladraw serve library.reladraw-page
+```
+
+A page spec lists diagrams for one page, which opens on an overview of them all and opens each from there. It is a file of its own, ending `.reladraw-page`, written like a diagram: a keyword first, then `key: value` settings, with `//` comments.
+
+```
+// the library's diagrams, in the order they're picked
+page  title: "Neighborhood library"  kind: list  theme: nord
+
+diagram borrow.reladraw  "Borrow"
+diagram return.reladraw  "Return"
+
+group "Holds"
+diagram hold.reladraw   "Place a hold"
+diagram renew.reladraw  "Renew"
+```
+
+- **`page`** comes once, with the page's settings: `kind:`, which is required, and `title:` and `theme:`, which are optional. `list` is the only kind so far; `grid`, `versions`, `steps` and `drill-down` are refused as not built yet. The title heads the page, and defaults to the spec's file name. The theme colors the overview, and defaults to `dark`. A diagram opened from the overview keeps its own colors.
+- **`diagram`** lists one diagram: its path from the spec's folder, quoted when it has a space, and then, optionally, a quoted label. The overview and the drop-down pick a diagram by its label, or by its title when it has none. The page lists the diagrams in the spec's order, and a path listed twice is refused.
+- **`group "…"`** starts a group, whose diagrams are the ones listed after it, up to the next `group`. The overview puts each group in a box headed by its name, and diagrams listed before the first group go in a box headed "Ungrouped". A group may have no diagrams yet; two groups with the same name are refused, and groups don't nest.
+
+A long `page` line may be broken over several lines, as a diagram's statements may. `reladraw format` lays a spec out too, lining up neighboring `diagram` lines in columns; `.reladraw-format`'s settings are for diagrams and don't apply to it. An unknown keyword or key, a key written twice, or a missing `page`, `kind:` or diagram is an error naming the line.
+
+```
+reladraw render --page diagrams/
+reladraw render --page borrow.reladraw return.reladraw -o lending.html
+```
+
+A plain list needs no spec. A folder makes a page of the `.reladraw` files directly inside it, sorted by name and titled with the folder's name, written beside the folder as `diagrams.html`. Several files make one page in the order given, and `render` needs `-o` to name it. `render --page` of a spec writes the page beside the spec under its name, `library.html`. Without `--page`, `render` refuses all three, since they make a page, not an SVG. A spec or a folder goes on its own, not among other inputs. `check` takes the same inputs and prints each diagram's findings under its own path.
+
+**The page** opens on the overview: each diagram drawn small on a card under its label, in the page's theme. A click on a card opens that diagram, on the same page as `--page` writes for one diagram. The title then reads with a ← before it, and a click on it goes back to the overview. A drop-down beside the title switches between the diagrams. For eight diagrams or fewer it shows each one's drawing, and for more it lists the labels in columns, groups flowing down them under their names. From the keyboard, `o` goes back to the overview and `]` and `[` open the next and the previous diagram. `m` then `d` opens the drop-down, whose rows are lettered in the spec's order, and a row's letter opens it. On the overview, `s` puts the same letters on the cards.
+
+**Served**, the page follows the spec and every diagram on it: a diagram redraws on its card and when open as soon as its file changes, and a change to the spec relabels, reorders, regroups or drops the cards. A diagram that stops drawing says why on its card and opens to show the error. A diagram the spec names that isn't there is listed over the cards with its line, and the rest still draw. A folder served is followed too, so a diagram added to it gets a card and one taken out goes.
+
+Edit follows the view. On the overview it shows the spec, and the cards redraw from it as you type, before it is saved. With a diagram open, it shows that diagram's source. Each file keeps its own unsaved text, Versions and Save, and a ● on a card and on its drop-down row marks a file with text not saved. Served from a folder or from several files, Edit on the overview shows the spec they imply; its first Save asks where to write it as a `.reladraw-page`, with each diagram's path written from the spec's folder, and the page then follows that spec.
+
 ### Formatting
 
 ```
@@ -1345,7 +1387,7 @@ reladraw format --init
 
 Inside a clause, spacing comes out as these pages write it, whatever was typed: one space after a key's colon and between words, none just inside a bracket, and a comma against the word before it, so `line:( corners:rounded , path:square )` becomes `line: (corners: rounded, path: square)`.
 
-Only whitespace changes, and the order of clauses when `clause-order` asks: every word is copied as it was written, and the result is checked to draw exactly what the original did. A file that doesn't parse is reported and left alone, and the other files still run. `--check` changes nothing, prints each file that would change, and fails if there is one, for a pre-commit hook or CI. A shell expands `*.reladraw` into the files; folders aren't searched.
+Only whitespace changes, and the order of clauses when `clause-order` asks: every word is copied as it was written, and the result is checked to draw exactly what the original did. A file that doesn't parse is reported and left alone, and the other files still run. `--check` changes nothing, prints each file that would change, and fails if there is one, for a pre-commit hook or CI. A shell expands `*.reladraw` into the files; folders aren't searched. A `.reladraw-page` given to `format` is laid out as a page spec ([A page of several diagrams](#a-page-of-several-diagrams)).
 
 `-` in place of the files reads the diagram from standard input and prints it formatted, touching no file. That is how an editor formats a buffer, saved or not: Vim's `:%!reladraw format -`, or the command a format-on-save package runs. Its settings come from the nearest `.reladraw-format` to the current folder.
 
@@ -1454,7 +1496,9 @@ Pre-1.0, so the minor number is where a breaking change goes. Every removal is r
 
 **Unreleased**
 
+- **A page of several diagrams.** A page spec, a file ending `.reladraw-page`, lists diagrams with a label each, optionally under `group "…"` headings, and `reladraw render --page` of it writes one page that opens on an overview of them all, drawn small, with a drop-down to switch between them. A folder, or several files, make the same page without a spec. The page has its own `theme:`, and `o`, `[`, `]`, `m` `d` and `s` reach the diagrams from the keyboard. `reladraw serve` takes the same inputs and follows the spec and every diagram on it; Edit shows the spec on the overview and the open diagram's source otherwise, and the spec a folder implies can be saved as a file. `check` and `format` take a spec too. See [A page of several diagrams](#a-page-of-several-diagrams).
 - **Help is in the page's bar**, beside Settings, on every page and in Edit and View alike, and `m` `h` reaches it. It holds the language cheatsheet where there is a source, a new sheet of every keyboard shortcut, and the syntax reference. It used to be in the source's bar, so it was gone whenever the source was hidden, and no page listed its keys.
+- Selected bare text takes the selection's color instead of glowing round every letter, which made it hard to read.
 
 **0.30.1**
 

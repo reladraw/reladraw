@@ -18,11 +18,15 @@ const USAGE = `reladraw — draw a diagram from stated placement
 
   reladraw render <input.reladraw> [-o <output.svg>] [options]
   reladraw render <input.reladraw> --page [-o <output.html>] [options]
-  reladraw check <input.reladraw> [options]
-  reladraw format <input.reladraw>... [--check]
+  reladraw render <page.reladraw-page | folder | a.reladraw b.reladraw...>
+                  --page [-o <output.html>] [options]
+  reladraw check <input.reladraw | page.reladraw-page | folder | files...>
+                 [options]
+  reladraw format <input.reladraw | page.reladraw-page>... [--check]
   reladraw format - [--check]
   reladraw format --init
-  reladraw serve [<input.reladraw>] [--no-open]
+  reladraw serve [<input.reladraw | page.reladraw-page | folder | files...>]
+                 [--no-open]
   reladraw note <input.reladraw> "<what changed>"
   reladraw install-skill [--claude] [--agents]
 
@@ -44,7 +48,8 @@ const USAGE = `reladraw — draw a diagram from stated placement
               redraws whenever the file changes, and edits and saves it. One
               server serves the folder it was started in, until Ctrl-C;
               serving another file there opens a page on it. --no-open
-              prints the address.
+              prints the address. Given a page spec, a folder or several
+              files, the page shows them all and follows each.
   note        describe the change just made to a served file; the page's
               Versions menu shows it as the agent's, with the note.
   install-skill
@@ -61,6 +66,9 @@ const USAGE = `reladraw — draw a diagram from stated placement
               pans, zooms, goes full screen, saves itself, its source, the SVG
               or a PNG, lists the findings and names what is under the
               pointer. Defaults to the input path with .html.
+              Of a page spec (.reladraw-page), a folder or several files,
+              one page of all the diagrams, opening on an overview of
+              them; several files need -o.
   --theme     render in this theme, whatever the file's \`diagram theme:\`
               says. One of ${THEME_NAMES.join(', ')}.
   --guides    draw the guides: everything written with \`guide\` in front,

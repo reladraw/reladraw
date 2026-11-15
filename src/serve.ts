@@ -30,8 +30,8 @@ import { DEFAULT_THEME } from './themes.js';
 export const FIRST_PORT = 4747;
 const PORTS = 20;
 
-// Pages of several diagrams aren't in the help until their docs are written.
 const HELP = `reladraw serve [<file.reladraw>] [--no-open]
+reladraw serve <page.reladraw-page | folder | a.reladraw b.reladraw...> [--no-open]
 
 Serves a page for the diagram on this machine and opens it in the browser.
 The page redraws whenever the file changes on disk, and its Save writes the
@@ -39,6 +39,11 @@ file. With no file, the page is a playground: the examples, and a Save that
 names a file in the folder, after which the page follows that file. One
 server serves the folder it was started in: serving another file in that
 folder opens a page on the server already running. Ctrl-C stops it.
+
+Given a page spec, a folder or several files, the page opens on an overview
+of every diagram and follows each one, and the spec too. Edit on the
+overview shows the spec, or the one a folder or the files imply, whose
+first Save writes it as a .reladraw-page.
 
   --no-open   print the page's address instead of opening it.
 `;

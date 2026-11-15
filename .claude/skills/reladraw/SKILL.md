@@ -45,6 +45,18 @@ diagram.reladraw:9: warning(edge-node-overlap): line api -> db crosses node cach
 
 **The user edits the file too.** On the served page the user can change the diagram and save it, so read the file again before every change you make to it, even one you wrote a minute ago; what you remember may no longer be what is there. After each change, describe it in a few words, which the page's Versions menu shows as yours: `reladraw note diagram.reladraw "moved the cache under the API"`, run from the folder you served. With no server running it notes nothing and says so, which is fine.
 
+**Several diagrams go on one page.** When you have drawn more than one diagram for the same question, such as a view per endpoint or the steps of a change, serve them together rather than one page each: `reladraw serve diagrams/` for a folder, or `reladraw serve a.reladraw b.reladraw` for files. The page opens on an overview of them all, drawn small, with a drop-down to switch between them, and follows every file. To fix their order and give each a short label, write a page spec, `diagrams.reladraw-page`, and serve that:
+
+```
+page  title: "Checkout"  kind: list
+
+diagram cart.reladraw    "Cart"
+diagram pay.reladraw     "Pay"
+diagram refund.reladraw  "Refund"
+```
+
+Paths are from the spec's folder; `group "…"` lines put the diagrams after them under a heading. `render --page`, `check` and `format` take a spec, a folder or several files too, and `render --page` of several files needs `-o`.
+
 A file with no errors and no findings has nothing on top of anything. That is still not the same as a good picture: re-read your source to confirm the arrangement says what you meant, and for a large diagram tell the user you have checked the findings but not seen the render.
 
 ## The one idea
