@@ -1,4 +1,4 @@
-# Syntax reference — 0.30.1
+# Syntax reference — 0.31.0
 
 What the language accepts. The changelog at the end lists what changed in each published version; 0.17.0's changes are large, and its entry has a table of every old spelling and what to write instead.
 
@@ -1515,7 +1515,7 @@ Designed and absent from the code.
 
 Pre-1.0, so the minor number is where a breaking change goes. Every removal is refused by name with the replacement quoted, rather than dropped in silence: an older file stops with an error saying what to write instead.
 
-**Unreleased**
+**0.31.0**
 
 - **A page of several diagrams.** A page spec, a file ending `.reladraw-page`, lists diagrams with a label each, optionally under `group "…"` headings, and `reladraw render --page` of it writes one page that opens on an overview of them all, drawn small, with a drop-down to switch between them. A folder, or several files, make the same page without a spec. The page has its own `theme:`, and `o`, `[`, `]`, `m` `d` and `s` reach the diagrams from the keyboard. `reladraw serve` takes the same inputs and follows the spec and every diagram on it; Edit shows the spec on the overview and the open diagram's source otherwise, and the spec a folder implies can be saved as a file. `check` and `format` take a spec too. See [A page of several diagrams](#a-page-of-several-diagrams).
 - **A grid of diagrams.** `kind: grid` in a page spec names its rows and columns with `row` and `column`, and puts each diagram in a cell, `diagram borrow.desk borrow/desk.reladraw`. The overview is a table under the rows' and columns' labels, a cell may be empty, and the drop-down is the same table, where the arrow keys move from cell to cell. Served, it follows the spec and its diagrams as a list does.
