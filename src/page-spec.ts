@@ -16,7 +16,9 @@ import { THEME_NAMES } from './themes.js';
  * `page` states the page's own settings, as `diagram` does in a diagram: it
  * names nothing, since the whole file is the page. Each `diagram` lists one
  * diagram, by its path from the spec's folder, with the short label the page
- * picks it by.
+ * picks it by. `group "Lending"` starts a group, which the diagrams after it
+ * belong to until the next `group`; the page puts its name over them. A
+ * group may have no diagrams yet, and two may not share a name.
  */
 export const PAGE_EXTENSION = '.reladraw-page';
 
@@ -28,7 +30,7 @@ export type PageKind = (typeof PAGE_KINDS)[number];
 const LATER_KINDS = ['grid', 'versions', 'steps', 'drill-down'];
 
 const PAGE_KEYS = ['title', 'kind', 'theme'] as const;
-const KEYWORDS = ['page', 'diagram'] as const;
+const KEYWORDS = ['page', 'diagram', 'group'] as const;
 
 export interface PageSpec {
   /** What the page is headed with; without one, the spec's file name. */
@@ -37,6 +39,8 @@ export interface PageSpec {
   /** The overview's theme; without one, the default. A diagram opened from it keeps its own. */
   theme?: string;
   entries: SpecEntry[];
+  /** The groups, in order, empty ones included; none when the spec has no `group`. */
+  groups: SpecGroup[];
 }
 
 export interface SpecEntry {
@@ -44,6 +48,13 @@ export interface SpecEntry {
   path: string;
   /** What the page picks it by; without one, the diagram's own title. */
   label?: string;
+  /** The group it is listed under; none for a diagram before the first `group`. */
+  group?: string;
+  line: number;
+}
+
+export interface SpecGroup {
+  name: string;
   line: number;
 }
 
@@ -114,6 +125,7 @@ function commentOf(raw: string, tokens: Token[]): string {
 function readSpec(pieces: Piece[]): PageSpec {
   let page: { line: number; title?: string; kind?: string; kindLine?: number; theme?: string } | null = null;
   const entries: SpecEntry[] = [];
+  const groups: SpecGroup[] = [];
   const seen = new Map<string, number>();
   for (const piece of pieces) {
     if (piece.kind !== 'statement') continue;
@@ -123,9 +135,13 @@ function readSpec(pieces: Piece[]): PageSpec {
     if (head.quoted || !(KEYWORDS as readonly string[]).includes(head.text)) {
       const near = head.quoted ? undefined : nearMatch(head.text, KEYWORDS);
       throw new SourceError(
-        `a page spec has two kinds of statement, page and diagram, and ${word} is neither` + (near ? ` — did you mean ${near}?` : ''),
+        `a page spec's statements are page, diagram and group, and ${word} is none of them` + (near ? ` — did you mean ${near}?` : ''),
         line,
       );
+    }
+    if (head.text === 'group') {
+      groups.push(readGroup(tokens.slice(1), line, groups));
+      continue;
     }
     if (head.text === 'page') {
       if (page) throw new SourceError(`the page's settings are stated once, and they were on line ${page.line} — put these there`, line);
@@ -180,7 +196,8 @@ function readSpec(pieces: Piece[]): PageSpec {
     if (labelToken && labelToken.token.text.trim() === '') {
       throw new SourceError(`a diagram's label is what the page picks it by, so it can't be empty — leave it out to use the diagram's title`, labelToken.line);
     }
-    entries.push({ path, ...(labelToken ? { label: labelToken.token.text } : {}), line });
+    const group = groups[groups.length - 1];
+    entries.push({ path, ...(labelToken ? { label: labelToken.token.text } : {}), ...(group ? { group: group.name } : {}), line });
   }
   if (!page) {
     throw new SourceError('a page spec says what page it makes, and this one doesn\'t — start it with: page  kind: list', 1);
@@ -206,7 +223,33 @@ function readSpec(pieces: Piece[]): PageSpec {
     kind: page.kind as PageKind,
     ...(page.theme !== undefined ? { theme: page.theme } : {}),
     entries,
+    groups,
   };
+}
+
+/** `group "Lending"`: a name in quotes and nothing else, not one an earlier group has. */
+function readGroup(tokens: { token: Token; line: number }[], line: number, before: SpecGroup[]): SpecGroup {
+  const name = tokens[0];
+  if (!name) throw new SourceError('a group statement names the group, in quotes: group "Lending"', line);
+  if (!name.token.quoted) {
+    if (name.token.text.endsWith(':')) throw new SourceError(`a group takes no settings, so ${name.token.text} means nothing here`, name.line);
+    throw new SourceError(`a group's name goes in quotes: group "${name.token.text}"`, name.line);
+  }
+  if (name.token.text.trim() === '') {
+    throw new SourceError('a group\'s name is what the page heads it with, so it can\'t be empty', name.line);
+  }
+  if (tokens.length > 1) {
+    const extra = tokens[1]!;
+    throw new SourceError(
+      `a group statement is just its name, and ${extra.token.quoted ? `"${extra.token.text}"` : extra.token.text} is a second thing — the diagrams in it go on the lines after it`,
+      extra.line,
+    );
+  }
+  const same = before.find((one) => one.name === name.token.text);
+  if (same) {
+    throw new SourceError(`there is already a group called "${name.token.text}", on line ${same.line} — two groups can't share a name`, line);
+  }
+  return { name: name.token.text, line };
 }
 
 /** A `page` statement's settings, each key with its value, refusing a name, an unknown key or a key twice. */
@@ -280,6 +323,7 @@ export function formatPageSpec(text: string): string {
     if (piece.kind === 'blank') {
       if (out.length > 0 && out[out.length - 1] !== '') out.push('');
     } else if (piece.kind === 'comment') out.push(piece.text);
+    else if (piece.statement.tokens[0]!.token.text === 'group') out.push(groupLine(piece.statement));
     else out.push(...pageLines(piece.statement));
   }
   flush();
@@ -292,7 +336,17 @@ export function formatPageSpec(text: string): string {
 }
 
 function stripLines(spec: PageSpec): unknown {
-  return { ...spec, entries: spec.entries.map(({ path, label }) => ({ path, label })) };
+  return {
+    ...spec,
+    entries: spec.entries.map(({ path, label, group }) => ({ path, label, group })),
+    groups: spec.groups.map(({ name }) => name),
+  };
+}
+
+function groupLine(statement: Statement): string {
+  const text = `group ${written(statement, statement.tokens[1]!)}`;
+  const comment = commentsOf(statement).join('  ');
+  return comment ? `${text}  ${comment}` : text;
 }
 
 /** A token as it was written on its line, quotes and escapes included. */

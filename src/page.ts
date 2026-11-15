@@ -32,6 +32,8 @@ export interface ListedDiagram {
   source: string;
   file: string;
   label?: string;
+  /** The group it is listed under, one of the page's `groups`; none before the first. */
+  group?: string;
   options?: DrawOptions;
   /** Served: the diagram's path inside the folder served, which the page follows it by. */
   path?: string;
@@ -46,6 +48,8 @@ export interface ListedDiagram {
  * theme the diagram last open was in. Findings come back with the file each
  * belongs to. Served (`editing`), it is the page `reladraw serve` follows its
  * files on, and a diagram that doesn't draw yet is drawn empty, not refused.
+ * `groups` are the spec's groups in order, empty ones included: each heads
+ * the diagrams listed under it, after those listed before any group.
  */
 export function drawListPage(
   title: string,
@@ -53,6 +57,7 @@ export function drawListPage(
   at: Date = new Date(),
   theme: string = DEFAULT_THEME,
   editing?: Extract<Editing, { kind: 'list' }>,
+  groups: string[] = [],
 ): { html: string; findings: { file: string; findings: Finding[] }[] } {
   const all = diagrams.map((one, index) => {
     try {
@@ -72,8 +77,10 @@ export function drawListPage(
     title,
     theme,
     palettes: palettes(),
+    groups,
     items: all.map(({ one, parts }, i) => ({
       label: one.label ?? parts.title,
+      ...(one.group !== undefined ? { group: one.group } : {}),
       // The label as the spec states it, apart from the title it falls back to.
       ...(editing ? { file: one.path ?? one.file, ...(one.label !== undefined ? { stated: one.label } : {}) } : {}),
       title: parts.title,
@@ -100,7 +107,8 @@ type ListData = {
   title: string;
   theme: string;
   palettes: Record<string, { colors: Record<string, string>; scheme: string }>;
-  items: { label: string; file?: string; stated?: string; title: string; drawn: string; data: unknown }[];
+  groups: string[];
+  items: { label: string; group?: string; file?: string; stated?: string; title: string; drawn: string; data: unknown }[];
 };
 
 /**
@@ -596,8 +604,37 @@ const PAGE = `<!doctype html>
     display: grid; grid-auto-flow: column; gap: 2px 10px;
     grid-template-rows: repeat(var(--down), auto); grid-template-columns: repeat(var(--across), 18rem);
   }
-  #pick-rows.columns .text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-  #pick-rows .name, #pick-rows.columns .title { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* Grouped, each group is a box, sized to what is in it; the boxes run in
+     order and wrap, every box on a line as tall as the tallest. */
+  #pick-rows.boxed:not([hidden]) {
+    display: flex; flex-direction: row; flex-wrap: wrap; align-items: stretch; gap: 8px;
+    width: max-content; max-width: min(calc(100vw - 32px), 60rem);
+  }
+  /* A group's box and the cards in it: blue-grays, the box a step from the
+     page and the cards a step further (picked 2026-11-14 from a mock-up). */
+  :root { --group-bg: #161b24; --group-line: #283042; --card-bg: #1f2633; --card-line: #36405a; --card-over: #283042; }
+  :root[data-scheme="light"] { --group-bg: #e8edf5; --group-line: #cdd6e4; --card-bg: #f7f9fc; --card-line: #b8c4d8; --card-over: #ffffff; }
+  #pick-rows .group-box {
+    display: flex; flex-direction: column; padding: 4px 6px 6px; border-radius: 8px;
+    border: 1px solid var(--group-line); background: var(--group-bg);
+  }
+  #pick-rows .group-box .row { background: var(--card-bg); border-color: var(--card-line); }
+  #pick-rows .group-box .row:hover, #pick-rows .group-box .row.cur { background: var(--card-over); }
+  #pick-rows .group-box > .group { color: color-mix(in srgb, var(--accent) 70%, var(--ink)); }
+  #pick-rows .group-box > .group { border-bottom: 0; padding: 2px 2px 5px; margin: 0; }
+  #pick-rows .group-box .inside { display: grid; grid-template-columns: repeat(var(--across), 11rem); gap: 8px; }
+  #pick-rows .group-box.empty { min-width: 8rem; }
+  .group-box .group.ungrouped { opacity: 0.7; }
+  .group-box .none { margin: auto; padding: 8px; font-size: 12px; font-style: italic; color: var(--muted); }
+  #pick-rows.flow:not([hidden]) { display: flex; flex-direction: row; gap: 10px; align-items: flex-start; }
+  #pick-rows.flow > .column { width: 18rem; display: flex; flex-direction: column; gap: 2px; }
+  #pick-rows .group {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted);
+    padding: 8px 6px 3px; border-bottom: 1px solid color-mix(in srgb, var(--rule) 60%, transparent); margin-bottom: 2px;
+  }
+  #pick-rows .group:first-child { padding-top: 2px; }
+  #pick-rows.flow .text, #pick-rows.columns .text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  #pick-rows .name, #pick-rows.columns .title, #pick-rows.flow .title { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   header:has(.tools.keyed) .menu.pick kbd.tag { display: inline; }
   header:has(.tools.keyed) .menu.pick { outline: 2px solid var(--sel); outline-offset: 4px; border-radius: 6px; }
   #overview .card { position: relative; }
@@ -613,6 +650,19 @@ const PAGE = `<!doctype html>
   #overview .card .why { font-size: 12px; color: var(--down); white-space: pre-wrap; }
   #overview .card:disabled { opacity: 0.6; cursor: default; }
   #overview .card .dirty, #pick-rows .dirty { color: var(--sel); margin-left: 4px; }
+  #overview .group-boxes { display: flex; flex-wrap: wrap; align-items: stretch; gap: 16px; }
+  #overview .group-box {
+    flex: 0 0 auto; max-width: 100%; display: flex; flex-direction: column; gap: 10px; padding: 12px 14px 14px;
+    border: 1px solid var(--group-line); border-radius: 12px; background: var(--group-bg);
+  }
+  #overview .group-box .card { background: var(--card-bg); border-color: var(--card-line); }
+  #overview .group-box .card:hover { background: var(--card-over); }
+  #overview h2.group { color: color-mix(in srgb, var(--accent) 70%, var(--ink)); }
+  #overview .group-box.empty { min-width: 12rem; }
+  #overview h2.group { font-size: 15px; font-weight: 600; margin: 0; }
+  /* As many cards across as the overview holds, set by fitGroups(). */
+  #overview .group-box .inside { display: grid; grid-template-columns: repeat(var(--across, 1), min(300px, calc(100vw - 100px))); gap: 16px; }
+  #overview .group-box .card { min-width: 0; }
   #overview .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 16px; }
   #overview .card {
     display: flex; flex-direction: column; gap: 4px; text-align: left; white-space: normal; padding: 12px 14px;
@@ -1843,7 +1893,8 @@ const PAGE = `<!doctype html>
     if (level === 'versions') return Array.prototype.slice.call(versionsList.querySelectorAll(':scope > .row'));
     if (level === 'help') return Array.prototype.slice.call(helpList.querySelectorAll(':scope > .row:not([hidden])'));
     if (level === 'theme') return themeItems.map(function (item) { return item.row; });
-    if (level === 'diagrams') return Array.prototype.slice.call(pickRows.querySelectorAll(':scope > .row'));
+    // Grouped as labels, the rows sit inside their columns.
+    if (level === 'diagrams') return Array.prototype.slice.call(pickRows.querySelectorAll('.row'));
     return [];
   }
 
@@ -3512,8 +3563,21 @@ const PAGE = `<!doctype html>
   // The drop-down shows the page's shape: a few diagrams as tiles, each a
   // small drawing under its label; more than that as labels in columns,
   // each with its title under it, so the list is wide rather than long.
+  // With groups, the tiles sit in a box per group, the boxes flowing; as labels,
+  // the groups flow down at most as many columns as the list would have
+  // without them, in order, each kept whole in one column.
   var TILES_UP_TO = 8;
-  function pickLayout(count) {
+  function pickLayout(count, sections) {
+    if (sections) {
+      pickRows.setAttribute('data-grouped', '');
+      if (count <= TILES_UP_TO) {
+        pickRows.classList.add('tiles', 'boxed');
+      } else {
+        pickRows.classList.add('flow');
+      }
+      return;
+    }
+    pickRows.removeAttribute('data-grouped');
     if (count <= TILES_UP_TO) {
       var across = Math.max(1, Math.min(count, 4));
       pickRows.classList.add('tiles');
@@ -3534,6 +3598,13 @@ const PAGE = `<!doctype html>
   // The arrows move as the drop-down is laid out: tiles run along their
   // rows, columns down theirs. A step off the edge stays put.
   function moveInPicker(key) {
+    if (pickRows.hasAttribute('data-grouped')) {
+      // Along the layout, the next in order, as ungrouped; across it, by place.
+      var along = pickRows.classList.contains('tiles') ? { ArrowLeft: -1, ArrowRight: 1 } : { ArrowUp: -1, ArrowDown: 1 };
+      if (along[key]) move(along[key]);
+      else moveByPlace(key);
+      return;
+    }
     var across = Number(pickRows.getAttribute('data-across')) || 1;
     var down = Number(pickRows.getAttribute('data-down')) || 1;
     var step = pickRows.classList.contains('tiles')
@@ -3545,6 +3616,82 @@ const PAGE = `<!doctype html>
     if (to < 0 || to >= rows().length) return;
     cursor = to;
     markCursor();
+  }
+
+  // Grouped, the rows aren't a regular grid, so an arrow across the layout
+  // goes to the nearest row that way, keeping to its column or row.
+  function moveByPlace(key) {
+    var all = rows();
+    if (!all.length) return;
+    var dir = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[key];
+    if (!dir) return;
+    function centre(row) { var r = row.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }
+    var from = centre(all[cursor]);
+    var best = -1, bestScore = Infinity;
+    all.forEach(function (row, i) {
+      if (i === cursor) return;
+      var at = centre(row);
+      var dx = at[0] - from[0], dy = at[1] - from[1];
+      var ahead = dx * dir[0] + dy * dir[1];
+      if (ahead <= 2) return;
+      var aside = Math.abs(dir[0] ? dy : dx);
+      var score = ahead + aside * 3;
+      if (score < bestScore) { bestScore = score; best = i; }
+    });
+    if (best < 0) return;
+    cursor = best;
+    markCursor();
+  }
+
+  // The list in its sections: the diagrams before any group, then each
+  // group in order with its diagrams, an empty group included.
+  function sectionsOf() {
+    var sections = [{ name: null, items: [] }];
+    var byName = {};
+    (LIST.groups || []).forEach(function (name) {
+      var section = { name: name, items: [] };
+      byName[name] = section;
+      sections.push(section);
+    });
+    LIST.items.forEach(function (item, i) {
+      var section = item.group !== undefined && item.group !== null ? byName[item.group] : null;
+      (section || sections[0]).items.push(i);
+    });
+    if (!sections[0].items.length) sections.shift();
+    return sections;
+  }
+
+  // A group's box on the overview is as many cards wide as it has, up to as
+  // many as the overview holds across, so a short group's box fits it and a
+  // long one wraps inside its box. Kept up as the overview's width changes.
+  var CARD = 300, CARD_GAP = 16, BOX_PAD = 30;
+  function fitGroups() {
+    if (!overview) return;
+    var width = overview.clientWidth - 40;
+    if (width <= 0) return;
+    var fits = Math.max(1, Math.floor((width - BOX_PAD + CARD_GAP) / (CARD + CARD_GAP)));
+    each(overview.querySelectorAll('.group-box[data-count]'), function (box) {
+      var inside = box.querySelector('.inside');
+      if (inside) inside.style.setProperty('--across', String(Math.min(Number(box.getAttribute('data-count')), fits)));
+    });
+  }
+  if (overview && window.ResizeObserver) new ResizeObserver(fitGroups).observe(overview);
+
+  // Groups into at most \`most\` columns, in order, none split: the shortest
+  // column that takes them all, counting a heading as a row.
+  function flowColumns(sections, most) {
+    function size(one) { return one.items.length + (one.name === null ? 0 : 1); }
+    var tall = Math.max.apply(null, sections.map(size).concat([1]));
+    for (;;) {
+      var columns = [[]], used = 0;
+      sections.forEach(function (one) {
+        if (used + size(one) > tall && columns[columns.length - 1].length) { columns.push([]); used = 0; }
+        columns[columns.length - 1].push(one);
+        used += size(one);
+      });
+      if (columns.length <= most) return columns;
+      tall += 1;
+    }
   }
 
   /* ---- a served page of several diagrams ---- */
@@ -3699,8 +3846,9 @@ const PAGE = `<!doctype html>
     var spec = readSpecText(textOf(specKey()));
     if (spec) {
       specEntries = spec.entries.map(function (entry) {
-        return { file: joinPath(specFolder(), entry.path), path: entry.path, label: entry.label, line: entry.line };
+        return { file: joinPath(specFolder(), entry.path), path: entry.path, label: entry.label, group: entry.group, line: entry.line };
       });
+      LIST.groups = spec.groups.map(function (one) { return one.name; });
       LIST.title = spec.title || specName();
       LIST.theme = spec.theme || 'dark';
     }
@@ -3715,7 +3863,7 @@ const PAGE = `<!doctype html>
       var made = drawn && drawn.made;
       var title = made ? made.title : entry.path.split('/').pop().replace(/\\.reladraw$/, '');
       return {
-        file: entry.file, line: entry.line, label: entry.label || title, stated: entry.label, title: title,
+        file: entry.file, line: entry.line, label: entry.label || title, stated: entry.label, group: entry.group, title: title,
         drawn: made ? made.drawn : '', data: made ? made.data : null, error: drawn ? drawn.error : null, missing: missing,
       };
     });
@@ -3923,7 +4071,7 @@ const PAGE = `<!doctype html>
         drawnItems[item.file] = { text: item.data.source, made: { data: item.data, title: item.title, drawn: item.drawn }, error: null };
       }
     });
-    specEntries = LIST.items.map(function (item) { return { file: item.file, path: item.file, label: item.stated, line: 0 }; });
+    specEntries = LIST.items.map(function (item) { return { file: item.file, path: item.file, label: item.stated, group: item.group, line: 0 }; });
     if (onOverview()) showFile(specKey());
     liveLine();
     followList();
@@ -3935,11 +4083,13 @@ const PAGE = `<!doctype html>
   function buildCards() {
     overview.textContent = '';
     pickRows.textContent = '';
-    pickRows.classList.remove('tiles', 'columns');
+    pickRows.classList.remove('tiles', 'columns', 'flow', 'boxed');
     if (SERVED_LIST) overview.append(problemList());
-    pickLayout(LIST.items.length);
+    var grouped = (LIST.groups || []).length > 0;
+    var sections = grouped ? sectionsOf() : null;
+    pickLayout(LIST.items.length, sections);
     var tiles = pickRows.classList.contains('tiles');
-    var cards = element('div', 'cards');
+    var cardOf = [], rowOf = [];
     LIST.items.forEach(function (item, i) {
       var card = element('button', 'card');
       card.type = 'button';
@@ -3959,7 +4109,7 @@ const PAGE = `<!doctype html>
         card.append(thumb);
       }
       card.onclick = function () { openDiagram(i); };
-      cards.append(card);
+      cardOf.push(card);
       // The same letter on its card, for s, and its row in the drop-down,
       // for m d: a to z, then none, where the arrows still reach.
       var letter = i < 26 ? String.fromCharCode(97 + i) : '';
@@ -3990,9 +4140,56 @@ const PAGE = `<!doctype html>
         line.append(element('kbd', '', letter));
       }
       row.onclick = function () { openDiagram(i); };
-      pickRows.append(row);
+      rowOf.push(row);
     });
-    overview.append(cards);
+    if (!sections) {
+      var cards = element('div', 'cards');
+      cardOf.forEach(function (card) { cards.append(card); });
+      overview.append(cards);
+      rowOf.forEach(function (row) { pickRows.append(row); });
+    } else {
+      // Each group a box under its name, sized to its diagrams; the boxes
+      // run in order and wrap, every box on a line as tall as the tallest.
+      // The diagrams before any group are a box headed Ungrouped, and a
+      // group with none yet says so.
+      var boxed = function (one, heading, of, across) {
+        var box = element('div', 'group-box');
+        var head = element(heading, 'group', one.name === null ? 'Ungrouped' : one.name);
+        if (one.name === null) { box.classList.add('ungrouped'); head.classList.add('ungrouped'); }
+        box.append(head);
+        if (!one.items.length) {
+          box.classList.add('empty');
+          box.append(element('span', 'none', 'no diagrams yet'));
+          return box;
+        }
+        var inside = element('div', 'inside');
+        if (across) inside.style.setProperty('--across', String(Math.min(one.items.length, across)));
+        one.items.forEach(function (i) { inside.append(of[i]); });
+        box.append(inside);
+        return box;
+      };
+      var boxes = element('div', 'group-boxes');
+      sections.forEach(function (one) {
+        var box = boxed(one, 'h2', cardOf);
+        box.setAttribute('data-count', String(one.items.length));
+        boxes.append(box);
+      });
+      overview.append(boxes);
+      fitGroups();
+      var place = function (box, one) {
+        if (one.name !== null) box.append(element('div', 'group', one.name));
+        one.items.forEach(function (i) { box.append(rowOf[i]); });
+      };
+      if (tiles) {
+        sections.forEach(function (one) { pickRows.append(boxed(one, 'div', rowOf, 4)); });
+      } else {
+        flowColumns(sections, Math.min(3, Math.ceil(LIST.items.length / 10))).forEach(function (column) {
+          var box = element('div', 'column');
+          column.forEach(function (one) { place(box, one); });
+          pickRows.append(box);
+        });
+      }
+    }
     if (openIndex >= 0) {
       each(pickRows.querySelectorAll('.row'), function (row, i) {
         row.setAttribute('aria-checked', String(i === openIndex));

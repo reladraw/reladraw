@@ -531,7 +531,9 @@ async function listFrom(root: string, url: URL): Promise<ListFrom | { problem: s
 interface Listing {
   title: string;
   theme: string;
-  items: { file: string; label?: string; line?: number }[];
+  items: { file: string; label?: string; group?: string; line?: number }[];
+  /** The spec's groups in order, empty ones included. */
+  groups: string[];
   missing: { file: string; line: number; problem: string }[];
   error: { message: string; line?: number } | null;
   implied: string | null;
@@ -546,14 +548,21 @@ async function listingOf(root: string, followed: Map<string, Followed>, from: Li
       read = parsePageSpec(entry.text ?? '');
     } catch (error) {
       if (!(error instanceof SourceError)) throw error;
-      return { title: named, theme: DEFAULT_THEME, items: [], missing: [], error: { message: error.message, line: error.line }, implied: null };
+      return { title: named, theme: DEFAULT_THEME, items: [], groups: [], missing: [], error: { message: error.message, line: error.line }, implied: null };
     }
     const items: Listing['items'] = [];
     const missing: Listing['missing'] = [];
     for (const one of read.entries) {
       const file = posix.normalize(posix.join(posix.dirname(from.spec), one.path));
       const inside = await insideRoot(root, file);
-      if (typeof inside === 'string') items.push({ file: inside, ...(one.label !== undefined ? { label: one.label } : {}), line: one.line });
+      if (typeof inside === 'string') {
+        items.push({
+          file: inside,
+          ...(one.label !== undefined ? { label: one.label } : {}),
+          ...(one.group !== undefined ? { group: one.group } : {}),
+          line: one.line,
+        });
+      }
       else {
         missing.push({
           file,
@@ -562,7 +571,15 @@ async function listingOf(root: string, followed: Map<string, Followed>, from: Li
         });
       }
     }
-    return { title: read.title ?? named, theme: read.theme ?? DEFAULT_THEME, items, missing, error: null, implied: null };
+    return {
+      title: read.title ?? named,
+      theme: read.theme ?? DEFAULT_THEME,
+      items,
+      groups: read.groups.map((one) => one.name),
+      missing,
+      error: null,
+      implied: null,
+    };
   }
   let files: string[];
   let title: string;
@@ -579,7 +596,7 @@ async function listingOf(root: string, followed: Map<string, Followed>, from: Li
   }
   const implied =
     files.length > 0 ? impliedPageSpec(title, files) : `page  title: ${JSON.stringify(title)}  kind: list\n`;
-  return { title, theme: DEFAULT_THEME, items: files.map((file) => ({ file })), missing: [], error: null, implied };
+  return { title, theme: DEFAULT_THEME, items: files.map((file) => ({ file })), groups: [], missing: [], error: null, implied };
 }
 
 /** The page of several diagrams, drawn as it stands, which then follows them through `followList`. */
@@ -588,9 +605,15 @@ async function listPage(root: string, followed: Map<string, Followed>, from: Lis
   const diagrams: ListedDiagram[] = [];
   for (const item of listing.items) {
     const entry = await entryFor(root, followed, item.file);
-    diagrams.push({ source: entry.text ?? '', file: basename(item.file), path: item.file, ...(item.label !== undefined ? { label: item.label } : {}) });
+    diagrams.push({
+      source: entry.text ?? '',
+      file: basename(item.file),
+      path: item.file,
+      ...(item.label !== undefined ? { label: item.label } : {}),
+      ...(item.group !== undefined ? { group: item.group } : {}),
+    });
   }
-  const { html } = drawListPage(listing.title, diagrams, new Date(), listing.theme, { kind: 'list', from, folder: shown(root) });
+  const { html } = drawListPage(listing.title, diagrams, new Date(), listing.theme, { kind: 'list', from, folder: shown(root) }, listing.groups);
   res.writeHead(200, { 'content-type': TYPES['.html']!, 'cache-control': 'no-store' });
   res.end(html);
 }

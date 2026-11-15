@@ -408,9 +408,10 @@ async function renderMany(
 
   let title: string;
   let defaultOut: string | undefined;
-  let listed: { path: string; label?: string; line?: number }[];
+  let listed: { path: string; label?: string; group?: string; line?: number }[];
   let spec: string | undefined;
   let pageTheme: string | undefined;
+  let groups: string[] = [];
   if (first.endsWith(PAGE_EXTENSION)) {
     spec = first;
     let text: string;
@@ -429,7 +430,13 @@ async function renderMany(
     title = read.title ?? basename(spec).slice(0, -PAGE_EXTENSION.length);
     pageTheme = read.theme;
     defaultOut = spec.slice(0, -PAGE_EXTENSION.length) + '.html';
-    listed = read.entries.map((entry) => ({ path: join(dirname(spec!), entry.path), ...(entry.label !== undefined ? { label: entry.label } : {}), line: entry.line }));
+    groups = read.groups.map((one) => one.name);
+    listed = read.entries.map((entry) => ({
+      path: join(dirname(spec!), entry.path),
+      ...(entry.label !== undefined ? { label: entry.label } : {}),
+      ...(entry.group !== undefined ? { group: entry.group } : {}),
+      line: entry.line,
+    }));
   } else if (isFolder(first)) {
     const folder = first.replace(/[/\\]+$/, '') || first;
     const names = readdirSync(folder)
@@ -463,12 +470,18 @@ async function renderMany(
           : `reladraw: can't read ${one.path}`,
       );
     }
-    diagrams.push({ source, file: basename(one.path), ...(one.label !== undefined ? { label: one.label } : {}), options: optionsFor(one.path) });
+    diagrams.push({
+      source,
+      file: basename(one.path),
+      ...(one.label !== undefined ? { label: one.label } : {}),
+      ...(one.group !== undefined ? { group: one.group } : {}),
+      options: optionsFor(one.path),
+    });
   }
 
   let made: ReturnType<typeof drawListPage>;
   try {
-    made = drawListPage(title, diagrams, new Date(), pageTheme);
+    made = drawListPage(title, diagrams, new Date(), pageTheme, undefined, groups);
   } catch (error) {
     if (error instanceof ListedDiagramError) return fail(error.cause.format(listed[error.index]!.path));
     throw error;
