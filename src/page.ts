@@ -550,7 +550,30 @@ const PAGE = `<!doctype html>
   .menu.pick[hidden] { display: none; }
   .menu.pick > button { font-size: 13px; padding: 3px 8px; white-space: nowrap; }
   .menu.pick > button .name { display: inline-block; max-width: 14em; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
-  .menu.pick > .menu-list { left: 0; right: auto; max-height: 70vh; overflow: auto; }
+  .menu.pick > .menu-list { left: 0; right: auto; max-height: 70vh; max-width: calc(100vw - 32px); overflow: auto; }
+  #pick-rows .line { display: flex; align-items: center; gap: 8px; width: 100%; }
+  #pick-rows .name { flex: 1; }
+  #pick-rows .row[aria-checked="true"] .name { font-weight: 600; }
+  #pick-rows .title { font-size: 11px; color: var(--muted); }
+  #pick-rows.tiles:not([hidden]) { display: grid; grid-template-columns: repeat(var(--across), 11rem); gap: 8px; }
+  #pick-rows.tiles .row {
+    flex-direction: column; align-items: stretch; gap: 4px; padding: 6px;
+    border: 1px solid color-mix(in srgb, var(--rule) 50%, transparent); border-radius: 6px;
+  }
+  #pick-rows.tiles .row[aria-checked="true"] { border-color: var(--sel); box-shadow: inset 0 0 0 1px var(--sel); }
+  #pick-rows.tiles .mark { display: none; }
+  #pick-rows.tiles .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #pick-rows .thumb {
+    height: 6rem; display: flex; align-items: center; justify-content: center; overflow: hidden;
+    border-radius: 4px;
+  }
+  #pick-rows .thumb svg { width: 100%; height: 100%; }
+  #pick-rows.columns:not([hidden]) {
+    display: grid; grid-auto-flow: column; gap: 2px 10px;
+    grid-template-rows: repeat(var(--down), auto); grid-template-columns: repeat(var(--across), 18rem);
+  }
+  #pick-rows.columns .text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  #pick-rows .name, #pick-rows.columns .title { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   header:has(.tools.keyed) .menu.pick kbd.tag { display: inline; }
   header:has(.tools.keyed) .menu.pick { outline: 2px solid var(--sel); outline-offset: 4px; border-radius: 6px; }
   #overview .card { position: relative; }
@@ -1777,7 +1800,7 @@ const PAGE = `<!doctype html>
     versions: ['Menu \\u203A <b>Versions</b>', '\\u2191\\u2193 Enter to put one in the editor \\u00B7 \\u232B back \\u00B7 Esc out'],
     help: ['Menu \\u203A <b>Help</b>', 'letter to open \\u00B7 \\u2191\\u2193 Enter \\u00B7 \\u232B back \\u00B7 Esc out'],
     theme: ['Menu \\u203A Settings \\u203A <b>Theme</b>', '\\u2191\\u2193 to try \\u00B7 Enter keep \\u00B7 \\u232B back \\u00B7 Esc out'],
-    diagrams: ['Menu \\u203A <b>Diagrams</b>', 'letter to open \\u00B7 \\u2191\\u2193 Enter \\u00B7 \\u232B back \\u00B7 Esc out'],
+    diagrams: ['Menu \\u203A <b>Diagrams</b>', 'letter to open \\u00B7 arrows, Enter \\u00B7 \\u232B back \\u00B7 Esc out'],
     cards: ['<b>Select</b>', 'letter to open \\u00B7 Esc out'],
   };
 
@@ -2333,6 +2356,7 @@ const PAGE = `<!doctype html>
     } else {
       if (ZOOM_KEYS[key] || key === 'Tab') return;
       if (key === 'Backspace') back();
+      else if (level === 'diagrams' && key.indexOf('Arrow') === 0) moveInPicker(key);
       else if (key === 'ArrowDown') move(1);
       else if (key === 'ArrowUp') move(-1);
       else if (key === 'Enter' || key === ' ') enter();
@@ -3385,8 +3409,48 @@ const PAGE = `<!doctype html>
     zoom.fit();
   }
 
+  // The drop-down shows the page's shape: a few diagrams as tiles, each a
+  // small drawing under its label; more than that as labels in columns,
+  // each with its title under it, so the list is wide rather than long.
+  var TILES_UP_TO = 8;
+  function pickLayout(count) {
+    if (count <= TILES_UP_TO) {
+      var across = Math.min(count, 4);
+      pickRows.classList.add('tiles');
+      pickRows.setAttribute('data-across', String(across));
+      pickRows.setAttribute('data-down', String(Math.ceil(count / across)));
+      pickRows.style.setProperty('--across', String(across));
+    } else {
+      var columns = Math.min(3, Math.ceil(count / 10));
+      var down = Math.ceil(count / columns);
+      pickRows.classList.add('columns');
+      pickRows.setAttribute('data-across', String(columns));
+      pickRows.setAttribute('data-down', String(down));
+      pickRows.style.setProperty('--across', String(columns));
+      pickRows.style.setProperty('--down', String(down));
+    }
+  }
+
+  // The arrows move as the drop-down is laid out: tiles run along their
+  // rows, columns down theirs. A step off the edge stays put.
+  function moveInPicker(key) {
+    var across = Number(pickRows.getAttribute('data-across')) || 1;
+    var down = Number(pickRows.getAttribute('data-down')) || 1;
+    var step = pickRows.classList.contains('tiles')
+      ? { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -across, ArrowDown: across }[key]
+      : { ArrowLeft: -down, ArrowRight: down, ArrowUp: -1, ArrowDown: 1 }[key];
+    if (!step) return;
+    if (step === 1 || step === -1) { move(step); return; }
+    var to = cursor + step;
+    if (to < 0 || to >= rows().length) return;
+    cursor = to;
+    markCursor();
+  }
+
   if (LIST) {
     LIST.items[0].data = DATA;
+    pickLayout(LIST.items.length);
+    var tiles = pickRows.classList.contains('tiles');
     var cards = element('div', 'cards');
     LIST.items.forEach(function (item, i) {
       var card = element('button', 'card');
@@ -3407,13 +3471,26 @@ const PAGE = `<!doctype html>
       var row = element('button', 'row');
       row.type = 'button';
       row.setAttribute('role', 'menuitemradio');
-      row.append(element('span', 'mark'), element('span', 'name', item.label));
+      var line = element('span', 'line');
+      line.append(element('span', 'mark'), element('span', 'name', item.label));
+      var title = item.title !== item.label ? element('span', 'title', item.title) : null;
+      if (tiles) {
+        var small = element('span', 'thumb');
+        small.innerHTML = thumbnail(item.data.themes[item.data.current].svg, 'pick' + i + '-');
+        row.append(small, line);
+        if (title) row.append(title);
+      } else {
+        var text = element('span', 'text');
+        text.append(line);
+        if (title) text.append(title);
+        row.append(text);
+      }
       if (letter) {
         card.setAttribute('data-key', letter);
         var tag = element('kbd', 'tag', letter);
         top.prepend(tag);
         row.setAttribute('data-key', letter);
-        row.append(element('kbd', '', letter));
+        line.append(element('kbd', '', letter));
       }
       row.onclick = function () { openDiagram(i); };
       pickRows.append(row);
