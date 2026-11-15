@@ -1,6 +1,7 @@
 import { nearMatch } from './checks.js';
 import { SourceError } from './errors.js';
 import { tokenizeLine, type Token } from './lexer.js';
+import { THEME_NAMES } from './themes.js';
 
 /**
  * A page spec: a `.reladraw-page` file, which says what page of several
@@ -26,13 +27,15 @@ export type PageKind = (typeof PAGE_KINDS)[number];
 /** Kinds a spec may name that this version doesn't make, refused by name rather than as unknown words. */
 const LATER_KINDS = ['grid', 'versions', 'steps', 'drill-down'];
 
-const PAGE_KEYS = ['title', 'kind'] as const;
+const PAGE_KEYS = ['title', 'kind', 'theme'] as const;
 const KEYWORDS = ['page', 'diagram'] as const;
 
 export interface PageSpec {
   /** What the page is headed with; without one, the spec's file name. */
   title?: string;
   kind: PageKind;
+  /** The overview's theme; without one, the default. A diagram opened from it keeps its own. */
+  theme?: string;
   entries: SpecEntry[];
 }
 
@@ -109,7 +112,7 @@ function commentOf(raw: string, tokens: Token[]): string {
 }
 
 function readSpec(pieces: Piece[]): PageSpec {
-  let page: { line: number; title?: string; kind?: string; kindLine?: number } | null = null;
+  let page: { line: number; title?: string; kind?: string; kindLine?: number; theme?: string } | null = null;
   const entries: SpecEntry[] = [];
   const seen = new Map<string, number>();
   for (const piece of pieces) {
@@ -130,7 +133,16 @@ function readSpec(pieces: Piece[]): PageSpec {
       const settings = readSettings(tokens.slice(1));
       for (const [key, value] of settings) {
         if (key.name === 'title') page.title = value.text;
-        else {
+        else if (key.name === 'theme') {
+          if (!(THEME_NAMES as readonly string[]).includes(value.text)) {
+            const near = nearMatch(value.text, THEME_NAMES);
+            throw new SourceError(
+              `there is no theme called "${value.text}"` + (near ? ` — did you mean ${near}?` : ` — the themes are ${THEME_NAMES.join(', ')}`),
+              key.line,
+            );
+          }
+          page.theme = value.text;
+        } else {
           page.kind = value.text;
           page.kindLine = key.line;
         }
@@ -189,7 +201,12 @@ function readSpec(pieces: Piece[]): PageSpec {
   if (entries.length === 0) {
     throw new SourceError('a list page lists diagrams, and this one has none — add one: diagram borrow.reladraw  "Borrow"', page.line);
   }
-  return { ...(page.title !== undefined ? { title: page.title } : {}), kind: page.kind as PageKind, entries };
+  return {
+    ...(page.title !== undefined ? { title: page.title } : {}),
+    kind: page.kind as PageKind,
+    ...(page.theme !== undefined ? { theme: page.theme } : {}),
+    entries,
+  };
 }
 
 /** A `page` statement's settings, each key with its value, refusing a name, an unknown key or a key twice. */
@@ -221,7 +238,12 @@ function readSettings(
     named.add(key);
     const value = tokens[i + 1];
     if (!value || (!value.token.quoted && value.token.text.endsWith(':'))) {
-      throw new SourceError(key === 'title' ? 'title: needs the title, in quotes: title: "Library"' : `kind: needs a kind: kind: ${PAGE_KINDS[0]}`, at);
+      throw new SourceError(
+        key === 'title' ? 'title: needs the title, in quotes: title: "Library"'
+        : key === 'theme' ? 'theme: needs a theme: theme: nord'
+        : `kind: needs a kind: kind: ${PAGE_KINDS[0]}`,
+        at,
+      );
     }
     if (key === 'title' && !value.token.quoted) {
       throw new SourceError(`a title goes in quotes: title: "${value.token.text}"`, value.line);

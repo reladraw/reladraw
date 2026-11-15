@@ -286,6 +286,11 @@ function colorsOf(theme: Theme): Record<string, string> {
   };
 }
 
+/** Every named theme's page colors, for a page whose own colors aren't a diagram's: a list's overview. */
+export function palettes(): Record<string, { colors: Record<string, string>; scheme: string }> {
+  return Object.fromEntries(THEME_NAMES.map((name) => [name, { colors: colorsOf(THEMES[name]!), scheme: schemeOf(THEMES[name]!) }]));
+}
+
 export type PageData = ReturnType<typeof dataOf>;
 
 export function dataOf({ name, source, findings, themes, flipped, guidesShown, guideCount, current, graph }: PageParts) {

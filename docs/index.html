@@ -379,11 +379,15 @@
   .heading h1.back::before { content: '← '; color: var(--muted); }
   .heading h1.back:hover { color: var(--accent); }
   .heading h1.back:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  select.pick {
-    font: inherit; font-size: 13px; color: var(--ink); background: var(--page); vertical-align: middle; margin-left: 10px;
-    border: 1px solid color-mix(in srgb, var(--rule) 70%, transparent); border-radius: 6px; padding: 3px 6px; max-width: 16em;
-  }
-  select.pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .menu.pick { display: inline-block; vertical-align: middle; margin-left: 10px; }
+  .menu.pick[hidden] { display: none; }
+  .menu.pick > button { font-size: 13px; padding: 3px 8px; white-space: nowrap; }
+  .menu.pick > button .name { display: inline-block; max-width: 14em; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+  .menu.pick > .menu-list { left: 0; right: auto; max-height: 70vh; overflow: auto; }
+  header:has(.tools.keyed) .menu.pick kbd.tag { display: inline; }
+  header:has(.tools.keyed) .menu.pick { outline: 2px solid var(--sel); outline-offset: 4px; border-radius: 6px; }
+  #overview .card { position: relative; }
+  #overview.keyed .card kbd.tag { display: inline; top: -8px; right: -7px; font-size: 13px; padding: 1px 6px; }
   #overview { flex: 1; overflow: auto; padding: 20px; }
   #overview:not([hidden]) ~ #split, #overview:not([hidden]) ~ #picture, #overview:not([hidden]) ~ #side, #overview:not([hidden]) ~ #editor { display: none; }
   #overview .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 16px; }
@@ -803,6 +807,8 @@
     <section class="cs-card" style="--hue: var(--syn-type)" data-on="list"><h3>Diagrams</h3>
       <div class="cs-row"><div><kbd>o</kbd></div><span>the overview of every diagram on this page</span></div>
       <div class="cs-row"><div><kbd>[</kbd><kbd>]</kbd></div><span>the diagram before or after this one; from the overview, the first or last</span></div>
+      <div class="cs-row"><div><kbd>s</kbd></div><span>on the overview, a letter on every diagram; type one to open it</span></div>
+      <div class="cs-row"><div><kbd>m</kbd> <kbd>d</kbd></div><span>with a diagram open, the drop-down of every diagram</span></div>
     </section>
     <section class="cs-card" style="--hue: var(--syn-relation)"><h3>Selecting</h3>
       <div class="cs-row"><div><kbd>s</kbd></div><span>a letter on every box and line; type one to select it</span></div>
@@ -17857,6 +17863,10 @@ function colorsOf(theme) {
         '--on-accent': theme.primary.on,
     };
 }
+/** Every named theme's page colors, for a page whose own colors aren't a diagram's: a list's overview. */
+function palettes() {
+    return Object.fromEntries(THEME_NAMES.map((name) => [name, { colors: colorsOf(THEMES[name]), scheme: schemeOf(THEMES[name]) }]));
+}
 function dataOf({ name, source, findings, themes, flipped, guidesShown, guideCount, current, graph }) {
     // The theme list: first the diagram's own theme, which follows the file;
     // then every theme as the reader's choice, dark ones together and light
@@ -18159,10 +18169,11 @@ function drawPage(source, file, options = {}, at = new Date(), editing) {
  * page holding every diagram. It opens on an overview of them all, each under
  * its label; a diagram opened from there fills the page as a page of one
  * does, with a drop-down in the bar to switch to another and the page's title
- * to go back. `title` heads the page. Findings come back with the file each
+ * to go back. `title` heads the page. The overview is in `theme`, whatever
+ * theme the diagram last open was in. Findings come back with the file each
  * belongs to.
  */
-function drawListPage(title, diagrams, at = new Date()) {
+function drawListPage(title, diagrams, at = new Date(), theme = DEFAULT_THEME) {
     const all = diagrams.map((one, index) => {
         try {
             return { one, parts: partsOf(one.source, one.file, one.options ?? {}, at) };
@@ -18174,6 +18185,8 @@ function drawListPage(title, diagrams, at = new Date()) {
     const first = all[0].parts;
     const list = {
         title,
+        theme,
+        palettes: palettes(),
         items: all.map(({ one, parts }, i) => ({
             label: one.label ?? parts.title,
             title: parts.title,
@@ -18215,12 +18228,14 @@ function playgroundPage(playground) {
 function page(parts, editing, framing, list) {
     const { themes, current } = parts;
     const shown = themes[current];
+    // A list opens on its overview, in the page's own colors.
+    const opening = list ? list.palettes[list.theme] : shown;
     const data = { ...dataOf(parts), edit: editing, ...(list ? { list } : {}) };
     const title = list?.title ?? framing?.title ?? parts.title;
     const noFile = editing !== null && editing.kind !== 'file';
     const filled = {
         panzoom: PAN_ZOOM,
-        scheme: shown.scheme,
+        scheme: opening.scheme,
         title: escapeMarkup(title),
         head: framing?.head ?? '',
         heading: escapeMarkup(list?.title ?? framing?.heading ?? parts.title),
@@ -18228,7 +18243,7 @@ function page(parts, editing, framing, list) {
         links: noFile ? LINKS : '',
         pick: list ? PICK : '',
         colors: [
-            ...Object.entries(shown.colors).map(([key, value]) => `${key}: ${value};`),
+            ...Object.entries(opening.colors).map(([key, value]) => `${key}: ${value};`),
             '--sel: #e0b25a; --up: #22b98c; --down: #e5484d;',
         ].join(' '),
         cheatsheet: editing ? CHEATSHEET : '',
@@ -18600,11 +18615,15 @@ const PAGE = `<!doctype html>
   .heading h1.back::before { content: '← '; color: var(--muted); }
   .heading h1.back:hover { color: var(--accent); }
   .heading h1.back:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  select.pick {
-    font: inherit; font-size: 13px; color: var(--ink); background: var(--page); vertical-align: middle; margin-left: 10px;
-    border: 1px solid color-mix(in srgb, var(--rule) 70%, transparent); border-radius: 6px; padding: 3px 6px; max-width: 16em;
-  }
-  select.pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .menu.pick { display: inline-block; vertical-align: middle; margin-left: 10px; }
+  .menu.pick[hidden] { display: none; }
+  .menu.pick > button { font-size: 13px; padding: 3px 8px; white-space: nowrap; }
+  .menu.pick > button .name { display: inline-block; max-width: 14em; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+  .menu.pick > .menu-list { left: 0; right: auto; max-height: 70vh; overflow: auto; }
+  header:has(.tools.keyed) .menu.pick kbd.tag { display: inline; }
+  header:has(.tools.keyed) .menu.pick { outline: 2px solid var(--sel); outline-offset: 4px; border-radius: 6px; }
+  #overview .card { position: relative; }
+  #overview.keyed .card kbd.tag { display: inline; top: -8px; right: -7px; font-size: 13px; padding: 1px 6px; }
   #overview { flex: 1; overflow: auto; padding: 20px; }
   #overview:not([hidden]) ~ #split, #overview:not([hidden]) ~ #picture, #overview:not([hidden]) ~ #side, #overview:not([hidden]) ~ #editor { display: none; }
   #overview .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 16px; }
@@ -18854,6 +18873,8 @@ const PAGE = `<!doctype html>
     <section class="cs-card" style="--hue: var(--syn-type)" data-on="list"><h3>Diagrams</h3>
       <div class="cs-row"><div><kbd>o</kbd></div><span>the overview of every diagram on this page</span></div>
       <div class="cs-row"><div><kbd>[</kbd><kbd>]</kbd></div><span>the diagram before or after this one; from the overview, the first or last</span></div>
+      <div class="cs-row"><div><kbd>s</kbd></div><span>on the overview, a letter on every diagram; type one to open it</span></div>
+      <div class="cs-row"><div><kbd>m</kbd> <kbd>d</kbd></div><span>with a diagram open, the drop-down of every diagram</span></div>
     </section>
     <section class="cs-card" style="--hue: var(--syn-relation)"><h3>Selecting</h3>
       <div class="cs-row"><div><kbd>s</kbd></div><span>a letter on every box and line; type one to select it</span></div>
@@ -19675,11 +19696,25 @@ const PAGE = `<!doctype html>
 
   // Neither a theme nor guides move anything, so the view, the selection and
   // the panel stay as they were.
+  function paint(colors, scheme) {
+    Object.keys(colors).forEach(function (key) { document.documentElement.style.setProperty(key, colors[key]); });
+    schemeMeta.setAttribute('content', scheme);
+    document.documentElement.setAttribute('data-scheme', scheme === 'light' ? 'light' : 'dark');
+  }
+
+  // A list's overview is in the page's own theme, or the reader's choice,
+  // never in the theme of whichever diagram was open last.
+  function onOverview() { return !!LIST && openIndex === -1; }
+  function paintOverview() {
+    var list = LIST;
+    var one = list.palettes[chosenName] || list.palettes[list.theme];
+    paint(one.colors, one.scheme);
+  }
+
   function redraw() {
     var next = shown();
-    Object.keys(next.colors).forEach(function (key) { document.documentElement.style.setProperty(key, next.colors[key]); });
-    schemeMeta.setAttribute('content', next.scheme);
-    document.documentElement.setAttribute('data-scheme', next.scheme === 'light' ? 'light' : 'dark');
+    if (onOverview()) paintOverview();
+    else paint(next.colors, next.scheme);
     unlight();
     hovered = null;
     tip.style.display = 'none';
@@ -19729,6 +19764,14 @@ const PAGE = `<!doctype html>
     themeItems.push({ value: value, row: row });
     themeList.append(row);
   }
+  // On a list's overview the first row is the page's own theme; with a
+  // diagram open, that diagram's.
+  function ownThemeName() { return onOverview() ? "Page's theme" : "Diagram's theme"; }
+  function labelOwnTheme() {
+    themeItems[0].row.querySelector('.name').textContent =
+      ownThemeName() + ' (' + (onOverview() ? LIST.theme : DATA.current) + ')';
+    showChosen();
+  }
   addThemeItem('', "Diagram's theme (" + DATA.current + ')');
   [['Dark', DATA.themeGroups.dark], ['Light', DATA.themeGroups.light]].forEach(function (group) {
     if (group[1].length === 0) return;
@@ -19737,7 +19780,7 @@ const PAGE = `<!doctype html>
   });
 
   function showChosen() {
-    themeRow.querySelector('.value').textContent = '· ' + (chosenName || "Diagram's theme");
+    themeRow.querySelector('.value').textContent = '· ' + (chosenName || ownThemeName());
     themeItems.forEach(function (item) {
       var on = item.value === chosenName;
       item.row.setAttribute('aria-checked', String(on));
@@ -19752,6 +19795,7 @@ const PAGE = `<!doctype html>
       else localStorage.removeItem(CHOSEN_THEME);
     } catch (e) {}
     showTheme(value || DATA.current);
+    if (onOverview()) paintOverview();
     showChosen();
     if (level === 'theme') setLevel('view', true);
   }
@@ -19784,6 +19828,12 @@ const PAGE = `<!doctype html>
   var versionsList = document.getElementById('versions-list');
   var helpButton = document.getElementById('help-button');
   var helpList = document.getElementById('help-list');
+  // On a page of several diagrams: the drop-down that switches between them,
+  // and the overview, whose cards s letters.
+  var pickMenu = document.getElementById('pick-menu');
+  var pickButton = document.getElementById('pick-button');
+  var pickRows = document.getElementById('pick-rows');
+  var overview = document.getElementById('overview');
   var strip = document.getElementById('strip');
   var level = null;
   var cursor = 0;
@@ -19796,6 +19846,8 @@ const PAGE = `<!doctype html>
     versions: ['Menu \\u203A <b>Versions</b>', '\\u2191\\u2193 Enter to put one in the editor \\u00B7 \\u232B back \\u00B7 Esc out'],
     help: ['Menu \\u203A <b>Help</b>', 'letter to open \\u00B7 \\u2191\\u2193 Enter \\u00B7 \\u232B back \\u00B7 Esc out'],
     theme: ['Menu \\u203A Settings \\u203A <b>Theme</b>', '\\u2191\\u2193 to try \\u00B7 Enter keep \\u00B7 \\u232B back \\u00B7 Esc out'],
+    diagrams: ['Menu \\u203A <b>Diagrams</b>', 'letter to open \\u00B7 \\u2191\\u2193 Enter \\u00B7 \\u232B back \\u00B7 Esc out'],
+    cards: ['<b>Select</b>', 'letter to open \\u00B7 Esc out'],
   };
 
   function rows() {
@@ -19804,6 +19856,7 @@ const PAGE = `<!doctype html>
     if (level === 'versions') return Array.prototype.slice.call(versionsList.querySelectorAll(':scope > .row'));
     if (level === 'help') return Array.prototype.slice.call(helpList.querySelectorAll(':scope > .row:not([hidden])'));
     if (level === 'theme') return themeItems.map(function (item) { return item.row; });
+    if (level === 'diagrams') return Array.prototype.slice.call(pickRows.querySelectorAll(':scope > .row'));
     return [];
   }
 
@@ -19824,6 +19877,9 @@ const PAGE = `<!doctype html>
       themeBefore = shownTheme;
       cursor = 0;
       themeItems.forEach(function (item, i) { if (item.value === chosenName) cursor = i; });
+    } else if (next === 'diagrams' && level !== 'diagrams') {
+      // The arrows start on the diagram open.
+      cursor = Math.max(0, openIndex);
     } else if (next !== level) {
       // Back from the theme list, the arrows are on Theme, the first row.
       cursor = 0;
@@ -19844,6 +19900,12 @@ const PAGE = `<!doctype html>
     viewButton.setAttribute('aria-expanded', String(level === 'view' || level === 'theme'));
     themeList.hidden = level !== 'theme';
     viewList.classList.toggle('behind', level === 'theme');
+    if (pickRows) {
+      pickRows.hidden = level !== 'diagrams';
+      pickButton.classList.toggle('open', level === 'diagrams');
+      pickButton.setAttribute('aria-expanded', String(level === 'diagrams'));
+    }
+    if (overview) overview.classList.toggle('keyed', level === 'cards');
     strip.hidden = level === null;
     if (level && STRIP[level]) {
       strip.querySelector('.crumbs').innerHTML = STRIP[level][0];
@@ -19855,7 +19917,7 @@ const PAGE = `<!doctype html>
 
   function back() {
     if (level === 'theme') setLevel('view');
-    else if (level === 'view' || level === 'save' || level === 'versions' || level === 'help') setLevel('bar');
+    else if (level === 'view' || level === 'save' || level === 'versions' || level === 'help' || level === 'diagrams') setLevel('bar');
     else setLevel(null);
   }
 
@@ -20282,6 +20344,7 @@ const PAGE = `<!doctype html>
     if (event.target.closest('.row')) setLevel(null);
   });
   viewButton.onclick = function () { setLevel(level === 'view' || level === 'theme' ? null : 'view'); };
+  if (pickButton) pickButton.onclick = function () { setLevel(level === 'diagrams' ? null : 'diagrams'); };
   themeRow.onclick = function () { setLevel(level === 'theme' ? 'view' : 'theme'); };
   document.addEventListener('click', function (event) {
     if (level && !(event.target.closest && event.target.closest('.menu'))) setLevel(null);
@@ -20320,6 +20383,10 @@ const PAGE = `<!doctype html>
       else if (key === 'e' && EDIT) toggleEditor();
       else if (key === 'c' && !checkButton.hidden) runCheck();
       else if (key === '?' && cheatBox) openCheatsheet();
+      // On the overview, s letters the cards, and the keys that pick from
+      // a diagram have none to pick from.
+      else if (onOverview() && key === 's') setLevel('cards');
+      else if (onOverview() && (key === '/' || key === 'n' || key === 'i' || key === 'l')) return;
       else if (key === 's') startHints('all');
       else if (key === '/') startHints('all', true);
       else if (key === 'n') startHints('neighbors');
@@ -20345,10 +20412,14 @@ const PAGE = `<!doctype html>
           else if (letter === 'x') setLevel('save');
           else if (letter === 'o' && tiedFile()) setLevel('versions');
           else if (letter === 'h') setLevel('help');
+          else if (letter === 'd' && LIST && !onOverview()) setLevel('diagrams');
           else if (letter === 'e' && EDIT) { setLevel(null); toggleEditor(); }
           else if (letter === 'c' && !checkButton.hidden) { setLevel(null); runCheck(); }
           else if (letter === 'f' && !full.hidden) { setLevel(null); toggleFull(); }
-        } else if (level === 'view' || level === 'save' || level === 'versions' || level === 'help') {
+        } else if (level === 'cards') {
+          var card = overview.querySelector('.card[data-key="' + letter + '"]');
+          if (card) card.click();
+        } else if (level === 'view' || level === 'save' || level === 'versions' || level === 'help' || level === 'diagrams') {
           rows().forEach(function (row, i) {
             if (row.getAttribute('data-key') !== letter) return;
             cursor = i;
@@ -20405,7 +20476,7 @@ const PAGE = `<!doctype html>
       heading.textContent = title;
       document.title = title;
     }
-    themeItems[0].row.querySelector('.name').textContent = "Diagram's theme (" + DATA.current + ')';
+    labelOwnTheme();
     if (selection && !(selection.kind === 'node' ? graph.nodes[selection.key] : graph.edges[selection.key])) selection = null;
     if (level === 'pick' || level === 'filter') setLevel(null);
     listFindings(null);
@@ -21316,8 +21387,6 @@ const PAGE = `<!doctype html>
   // It opens on the overview: a card for each diagram, under its label. A
   // card, the drop-down, [ or ] open one, which fills the page as a page of
   // one diagram does; the page's title, now marked ←, or o go back.
-  var overview = document.getElementById('overview');
-  var pickList = document.getElementById('pick-list');
   // The diagram open, or -1 on the overview; and the one whose data DATA is.
   var openIndex = -1;
   var dataIndex = 0;
@@ -21341,7 +21410,7 @@ const PAGE = `<!doctype html>
     openIndex = -1;
     setLevel(null);
     overview.hidden = false;
-    pickList.hidden = true;
+    pickMenu.hidden = true;
     heading.classList.remove('back');
     heading.removeAttribute('role');
     heading.removeAttribute('tabindex');
@@ -21349,6 +21418,8 @@ const PAGE = `<!doctype html>
     drawnLine.textContent = LIST.items.length + ' diagrams';
     document.title = LIST.title;
     diagramExports.forEach(function (row) { if (row) row.hidden = true; });
+    paintOverview();
+    labelOwnTheme();
     var first = overview.querySelector('.card');
     if (first && document.activeElement === heading) first.focus();
   }
@@ -21358,8 +21429,13 @@ const PAGE = `<!doctype html>
     var item = LIST.items[index];
     openIndex = index;
     overview.hidden = true;
-    pickList.hidden = false;
-    pickList.value = String(index);
+    setLevel(null);
+    pickMenu.hidden = false;
+    pickButton.querySelector('.name').textContent = item.label;
+    each(pickRows.querySelectorAll('.row'), function (row, i) {
+      row.setAttribute('aria-checked', String(i === index));
+      row.querySelector('.mark').textContent = i === index ? '\\u25CF' : '';
+    });
     heading.classList.add('back');
     heading.setAttribute('role', 'button');
     heading.setAttribute('tabindex', '0');
@@ -21371,6 +21447,7 @@ const PAGE = `<!doctype html>
     } else {
       document.title = item.title + ' · ' + LIST.title;
       redraw();
+      labelOwnTheme();
     }
     drawnLine.textContent = item.title + ' · ' + item.drawn;
     // A diagram opens seen whole, as a page of one does.
@@ -21393,13 +21470,24 @@ const PAGE = `<!doctype html>
       card.append(thumb);
       card.onclick = function () { openDiagram(i); };
       cards.append(card);
-      var option = document.createElement('option');
-      option.value = String(i);
-      option.textContent = item.label;
-      pickList.append(option);
+      // The same letter on its card, for s, and its row in the drop-down,
+      // for m d: a to z, then none, where the arrows still reach.
+      var letter = i < 26 ? String.fromCharCode(97 + i) : '';
+      var row = element('button', 'row');
+      row.type = 'button';
+      row.setAttribute('role', 'menuitemradio');
+      row.append(element('span', 'mark'), element('span', 'name', item.label));
+      if (letter) {
+        card.setAttribute('data-key', letter);
+        var tag = element('kbd', 'tag', letter);
+        top.prepend(tag);
+        row.setAttribute('data-key', letter);
+        row.append(element('kbd', '', letter));
+      }
+      row.onclick = function () { openDiagram(i); };
+      pickRows.append(row);
     });
     overview.append(cards);
-    pickList.onchange = function () { openDiagram(Number(pickList.value)); pickList.blur(); };
     heading.addEventListener('click', function () { if (openIndex >= 0) showOverview(); });
     heading.addEventListener('keydown', function (event) {
       if ((event.key === 'Enter' || event.key === ' ') && openIndex >= 0) { event.preventDefault(); showOverview(); }
@@ -21601,7 +21689,7 @@ const CHEATSHEET = `
 `;
 /** Where a page with no file sends someone who wants more than the cheatsheet. */
 // The drop-down a page of several diagrams switches between them with; the script fills it.
-const PICK = `<select id="pick-list" class="pick" aria-label="Which diagram" title="Another diagram on this page ([ and ])" hidden></select>`;
+const PICK = `<span class="menu pick" id="pick-menu" hidden><button id="pick-button" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="pick-rows" title="Another diagram on this page ([ and ])"><span class="name"></span> ▾<kbd class="tag">d</kbd></button><span id="pick-rows" class="menu-list" role="menu" aria-label="Which diagram" hidden></span></span>`;
 const LINKS = `<nav class="links"><a href="https://github.com/reladraw/reladraw" title="reladraw on GitHub" aria-label="reladraw on GitHub"><svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a></nav>`;
 /**
  * How Format lays the source out, on any page with an editor. With no file
@@ -22652,11 +22740,25 @@ function panZoom(view, stage, label, buttons) {
 
   // Neither a theme nor guides move anything, so the view, the selection and
   // the panel stay as they were.
+  function paint(colors, scheme) {
+    Object.keys(colors).forEach(function (key) { document.documentElement.style.setProperty(key, colors[key]); });
+    schemeMeta.setAttribute('content', scheme);
+    document.documentElement.setAttribute('data-scheme', scheme === 'light' ? 'light' : 'dark');
+  }
+
+  // A list's overview is in the page's own theme, or the reader's choice,
+  // never in the theme of whichever diagram was open last.
+  function onOverview() { return !!LIST && openIndex === -1; }
+  function paintOverview() {
+    var list = LIST;
+    var one = list.palettes[chosenName] || list.palettes[list.theme];
+    paint(one.colors, one.scheme);
+  }
+
   function redraw() {
     var next = shown();
-    Object.keys(next.colors).forEach(function (key) { document.documentElement.style.setProperty(key, next.colors[key]); });
-    schemeMeta.setAttribute('content', next.scheme);
-    document.documentElement.setAttribute('data-scheme', next.scheme === 'light' ? 'light' : 'dark');
+    if (onOverview()) paintOverview();
+    else paint(next.colors, next.scheme);
     unlight();
     hovered = null;
     tip.style.display = 'none';
@@ -22706,6 +22808,14 @@ function panZoom(view, stage, label, buttons) {
     themeItems.push({ value: value, row: row });
     themeList.append(row);
   }
+  // On a list's overview the first row is the page's own theme; with a
+  // diagram open, that diagram's.
+  function ownThemeName() { return onOverview() ? "Page's theme" : "Diagram's theme"; }
+  function labelOwnTheme() {
+    themeItems[0].row.querySelector('.name').textContent =
+      ownThemeName() + ' (' + (onOverview() ? LIST.theme : DATA.current) + ')';
+    showChosen();
+  }
   addThemeItem('', "Diagram's theme (" + DATA.current + ')');
   [['Dark', DATA.themeGroups.dark], ['Light', DATA.themeGroups.light]].forEach(function (group) {
     if (group[1].length === 0) return;
@@ -22714,7 +22824,7 @@ function panZoom(view, stage, label, buttons) {
   });
 
   function showChosen() {
-    themeRow.querySelector('.value').textContent = '· ' + (chosenName || "Diagram's theme");
+    themeRow.querySelector('.value').textContent = '· ' + (chosenName || ownThemeName());
     themeItems.forEach(function (item) {
       var on = item.value === chosenName;
       item.row.setAttribute('aria-checked', String(on));
@@ -22729,6 +22839,7 @@ function panZoom(view, stage, label, buttons) {
       else localStorage.removeItem(CHOSEN_THEME);
     } catch (e) {}
     showTheme(value || DATA.current);
+    if (onOverview()) paintOverview();
     showChosen();
     if (level === 'theme') setLevel('view', true);
   }
@@ -22761,6 +22872,12 @@ function panZoom(view, stage, label, buttons) {
   var versionsList = document.getElementById('versions-list');
   var helpButton = document.getElementById('help-button');
   var helpList = document.getElementById('help-list');
+  // On a page of several diagrams: the drop-down that switches between them,
+  // and the overview, whose cards s letters.
+  var pickMenu = document.getElementById('pick-menu');
+  var pickButton = document.getElementById('pick-button');
+  var pickRows = document.getElementById('pick-rows');
+  var overview = document.getElementById('overview');
   var strip = document.getElementById('strip');
   var level = null;
   var cursor = 0;
@@ -22773,6 +22890,8 @@ function panZoom(view, stage, label, buttons) {
     versions: ['Menu \u203A <b>Versions</b>', '\u2191\u2193 Enter to put one in the editor \u00B7 \u232B back \u00B7 Esc out'],
     help: ['Menu \u203A <b>Help</b>', 'letter to open \u00B7 \u2191\u2193 Enter \u00B7 \u232B back \u00B7 Esc out'],
     theme: ['Menu \u203A Settings \u203A <b>Theme</b>', '\u2191\u2193 to try \u00B7 Enter keep \u00B7 \u232B back \u00B7 Esc out'],
+    diagrams: ['Menu \u203A <b>Diagrams</b>', 'letter to open \u00B7 \u2191\u2193 Enter \u00B7 \u232B back \u00B7 Esc out'],
+    cards: ['<b>Select</b>', 'letter to open \u00B7 Esc out'],
   };
 
   function rows() {
@@ -22781,6 +22900,7 @@ function panZoom(view, stage, label, buttons) {
     if (level === 'versions') return Array.prototype.slice.call(versionsList.querySelectorAll(':scope > .row'));
     if (level === 'help') return Array.prototype.slice.call(helpList.querySelectorAll(':scope > .row:not([hidden])'));
     if (level === 'theme') return themeItems.map(function (item) { return item.row; });
+    if (level === 'diagrams') return Array.prototype.slice.call(pickRows.querySelectorAll(':scope > .row'));
     return [];
   }
 
@@ -22801,6 +22921,9 @@ function panZoom(view, stage, label, buttons) {
       themeBefore = shownTheme;
       cursor = 0;
       themeItems.forEach(function (item, i) { if (item.value === chosenName) cursor = i; });
+    } else if (next === 'diagrams' && level !== 'diagrams') {
+      // The arrows start on the diagram open.
+      cursor = Math.max(0, openIndex);
     } else if (next !== level) {
       // Back from the theme list, the arrows are on Theme, the first row.
       cursor = 0;
@@ -22821,6 +22944,12 @@ function panZoom(view, stage, label, buttons) {
     viewButton.setAttribute('aria-expanded', String(level === 'view' || level === 'theme'));
     themeList.hidden = level !== 'theme';
     viewList.classList.toggle('behind', level === 'theme');
+    if (pickRows) {
+      pickRows.hidden = level !== 'diagrams';
+      pickButton.classList.toggle('open', level === 'diagrams');
+      pickButton.setAttribute('aria-expanded', String(level === 'diagrams'));
+    }
+    if (overview) overview.classList.toggle('keyed', level === 'cards');
     strip.hidden = level === null;
     if (level && STRIP[level]) {
       strip.querySelector('.crumbs').innerHTML = STRIP[level][0];
@@ -22832,7 +22961,7 @@ function panZoom(view, stage, label, buttons) {
 
   function back() {
     if (level === 'theme') setLevel('view');
-    else if (level === 'view' || level === 'save' || level === 'versions' || level === 'help') setLevel('bar');
+    else if (level === 'view' || level === 'save' || level === 'versions' || level === 'help' || level === 'diagrams') setLevel('bar');
     else setLevel(null);
   }
 
@@ -23259,6 +23388,7 @@ function panZoom(view, stage, label, buttons) {
     if (event.target.closest('.row')) setLevel(null);
   });
   viewButton.onclick = function () { setLevel(level === 'view' || level === 'theme' ? null : 'view'); };
+  if (pickButton) pickButton.onclick = function () { setLevel(level === 'diagrams' ? null : 'diagrams'); };
   themeRow.onclick = function () { setLevel(level === 'theme' ? 'view' : 'theme'); };
   document.addEventListener('click', function (event) {
     if (level && !(event.target.closest && event.target.closest('.menu'))) setLevel(null);
@@ -23297,6 +23427,10 @@ function panZoom(view, stage, label, buttons) {
       else if (key === 'e' && EDIT) toggleEditor();
       else if (key === 'c' && !checkButton.hidden) runCheck();
       else if (key === '?' && cheatBox) openCheatsheet();
+      // On the overview, s letters the cards, and the keys that pick from
+      // a diagram have none to pick from.
+      else if (onOverview() && key === 's') setLevel('cards');
+      else if (onOverview() && (key === '/' || key === 'n' || key === 'i' || key === 'l')) return;
       else if (key === 's') startHints('all');
       else if (key === '/') startHints('all', true);
       else if (key === 'n') startHints('neighbors');
@@ -23322,10 +23456,14 @@ function panZoom(view, stage, label, buttons) {
           else if (letter === 'x') setLevel('save');
           else if (letter === 'o' && tiedFile()) setLevel('versions');
           else if (letter === 'h') setLevel('help');
+          else if (letter === 'd' && LIST && !onOverview()) setLevel('diagrams');
           else if (letter === 'e' && EDIT) { setLevel(null); toggleEditor(); }
           else if (letter === 'c' && !checkButton.hidden) { setLevel(null); runCheck(); }
           else if (letter === 'f' && !full.hidden) { setLevel(null); toggleFull(); }
-        } else if (level === 'view' || level === 'save' || level === 'versions' || level === 'help') {
+        } else if (level === 'cards') {
+          var card = overview.querySelector('.card[data-key="' + letter + '"]');
+          if (card) card.click();
+        } else if (level === 'view' || level === 'save' || level === 'versions' || level === 'help' || level === 'diagrams') {
           rows().forEach(function (row, i) {
             if (row.getAttribute('data-key') !== letter) return;
             cursor = i;
@@ -23382,7 +23520,7 @@ function panZoom(view, stage, label, buttons) {
       heading.textContent = title;
       document.title = title;
     }
-    themeItems[0].row.querySelector('.name').textContent = "Diagram's theme (" + DATA.current + ')';
+    labelOwnTheme();
     if (selection && !(selection.kind === 'node' ? graph.nodes[selection.key] : graph.edges[selection.key])) selection = null;
     if (level === 'pick' || level === 'filter') setLevel(null);
     listFindings(null);
@@ -24293,8 +24431,6 @@ function panZoom(view, stage, label, buttons) {
   // It opens on the overview: a card for each diagram, under its label. A
   // card, the drop-down, [ or ] open one, which fills the page as a page of
   // one diagram does; the page's title, now marked ←, or o go back.
-  var overview = document.getElementById('overview');
-  var pickList = document.getElementById('pick-list');
   // The diagram open, or -1 on the overview; and the one whose data DATA is.
   var openIndex = -1;
   var dataIndex = 0;
@@ -24318,7 +24454,7 @@ function panZoom(view, stage, label, buttons) {
     openIndex = -1;
     setLevel(null);
     overview.hidden = false;
-    pickList.hidden = true;
+    pickMenu.hidden = true;
     heading.classList.remove('back');
     heading.removeAttribute('role');
     heading.removeAttribute('tabindex');
@@ -24326,6 +24462,8 @@ function panZoom(view, stage, label, buttons) {
     drawnLine.textContent = LIST.items.length + ' diagrams';
     document.title = LIST.title;
     diagramExports.forEach(function (row) { if (row) row.hidden = true; });
+    paintOverview();
+    labelOwnTheme();
     var first = overview.querySelector('.card');
     if (first && document.activeElement === heading) first.focus();
   }
@@ -24335,8 +24473,13 @@ function panZoom(view, stage, label, buttons) {
     var item = LIST.items[index];
     openIndex = index;
     overview.hidden = true;
-    pickList.hidden = false;
-    pickList.value = String(index);
+    setLevel(null);
+    pickMenu.hidden = false;
+    pickButton.querySelector('.name').textContent = item.label;
+    each(pickRows.querySelectorAll('.row'), function (row, i) {
+      row.setAttribute('aria-checked', String(i === index));
+      row.querySelector('.mark').textContent = i === index ? '\u25CF' : '';
+    });
     heading.classList.add('back');
     heading.setAttribute('role', 'button');
     heading.setAttribute('tabindex', '0');
@@ -24348,6 +24491,7 @@ function panZoom(view, stage, label, buttons) {
     } else {
       document.title = item.title + ' · ' + LIST.title;
       redraw();
+      labelOwnTheme();
     }
     drawnLine.textContent = item.title + ' · ' + item.drawn;
     // A diagram opens seen whole, as a page of one does.
@@ -24370,13 +24514,24 @@ function panZoom(view, stage, label, buttons) {
       card.append(thumb);
       card.onclick = function () { openDiagram(i); };
       cards.append(card);
-      var option = document.createElement('option');
-      option.value = String(i);
-      option.textContent = item.label;
-      pickList.append(option);
+      // The same letter on its card, for s, and its row in the drop-down,
+      // for m d: a to z, then none, where the arrows still reach.
+      var letter = i < 26 ? String.fromCharCode(97 + i) : '';
+      var row = element('button', 'row');
+      row.type = 'button';
+      row.setAttribute('role', 'menuitemradio');
+      row.append(element('span', 'mark'), element('span', 'name', item.label));
+      if (letter) {
+        card.setAttribute('data-key', letter);
+        var tag = element('kbd', 'tag', letter);
+        top.prepend(tag);
+        row.setAttribute('data-key', letter);
+        row.append(element('kbd', '', letter));
+      }
+      row.onclick = function () { openDiagram(i); };
+      pickRows.append(row);
     });
     overview.append(cards);
-    pickList.onchange = function () { openDiagram(Number(pickList.value)); pickList.blur(); };
     heading.addEventListener('click', function () { if (openIndex >= 0) showOverview(); });
     heading.addEventListener('keydown', function (event) {
       if ((event.key === 'Enter' || event.key === ' ') && openIndex >= 0) { event.preventDefault(); showOverview(); }

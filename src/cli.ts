@@ -410,6 +410,7 @@ async function renderMany(
   let defaultOut: string | undefined;
   let listed: { path: string; label?: string; line?: number }[];
   let spec: string | undefined;
+  let pageTheme: string | undefined;
   if (first.endsWith(PAGE_EXTENSION)) {
     spec = first;
     let text: string;
@@ -426,6 +427,7 @@ async function renderMany(
       throw error;
     }
     title = read.title ?? basename(spec).slice(0, -PAGE_EXTENSION.length);
+    pageTheme = read.theme;
     defaultOut = spec.slice(0, -PAGE_EXTENSION.length) + '.html';
     listed = read.entries.map((entry) => ({ path: join(dirname(spec!), entry.path), ...(entry.label !== undefined ? { label: entry.label } : {}), line: entry.line }));
   } else if (isFolder(first)) {
@@ -466,7 +468,7 @@ async function renderMany(
 
   let made: ReturnType<typeof drawListPage>;
   try {
-    made = drawListPage(title, diagrams);
+    made = drawListPage(title, diagrams, new Date(), pageTheme);
   } catch (error) {
     if (error instanceof ListedDiagramError) return fail(error.cause.format(listed[error.index]!.path));
     throw error;
