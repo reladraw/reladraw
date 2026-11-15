@@ -412,7 +412,16 @@
   #overview .card { position: relative; }
   #overview.keyed .card kbd.tag { display: inline; top: -8px; right: -7px; font-size: 13px; padding: 1px 6px; }
   #overview { flex: 1; overflow: auto; padding: 20px; }
-  #overview:not([hidden]) ~ #split, #overview:not([hidden]) ~ #picture, #overview:not([hidden]) ~ #side, #overview:not([hidden]) ~ #editor { display: none; }
+  /* On the overview the picture and its panel give way to the cards; the
+     source, when a served page shows it, is the spec, beside them. */
+  main.on-overview > #picture, main.on-overview > #side { display: none; }
+  #overview .problems { list-style: none; margin: 0 0 16px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  #overview .problems li { padding: 6px 10px; border-radius: 6px; border-left: 3px solid var(--down); background: color-mix(in srgb, var(--down) 10%, transparent); }
+  #overview .problems .where { color: var(--muted); margin-right: 6px; }
+  #overview .problems .where.goto { cursor: pointer; text-decoration: underline; }
+  #overview .card .why { font-size: 12px; color: var(--down); white-space: pre-wrap; }
+  #overview .card:disabled { opacity: 0.6; cursor: default; }
+  #overview .card .dirty, #pick-rows .dirty { color: var(--sel); margin-left: 4px; }
   #overview .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 16px; }
   #overview .card {
     display: flex; flex-direction: column; gap: 4px; text-align: left; white-space: normal; padding: 12px 14px;
@@ -589,7 +598,6 @@
 </header>
 <div id="live" role="status" hidden></div>
 <main>
-  <section id="overview" aria-label="Every diagram on this page" hidden></section>
   <section id="editor" aria-label="Source" hidden>
     <div id="changed" role="alert" hidden><span class="what"></span><span class="gap"></span><button id="load-disk" type="button">Load it</button><button id="keep-mine" type="button">Keep mine</button></div>
     <div class="src-head">
@@ -730,6 +738,7 @@
 
   </section>
   <div id="split" role="separator" aria-orientation="vertical" aria-label="Resize the source and the diagram" tabindex="0" title="Drag to resize; double-click to reset" hidden></div>
+  <section id="overview" aria-label="Every diagram on this page" hidden></section>
   <div id="picture">
   <div id="canvas">
   <div id="strip" class="floating" hidden><span class="crumbs"></span><span class="hint"></span></div>
@@ -18194,31 +18203,42 @@ function drawPage(source, file, options = {}, at = new Date(), editing) {
  * does, with a drop-down in the bar to switch to another and the page's title
  * to go back. `title` heads the page. The overview is in `theme`, whatever
  * theme the diagram last open was in. Findings come back with the file each
- * belongs to.
+ * belongs to. Served (`editing`), it is the page `reladraw serve` follows its
+ * files on, and a diagram that doesn't draw yet is drawn empty, not refused.
  */
-function drawListPage(title, diagrams, at = new Date(), theme = DEFAULT_THEME) {
+function drawListPage(title, diagrams, at = new Date(), theme = DEFAULT_THEME, editing) {
     const all = diagrams.map((one, index) => {
         try {
             return { one, parts: partsOf(one.source, one.file, one.options ?? {}, at) };
         }
         catch (error) {
-            throw error instanceof SourceError ? new ListedDiagramError(index, error) : error;
+            if (!(error instanceof SourceError))
+                throw error;
+            // Served, a diagram that doesn't draw yet gets an empty drawing; its
+            // text arrives with the page's first events, fails there too, and the
+            // page says why, then draws it as soon as its file does.
+            if (editing)
+                return { one, parts: partsOf('', one.file, {}, at) };
+            throw new ListedDiagramError(index, error);
         }
     });
-    const first = all[0].parts;
+    // Served, a page may list nothing yet, as a spec whose diagrams aren't written.
+    const first = all[0]?.parts ?? partsOf('', 'diagram.reladraw', {}, at);
     const list = {
         title,
         theme,
         palettes: palettes(),
         items: all.map(({ one, parts }, i) => ({
             label: one.label ?? parts.title,
+            // The label as the spec states it, apart from the title it falls back to.
+            ...(editing ? { file: one.path ?? one.file, ...(one.label !== undefined ? { stated: one.label } : {}) } : {}),
             title: parts.title,
             drawn: parts.drawn,
             // The first is the page's own data, so it isn't carried twice.
             data: i === 0 ? null : dataOf(parts),
         })),
     };
-    const html = page(first, null, undefined, list);
+    const html = page(first, editing ?? null, undefined, list);
     return { html, findings: all.map(({ one, parts }) => ({ file: one.file, findings: parts.findings })) };
 }
 /** A diagram on a page of several that doesn't draw: which one, by its place in the list, and why. */
@@ -18255,7 +18275,9 @@ function page(parts, editing, framing, list) {
     const opening = list ? list.palettes[list.theme] : shown;
     const data = { ...dataOf(parts), edit: editing, ...(list ? { list } : {}) };
     const title = list?.title ?? framing?.title ?? parts.title;
-    const noFile = editing !== null && editing.kind !== 'file';
+    const noFile = editing !== null && (editing.kind === 'local' || editing.kind === 'hosted');
+    // A served list's spec may be implied, and its first Save names a file.
+    const savesAs = noFile || editing?.kind === 'list';
     const filled = {
         panzoom: PAN_ZOOM,
         scheme: opening.scheme,
@@ -18270,7 +18292,7 @@ function page(parts, editing, framing, list) {
             '--sel: #e0b25a; --up: #22b98c; --down: #e5484d;',
         ].join(' '),
         cheatsheet: editing ? CHEATSHEET : '',
-        dialogs: (editing ? FORMAT_DIALOG : '') + (noFile ? DIALOGS : ''),
+        dialogs: (editing ? FORMAT_DIALOG : '') + (savesAs ? DIALOGS : ''),
         drawing: shown.tagged,
         // A literal <\/script> in the library's text would end its tag early.
         library: framing?.library ? `<script>\n${framing.library.replace(/<\/script/gi, '<\\/script')}\n<\/script>` : '',
@@ -18671,7 +18693,16 @@ const PAGE = `<!doctype html>
   #overview .card { position: relative; }
   #overview.keyed .card kbd.tag { display: inline; top: -8px; right: -7px; font-size: 13px; padding: 1px 6px; }
   #overview { flex: 1; overflow: auto; padding: 20px; }
-  #overview:not([hidden]) ~ #split, #overview:not([hidden]) ~ #picture, #overview:not([hidden]) ~ #side, #overview:not([hidden]) ~ #editor { display: none; }
+  /* On the overview the picture and its panel give way to the cards; the
+     source, when a served page shows it, is the spec, beside them. */
+  main.on-overview > #picture, main.on-overview > #side { display: none; }
+  #overview .problems { list-style: none; margin: 0 0 16px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  #overview .problems li { padding: 6px 10px; border-radius: 6px; border-left: 3px solid var(--down); background: color-mix(in srgb, var(--down) 10%, transparent); }
+  #overview .problems .where { color: var(--muted); margin-right: 6px; }
+  #overview .problems .where.goto { cursor: pointer; text-decoration: underline; }
+  #overview .card .why { font-size: 12px; color: var(--down); white-space: pre-wrap; }
+  #overview .card:disabled { opacity: 0.6; cursor: default; }
+  #overview .card .dirty, #pick-rows .dirty { color: var(--sel); margin-left: 4px; }
   #overview .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 16px; }
   #overview .card {
     display: flex; flex-direction: column; gap: 4px; text-align: left; white-space: normal; padding: 12px 14px;
@@ -18848,7 +18879,6 @@ const PAGE = `<!doctype html>
 </header>
 <div id="live" role="status" hidden></div>
 <main>
-  <section id="overview" aria-label="Every diagram on this page" hidden></section>
   <section id="editor" aria-label="Source" hidden>
     <div id="changed" role="alert" hidden><span class="what"></span><span class="gap"></span><button id="load-disk" type="button">Load it</button><button id="keep-mine" type="button">Keep mine</button></div>
     <div class="src-head">
@@ -18873,6 +18903,7 @@ const PAGE = `<!doctype html>
     </div>{{cheatsheet}}
   </section>
   <div id="split" role="separator" aria-orientation="vertical" aria-label="Resize the source and the diagram" tabindex="0" title="Drag to resize; double-click to reset" hidden></div>
+  <section id="overview" aria-label="Every diagram on this page" hidden></section>
   <div id="picture">
   <div id="canvas">
   <div id="strip" class="floating" hidden><span class="crumbs"></span><span class="hint"></span></div>
@@ -20507,7 +20538,12 @@ const PAGE = `<!doctype html>
   var drawnLine = document.querySelector('header .drawn');
   var liveNote = document.getElementById('live');
 
-  function tiedFile() { return EDIT && EDIT.kind === 'file' ? EDIT.file : null; }
+  // The file the editor writes: on a served page of several, the one in view,
+  // unless that is the spec a folder or files imply, which is no file yet.
+  function tiedFile() {
+    if (EDIT && EDIT.kind === 'list') return shownFile || null;
+    return EDIT && EDIT.kind === 'file' ? EDIT.file : null;
+  }
 
   function adopt(next, title) {
     next.edit = EDIT;
@@ -20533,8 +20569,9 @@ const PAGE = `<!doctype html>
 
   var libReady = !EDIT ? Promise.resolve(null)
     : EDIT.kind === 'hosted' ? Promise.resolve(globalThis.reladraw)
-    : Promise.all(['/lib/index.js', '/lib/page.js', '/lib/page-data.js'].map(function (path) { return import(path); }))
-      .then(function (all) { return Object.assign({}, all[0], all[1], all[2]); });
+    : Promise.all(['/lib/index.js', '/lib/page.js', '/lib/page-data.js'].concat(EDIT.kind === 'list' ? ['/lib/page-spec.js'] : [])
+      .map(function (path) { return import(path); }))
+      .then(function (all) { return Object.assign.apply(Object, [{}].concat(all)); });
   var lib = null;
 
   function clock(at) {
@@ -20687,6 +20724,14 @@ const PAGE = `<!doctype html>
 
   // \`check\` looks for findings this once, as Check does.
   function draw(text, check) {
+    // Served, a page of several has the spec in the editor on its overview,
+    // and draws the cards from it.
+    if (SERVED_LIST && onOverview()) {
+      if (text === drawnSpec || !lib) return;
+      drawnSpec = text;
+      relist();
+      return;
+    }
     if (text === drawnText || !lib) return;
     drawnText = text;
     shownText = text;
@@ -20700,10 +20745,20 @@ const PAGE = `<!doctype html>
       cost = performance.now() - started;
       listFindings({ message: error.message, line: error.line });
       if (panelOn && panel.hidden) { openedByError = true; showPanel(true); }
+      if (SERVED_LIST && shownFile) {
+        var was = drawnItems[shownFile];
+        drawnItems[shownFile] = { text: text, made: was ? was.made : null, error: { message: error.message, line: error.line } };
+        relistSoon();
+      }
       return;
     }
     cost = performance.now() - started;
     adopt(made.data, made.title);
+    // The card shows what the editor drew.
+    if (SERVED_LIST && shownFile) {
+      drawnItems[shownFile] = { text: text, made: made, error: null };
+      relistSoon();
+    }
   }
 
   // A diagram quick to draw is drawn on every keystroke; a slow one once the
@@ -20817,6 +20872,15 @@ const PAGE = `<!doctype html>
     return Promise.resolve(formatText());
   }
   function formatSource() {
+    // A spec is laid out as reladraw format lays one out, with no settings.
+    if (SERVED_LIST && onOverview()) {
+      libReady.then(function () {
+        var laid = lib.formatPageSpec(sourceBox.value);
+        if (laid === sourceBox.value) { flash(formatButton, 'Already formatted'); return; }
+        replaceSource(laid);
+      }).catch(function (error) { flash(formatButton, 'Can\\u2019t format: ' + error.message.split('\\n')[0]); });
+      return;
+    }
     Promise.all([libReady, settingsText()]).then(function (got) {
       var settings;
       try {
@@ -20851,6 +20915,7 @@ const PAGE = `<!doctype html>
 
   function saveText() {
     if (tiedFile()) write(false);
+    else if (EDIT.kind === 'list') openSpecSaveAs();
     else if (EDIT.kind === 'local') openSaveAs();
     else saveDownload();
   }
@@ -20870,7 +20935,11 @@ const PAGE = `<!doctype html>
 
   function markUnsaved() {
     if (!EDIT) return;
-    if (tiedFile()) {
+    if (EDIT.kind === 'list') {
+      unsavedMark.hidden = !unsaved(shownFile);
+      unsavedMark.title = disk !== null ? 'Not saved to the file' : 'Not saved to a file';
+      markCards();
+    } else if (tiedFile()) {
       unsavedMark.hidden = sourceBox.value === disk;
       unsavedMark.title = 'Not saved to the file';
     } else {
@@ -20920,7 +20989,8 @@ const PAGE = `<!doctype html>
   // A change on disk loads at once, unless the editor holds text that isn't
   // in the file: then the text stays and a strip offers the file instead.
   function heard(message) {
-    var clean = sourceBox.value === disk && base === disk;
+    // A file shown before its text first came has nothing typed in it to keep.
+    var clean = disk === null || (sourceBox.value === disk && base === disk);
     disk = message.text;
     versions = message.versions || [];
     listVersions();
@@ -21020,7 +21090,10 @@ const PAGE = `<!doctype html>
   }
 
   window.addEventListener('beforeunload', function (event) {
-    if (tiedFile() && sourceBox.value !== disk) { event.preventDefault(); event.returnValue = ''; }
+    var losing = EDIT && EDIT.kind === 'list'
+      ? Object.keys(buffers).some(unsaved)
+      : tiedFile() && sourceBox.value !== disk;
+    if (losing) { event.preventDefault(); event.returnValue = ''; }
   });
 
   /* ---- a page with no file: the text kept in this browser ---- */
@@ -21049,7 +21122,7 @@ const PAGE = `<!doctype html>
   function unsavedHere() { return sourceBox.value !== keptText && current === null; }
 
   function edited() {
-    if (EDIT && EDIT.kind !== 'file') {
+    if (EDIT && (EDIT.kind === 'local' || EDIT.kind === 'hosted')) {
       current = named(sourceBox.value);
       // The stored copy trails the typing: it isn't read until the page is opened again.
       clearTimeout(stowing);
@@ -21153,6 +21226,11 @@ const PAGE = `<!doctype html>
       event.preventDefault();
       var path = document.getElementById('save-path').value.trim();
       if (!path) return;
+      if (EDIT.kind === 'list') {
+        if (!/\\.reladraw-page$/.test(path)) path += '.reladraw-page';
+        createSpec(path, false);
+        return;
+      }
       if (!/\\.reladraw$/.test(path)) path += '.reladraw';
       create(path, false);
     });
@@ -21454,9 +21532,11 @@ const PAGE = `<!doctype html>
 
   function showOverview() {
     if (!LIST) return;
+    stash();
     openIndex = -1;
     setLevel(null);
     overview.hidden = false;
+    document.querySelector('main').classList.add('on-overview');
     pickMenu.hidden = true;
     heading.classList.remove('back');
     heading.removeAttribute('role');
@@ -21467,6 +21547,8 @@ const PAGE = `<!doctype html>
     diagramExports.forEach(function (row) { if (row) row.hidden = true; });
     paintOverview();
     labelOwnTheme();
+    // Served, the source shown is now the spec.
+    if (SERVED_LIST) showFile(specKey());
     var first = overview.querySelector('.card');
     if (first && document.activeElement === heading) first.focus();
   }
@@ -21474,9 +21556,18 @@ const PAGE = `<!doctype html>
   function openDiagram(index) {
     if (!LIST) return;
     var item = LIST.items[index];
+    if (!item || !item.data) return;
+    stash();
     openIndex = index;
     overview.hidden = true;
+    document.querySelector('main').classList.remove('on-overview');
     setLevel(null);
+    // Its findings, not the last diagram's: a written page carries each
+    // diagram's own; a served one keeps what was last checked of each.
+    if (!EDIT) {
+      checked = { text: item.data.source, findings: item.data.findings };
+      shownText = item.data.source;
+    }
     pickMenu.hidden = false;
     pickButton.querySelector('.name').textContent = item.label;
     each(pickRows.querySelectorAll('.row'), function (row, i) {
@@ -21488,6 +21579,7 @@ const PAGE = `<!doctype html>
     heading.setAttribute('tabindex', '0');
     heading.title = 'Every diagram on this page (o)';
     diagramExports.forEach(function (row) { if (row) row.hidden = false; });
+    if (SERVED_LIST) showFile(item.file, item);
     if (index !== dataIndex) {
       dataIndex = index;
       adopt(item.data, item.title);
@@ -21495,8 +21587,14 @@ const PAGE = `<!doctype html>
       document.title = item.title + ' · ' + LIST.title;
       redraw();
       labelOwnTheme();
+      if (SERVED_LIST) listFindings(item.error ? { message: item.error.message, line: item.error.line } : null);
     }
     drawnLine.textContent = item.title + ' · ' + item.drawn;
+    if (SERVED_LIST) {
+      liveLine();
+      // What is typed but not drawn, or what doesn't draw, is drawn now, to show why.
+      if (sourceBox.value !== item.data.source || item.error) { drawnText = null; draw(sourceBox.value); }
+    }
     // A diagram opens seen whole, as a page of one does.
     zoom.fit();
   }
@@ -21507,7 +21605,7 @@ const PAGE = `<!doctype html>
   var TILES_UP_TO = 8;
   function pickLayout(count) {
     if (count <= TILES_UP_TO) {
-      var across = Math.min(count, 4);
+      var across = Math.max(1, Math.min(count, 4));
       pickRows.classList.add('tiles');
       pickRows.setAttribute('data-across', String(across));
       pickRows.setAttribute('data-down', String(Math.ceil(count / across)));
@@ -21539,22 +21637,417 @@ const PAGE = `<!doctype html>
     markCursor();
   }
 
-  if (LIST) {
-    LIST.items[0].data = DATA;
+  /* ---- a served page of several diagrams ---- */
+
+  // Served, a page of several follows the spec and every diagram on it over
+  // one stream, and keeps each file's text apart: what is on disk, what the
+  // editor's text was loaded or saved from, and what was typed, so switching
+  // diagrams keeps what was typed in each. Edit edits what is in view: the
+  // spec on the overview, the diagram open otherwise. A folder or files
+  // imply a spec, which isn't a file until its first Save names one.
+  var SERVED_LIST = !!(EDIT && EDIT.kind === 'list');
+  // The key the implied spec is kept under, which is no file's path.
+  var IMPLIED = '';
+  var buffers = {};
+  var shownFile = null;
+  // What the server last said the page lists, and each diagram's last drawing.
+  var listing = null;
+  var drawnItems = {};
+  // The spec's diagrams as it last read, and why it doesn't read now, if it doesn't.
+  var specEntries = [];
+  var specProblem = null;
+  var drawnSpec = null;
+  var listStream = null;
+  var relisting = null;
+
+  function specKey() { return EDIT.from.spec || IMPLIED; }
+  function specFolder() { return EDIT.from.spec ? dirOf(EDIT.from.spec) : '.'; }
+  function specName() {
+    if (EDIT.from.spec) return EDIT.from.spec.split('/').pop().replace(/\\.reladraw-page$/, '');
+    return listing ? listing.title : LIST.title;
+  }
+  function dirOf(path) { var at = path.lastIndexOf('/'); return at < 0 ? '.' : path.slice(0, at); }
+  // A path from a folder, as the server resolves it: . and .. taken out.
+  function joinPath(dir, path) {
+    var out = [];
+    (dir === '.' ? [] : dir.split('/')).concat(path.split('/')).forEach(function (part) {
+      if (part === '' || part === '.') return;
+      if (part === '..' && out.length && out[out.length - 1] !== '..') out.pop();
+      else out.push(part);
+    });
+    return out.join('/');
+  }
+  function bufferOf(file) {
+    if (!buffers[file]) buffers[file] = { disk: null, base: null, text: null, versions: [], at: Date.now(), changed: false, checked: null };
+    return buffers[file];
+  }
+  // The text this page has of a file: the editor's, for the one shown.
+  function textOf(file) {
+    if (file === shownFile) return sourceBox.value;
+    var b = buffers[file];
+    return b ? b.text : null;
+  }
+  // Typed and not saved: against the file, or for the implied spec, against what was implied.
+  function unsaved(file) {
+    var b = buffers[file];
+    if (!b) return false;
+    var against = file === shownFile ? (disk !== null ? disk : base) : (b.disk !== null ? b.disk : b.base);
+    var text = textOf(file);
+    return text !== null && against !== null && text !== against;
+  }
+
+  // The editor's state for the file shown, kept before another is shown.
+  function stash() {
+    if (!SERVED_LIST || shownFile === null) return;
+    var b = bufferOf(shownFile);
+    b.text = sourceBox.value;
+    b.disk = disk;
+    b.base = base;
+    b.versions = versions;
+    b.checked = checked;
+  }
+
+  // Puts a file in the editor, with its own state: the spec on the overview,
+  // a diagram when it is open.
+  function showFile(file, item) {
+    if (!SERVED_LIST) return;
+    shownFile = file;
+    var b = bufferOf(file);
+    disk = b.disk;
+    base = b.base;
+    versions = b.versions;
+    markedLine = 0;
+    var spec = file === specKey();
+    var implied = spec && !EDIT.from.spec;
+    fileName = file ? file.split('/').pop() : specName() + '.reladraw-page';
+    sourceBox.value = b.text !== null ? b.text : '';
+    if (!spec) {
+      checked = autoCheck && item && item.data ? { text: item.data.source, findings: item.data.findings } : b.checked;
+      drawnText = item && item.data ? item.data.source : null;
+      shownText = drawnText;
+    }
+    editorPane.querySelector('.file').textContent = implied ? 'the spec this page implies \\u00b7 not saved to a file' : file;
+    writeButton.querySelector('.name').textContent = implied ? 'Save\\u2026' : 'Save';
+    writeButton.title = implied
+      ? 'Save this spec as a .reladraw-page file in ' + EDIT.folder + ' (\\u2318S or Ctrl+S)'
+      : 'Write the source to the file (\\u2318S or Ctrl+S)';
+    formatOpen.hidden = spec;
+    formatButton.title = spec
+      ? 'Lay the spec out again, as reladraw format does (Shift+Alt+F)'
+      : 'Lay the source out again, as reladraw format does, with the nearest .reladraw-format (Shift+Alt+F)';
+    document.getElementById('versions-menu').hidden = implied;
+    changedStrip.hidden = !(b.disk !== null && b.text !== b.disk && b.base !== b.disk);
+    if (!changedStrip.hidden) changedStrip.querySelector('.what').textContent = fileName + ' changed on disk at ' + clock(new Date(b.at));
+    listVersions();
+    if (!editorPane.hidden) paintSource();
+    markUnsaved();
+  }
+
+  function readSpecText(text) {
+    try {
+      var spec = lib.parsePageSpec(text);
+      specProblem = null;
+      return spec;
+    } catch (error) {
+      specProblem = { message: error.message, line: error.line };
+      return null;
+    }
+  }
+
+  // A diagram drawn from the text this page has of it, or its last drawing
+  // when it doesn't draw, kept until its text changes. Before its text has
+  // come, the drawing the page was written with.
+  function drawItem(file) {
+    var text = textOf(file);
+    var was = drawnItems[file];
+    if (text === null) return was || null;
+    if (was && was.text === text) return was;
+    var now = { text: text, made: was ? was.made : null, error: null };
+    var name = file.split('/').pop();
+    try {
+      now.made = lib.pageData(text, name, autoCheck ? {} : { checks: false });
+    } catch (error) {
+      now.error = { message: error.message, line: error.line };
+      if (!now.made) { try { now.made = lib.pageData('', name, { checks: false }); } catch (e) {} }
+    }
+    drawnItems[file] = now;
+    return now;
+  }
+
+  function relistSoon() {
+    clearTimeout(relisting);
+    relisting = setTimeout(relist, 20);
+  }
+
+  // The overview made again from the spec as typed: its title, theme and
+  // diagrams in order, each drawn from what this page has of it. A spec
+  // that doesn't read keeps the diagrams it last listed, and says why.
+  function relist() {
+    clearTimeout(relisting);
+    // Before the spec's text has come, the cards stay as the page was written.
+    if (!SERVED_LIST || !lib || textOf(specKey()) === null) return;
+    var spec = readSpecText(textOf(specKey()));
+    if (spec) {
+      specEntries = spec.entries.map(function (entry) {
+        return { file: joinPath(specFolder(), entry.path), path: entry.path, label: entry.label, line: entry.line };
+      });
+      LIST.title = spec.title || specName();
+      LIST.theme = spec.theme || 'dark';
+    }
+    var openFile = openIndex >= 0 && LIST.items[openIndex] ? LIST.items[openIndex].file : null;
+    LIST.items = specEntries.map(function (entry) {
+      var drawn = drawItem(entry.file);
+      var missing = null;
+      if (!drawn) {
+        var gone = listing ? listing.missing.filter(function (one) { return one.file === entry.file; })[0] : null;
+        missing = gone ? gone.problem : entry.path + ' isn\\u2019t read yet: save the spec, and the page reads it';
+      }
+      var made = drawn && drawn.made;
+      var title = made ? made.title : entry.path.split('/').pop().replace(/\\.reladraw$/, '');
+      return {
+        file: entry.file, line: entry.line, label: entry.label || title, stated: entry.label, title: title,
+        drawn: made ? made.drawn : '', data: made ? made.data : null, error: drawn ? drawn.error : null, missing: missing,
+      };
+    });
+    dataIndex = -1;
+    var at = -1;
+    LIST.items.forEach(function (item, i) {
+      if (item.data === DATA) dataIndex = i;
+      if (item.file === openFile && item.data) at = i;
+    });
+    heading.textContent = LIST.title;
+    if (openFile !== null && at < 0) {
+      // The diagram open is no longer listed.
+      openIndex = -1;
+      buildCards();
+      showOverview();
+      return;
+    }
+    openIndex = at;
+    buildCards();
+    if (onOverview()) {
+      document.title = LIST.title;
+      paintOverview();
+      labelOwnTheme();
+    } else {
+      pickButton.querySelector('.name').textContent = LIST.items[openIndex].label;
+      document.title = LIST.items[openIndex].title + ' \\u00b7 ' + LIST.title;
+    }
+    liveLine();
+  }
+
+  // What is wrong with the list, over the cards: the spec not reading, and
+  // the diagrams it names that aren't there. Each names its line in the spec.
+  function problemList() {
+    var list = element('ul', 'problems');
+    function add(line, text) {
+      var row = element('li');
+      if (line) {
+        var where = element('span', 'where goto', 'line ' + line);
+        where.title = 'Select the line in the spec';
+        where.onclick = function () { goToLine(line); };
+        row.append(where);
+      }
+      row.append(document.createTextNode(text));
+      list.append(row);
+    }
+    if (specProblem) add(specProblem.line, specProblem.message + ' \\u2014 the cards are the spec as it last read');
+    LIST.items.forEach(function (item) { if (item.missing) add(item.line, item.missing); });
+    list.hidden = list.children.length === 0;
+    return list;
+  }
+
+  // A mark on each card and row whose file has typed text not saved.
+  function markCards() {
+    if (!SERVED_LIST) return;
+    function mark(box, on) {
+      if (!box) return;
+      var there = box.querySelector('.dirty');
+      if (on && !there) {
+        var dot = element('span', 'dirty', '\\u25CF');
+        dot.title = 'Not saved to the file';
+        box.append(dot);
+      } else if (!on && there) there.remove();
+    }
+    each(overview.querySelectorAll('.card[data-file]'), function (card) { mark(card.querySelector('.top'), unsaved(card.getAttribute('data-file'))); });
+    each(pickRows.querySelectorAll('.row[data-file]'), function (row) { mark(row.querySelector('.line'), unsaved(row.getAttribute('data-file'))); });
+  }
+
+  function liveLine() {
+    if (!SERVED_LIST || down) return;
+    if (onOverview()) {
+      var from = EDIT.from.spec ? EDIT.from.spec
+        : EDIT.from.folder ? (EDIT.from.folder === '.' ? 'this folder' : EDIT.from.folder + '/')
+        : 'the files given';
+      drawnLine.textContent = LIST.items.length + ' diagrams \\u00b7 ' + from + ' \\u00b7 live';
+    } else if (shownFile) {
+      var b = bufferOf(shownFile);
+      drawnLine.textContent = shownFile + ' \\u00b7 live, ' + (b.changed ? 'changed ' : 'read ') + clock(new Date(b.at));
+    }
+  }
+
+  // A file's text from the server. The one shown goes through the editor, as
+  // a page of one's does; another is taken in when nothing typed in it would
+  // be lost, and kept on disk's side until it is shown otherwise.
+  function hear(file, message) {
+    var b = bufferOf(file);
+    b.at = message.at;
+    b.changed = message.changed;
+    if (file === shownFile) {
+      heard(message);
+      liveLine();
+      markCards();
+      return;
+    }
+    var clean = b.disk === null || (b.text === b.disk && b.base === b.disk);
+    b.disk = message.text;
+    b.versions = message.versions || [];
+    if (clean) {
+      b.text = message.text;
+      b.base = message.text;
+    }
+    relistSoon();
+  }
+
+  function listQuery() {
+    var query = new URLSearchParams();
+    if (EDIT.from.spec) query.set('spec', EDIT.from.spec);
+    else if (EDIT.from.folder) query.set('folder', EDIT.from.folder);
+    else EDIT.from.files.forEach(function (file) { query.append('file', file); });
+    return query.toString();
+  }
+
+  function followList() {
+    if (listStream) listStream.close();
+    var events = listStream = new EventSource('/list-events?' + listQuery());
+    function back() {
+      if (!down) return;
+      down = false;
+      liveNote.hidden = true;
+      writeButton.disabled = false;
+    }
+    events.addEventListener('list', function (event) {
+      back();
+      listing = JSON.parse(event.data);
+      // With no spec, what the folder or files imply, unless it has been typed over.
+      if (!EDIT.from.spec && listing.implied !== null) {
+        if (shownFile === IMPLIED) {
+          if (base === null || sourceBox.value === base) {
+            base = listing.implied;
+            load(listing.implied);
+          }
+        } else {
+          var b = bufferOf(IMPLIED);
+          if (b.text === null || b.text === b.base) b.text = listing.implied;
+          b.base = listing.implied;
+        }
+      }
+      relistSoon();
+    });
+    events.addEventListener('source', function (event) {
+      back();
+      var message = JSON.parse(event.data);
+      hear(message.file, message);
+    });
+    events.onerror = function () {
+      if (down) return;
+      down = true;
+      writeButton.disabled = true;
+      drawnLine.textContent = (EDIT.from.spec || 'this page') + ' \\u00b7 not live';
+      liveNote.textContent = 'The server has stopped, so this page can\\u2019t save or follow its files. Start it again with reladraw serve in the same folder, and this page picks them up again. Export \\u25BE still saves what you typed.';
+      liveNote.hidden = false;
+    };
+  }
+
+  // The implied spec's first Save: a .reladraw-page in the folder, its
+  // diagrams' paths written from wherever it goes. From then on the page
+  // follows that spec, as if it had been served with it.
+  function openSpecSaveAs() {
+    var path = document.getElementById('save-path');
+    document.getElementById('save-problem').textContent = '';
+    saveAs.querySelector('.about').textContent = 'A path inside that folder, such as library.reladraw-page or docs/library.reladraw-page. '
+      + 'Each diagram is written by its path from the spec\\u2019s folder. If the file is there already, you\\u2019ll be asked before it\\u2019s replaced. '
+      + 'From then on this page follows the spec.';
+    if (!path.value || !/\\.reladraw-page$/.test(path.value)) {
+      var folder = EDIT.from.folder && EDIT.from.folder !== '.' ? EDIT.from.folder + '/' : '';
+      path.value = folder + specName() + '.reladraw-page';
+    }
+    saveAs.showModal();
+    path.select();
+  }
+  function createSpec(path, replace) {
+    var text = sourceBox.value;
+    var problem = document.getElementById('save-problem');
+    return fetch('/create?file=' + encodeURIComponent(path), {
+      method: 'POST',
+      body: JSON.stringify({ text: text, replace: !!replace, from: '.' }),
+    }).then(function (answer) {
+      return answer.json().then(function (told) {
+        if (answer.status === 409 && told.exists) {
+          if (confirm(told.file + ' is there already. Replace it with this spec?')) return createSpec(path, true);
+          return;
+        }
+        if (!answer.ok) { problem.textContent = told.error || 'The server said ' + answer.status; return; }
+        saveAs.close();
+        delete buffers[IMPLIED];
+        EDIT.from = { spec: told.file };
+        buffers[told.file] = { disk: told.text, base: told.text, text: told.text, versions: [], at: told.at, changed: true, checked: null };
+        history.replaceState(null, '', '/' + told.file.split('/').map(encodeURIComponent).join('/'));
+        showFile(told.file);
+        drawnSpec = null;
+        relist();
+        followList();
+        saveFlash('Saved');
+      });
+    }).catch(function (error) {
+      problem.textContent = 'Couldn\\u2019t save: ' + error.message + '. Is reladraw serve still running?';
+    });
+  }
+
+  function startList() {
+    fileMenu.hidden = true;
+    writeButton.hidden = false;
+    // Until each file's text comes, its card is the drawing the page was written with.
+    LIST.items.forEach(function (item) {
+      if (item.file && item.data) {
+        drawnItems[item.file] = { text: item.data.source, made: { data: item.data, title: item.title, drawn: item.drawn }, error: null };
+      }
+    });
+    specEntries = LIST.items.map(function (item) { return { file: item.file, path: item.file, label: item.stated, line: 0 }; });
+    if (onOverview()) showFile(specKey());
+    liveLine();
+    followList();
+  }
+
+  // The cards and the drop-down's rows, made again when a served page's
+  // list changes. A diagram that doesn't draw has its card say why, over its
+  // last drawing; one that isn't there has a card that opens nothing.
+  function buildCards() {
+    overview.textContent = '';
+    pickRows.textContent = '';
+    pickRows.classList.remove('tiles', 'columns');
+    if (SERVED_LIST) overview.append(problemList());
     pickLayout(LIST.items.length);
     var tiles = pickRows.classList.contains('tiles');
     var cards = element('div', 'cards');
     LIST.items.forEach(function (item, i) {
       var card = element('button', 'card');
       card.type = 'button';
-      card.title = 'Open ' + item.label;
+      card.title = item.data ? 'Open ' + item.label : item.missing;
+      if (item.file) card.setAttribute('data-file', item.file);
       var top = element('span', 'top');
       top.append(element('span', 'label', item.label));
       card.append(top);
       if (item.title !== item.label) card.append(element('span', 'title', item.title));
-      var thumb = element('span', 'thumb');
-      thumb.innerHTML = thumbnail(item.data.themes[item.data.current].svg, 'card' + i + '-');
-      card.append(thumb);
+      if (item.error) card.append(element('span', 'why', 'Doesn\\u2019t draw: ' + (item.error.line ? 'line ' + item.error.line + ': ' : '') + item.error.message));
+      if (item.missing) {
+        card.disabled = true;
+        card.append(element('span', 'why', item.missing));
+      } else {
+        var thumb = element('span', 'thumb');
+        thumb.innerHTML = thumbnail(item.data.themes[item.data.current].svg, 'card' + i + '-');
+        card.append(thumb);
+      }
       card.onclick = function () { openDiagram(i); };
       cards.append(card);
       // The same letter on its card, for s, and its row in the drop-down,
@@ -21566,9 +22059,11 @@ const PAGE = `<!doctype html>
       var line = element('span', 'line');
       line.append(element('span', 'mark'), element('span', 'name', item.label));
       var title = item.title !== item.label ? element('span', 'title', item.title) : null;
+      if (item.file) row.setAttribute('data-file', item.file);
+      if (item.missing) row.disabled = true;
       if (tiles) {
         var small = element('span', 'thumb');
-        small.innerHTML = thumbnail(item.data.themes[item.data.current].svg, 'pick' + i + '-');
+        if (item.data) small.innerHTML = thumbnail(item.data.themes[item.data.current].svg, 'pick' + i + '-');
         row.append(small, line);
         if (title) row.append(title);
       } else {
@@ -21588,6 +22083,19 @@ const PAGE = `<!doctype html>
       pickRows.append(row);
     });
     overview.append(cards);
+    if (openIndex >= 0) {
+      each(pickRows.querySelectorAll('.row'), function (row, i) {
+        row.setAttribute('aria-checked', String(i === openIndex));
+        row.querySelector('.mark').textContent = i === openIndex ? '\\u25CF' : '';
+      });
+    }
+    if (SERVED_LIST) markCards();
+  }
+
+  if (LIST) {
+    if (LIST.items.length) LIST.items[0].data = DATA;
+    else dataIndex = -1;
+    buildCards();
     heading.addEventListener('click', function () { if (openIndex >= 0) showOverview(); });
     heading.addEventListener('keydown', function (event) {
       if ((event.key === 'Enter' || event.key === ' ') && openIndex >= 0) { event.preventDefault(); showOverview(); }
@@ -21597,6 +22105,7 @@ const PAGE = `<!doctype html>
       if (event.target.closest && event.target.closest('input, textarea, select, [contenteditable]')) return;
       if (document.querySelector('dialog[open]')) return;
       var count = LIST.items.length;
+      if (event.key !== 'o' && count === 0) return;
       if (event.key === 'o') showOverview();
       else if (event.key === ']') openDiagram(openIndex < 0 ? 0 : (openIndex + 1) % count);
       else if (event.key === '[') openDiagram(openIndex < 0 ? count - 1 : (openIndex - 1 + count) % count);
@@ -21629,7 +22138,9 @@ const PAGE = `<!doctype html>
       var share = parseFloat(localStorage.getItem(SPLIT));
       if (share > 0 && share < 1) divide(share, false);
     } catch (e) {}
-    if (EDIT.kind === 'file') {
+    if (EDIT.kind === 'list') {
+      startList();
+    } else if (EDIT.kind === 'file') {
       sourceBox.value = DATA.source;
       tie(EDIT.file, DATA.source);
     } else {
@@ -23605,7 +24116,12 @@ function panZoom(view, stage, label, buttons) {
   var drawnLine = document.querySelector('header .drawn');
   var liveNote = document.getElementById('live');
 
-  function tiedFile() { return EDIT && EDIT.kind === 'file' ? EDIT.file : null; }
+  // The file the editor writes: on a served page of several, the one in view,
+  // unless that is the spec a folder or files imply, which is no file yet.
+  function tiedFile() {
+    if (EDIT && EDIT.kind === 'list') return shownFile || null;
+    return EDIT && EDIT.kind === 'file' ? EDIT.file : null;
+  }
 
   function adopt(next, title) {
     next.edit = EDIT;
@@ -23631,8 +24147,9 @@ function panZoom(view, stage, label, buttons) {
 
   var libReady = !EDIT ? Promise.resolve(null)
     : EDIT.kind === 'hosted' ? Promise.resolve(globalThis.reladraw)
-    : Promise.all(['/lib/index.js', '/lib/page.js', '/lib/page-data.js'].map(function (path) { return import(path); }))
-      .then(function (all) { return Object.assign({}, all[0], all[1], all[2]); });
+    : Promise.all(['/lib/index.js', '/lib/page.js', '/lib/page-data.js'].concat(EDIT.kind === 'list' ? ['/lib/page-spec.js'] : [])
+      .map(function (path) { return import(path); }))
+      .then(function (all) { return Object.assign.apply(Object, [{}].concat(all)); });
   var lib = null;
 
   function clock(at) {
@@ -23785,6 +24302,14 @@ function panZoom(view, stage, label, buttons) {
 
   // `check` looks for findings this once, as Check does.
   function draw(text, check) {
+    // Served, a page of several has the spec in the editor on its overview,
+    // and draws the cards from it.
+    if (SERVED_LIST && onOverview()) {
+      if (text === drawnSpec || !lib) return;
+      drawnSpec = text;
+      relist();
+      return;
+    }
     if (text === drawnText || !lib) return;
     drawnText = text;
     shownText = text;
@@ -23798,10 +24323,20 @@ function panZoom(view, stage, label, buttons) {
       cost = performance.now() - started;
       listFindings({ message: error.message, line: error.line });
       if (panelOn && panel.hidden) { openedByError = true; showPanel(true); }
+      if (SERVED_LIST && shownFile) {
+        var was = drawnItems[shownFile];
+        drawnItems[shownFile] = { text: text, made: was ? was.made : null, error: { message: error.message, line: error.line } };
+        relistSoon();
+      }
       return;
     }
     cost = performance.now() - started;
     adopt(made.data, made.title);
+    // The card shows what the editor drew.
+    if (SERVED_LIST && shownFile) {
+      drawnItems[shownFile] = { text: text, made: made, error: null };
+      relistSoon();
+    }
   }
 
   // A diagram quick to draw is drawn on every keystroke; a slow one once the
@@ -23915,6 +24450,15 @@ function panZoom(view, stage, label, buttons) {
     return Promise.resolve(formatText());
   }
   function formatSource() {
+    // A spec is laid out as reladraw format lays one out, with no settings.
+    if (SERVED_LIST && onOverview()) {
+      libReady.then(function () {
+        var laid = lib.formatPageSpec(sourceBox.value);
+        if (laid === sourceBox.value) { flash(formatButton, 'Already formatted'); return; }
+        replaceSource(laid);
+      }).catch(function (error) { flash(formatButton, 'Can\u2019t format: ' + error.message.split('\n')[0]); });
+      return;
+    }
     Promise.all([libReady, settingsText()]).then(function (got) {
       var settings;
       try {
@@ -23949,6 +24493,7 @@ function panZoom(view, stage, label, buttons) {
 
   function saveText() {
     if (tiedFile()) write(false);
+    else if (EDIT.kind === 'list') openSpecSaveAs();
     else if (EDIT.kind === 'local') openSaveAs();
     else saveDownload();
   }
@@ -23968,7 +24513,11 @@ function panZoom(view, stage, label, buttons) {
 
   function markUnsaved() {
     if (!EDIT) return;
-    if (tiedFile()) {
+    if (EDIT.kind === 'list') {
+      unsavedMark.hidden = !unsaved(shownFile);
+      unsavedMark.title = disk !== null ? 'Not saved to the file' : 'Not saved to a file';
+      markCards();
+    } else if (tiedFile()) {
       unsavedMark.hidden = sourceBox.value === disk;
       unsavedMark.title = 'Not saved to the file';
     } else {
@@ -24018,7 +24567,8 @@ function panZoom(view, stage, label, buttons) {
   // A change on disk loads at once, unless the editor holds text that isn't
   // in the file: then the text stays and a strip offers the file instead.
   function heard(message) {
-    var clean = sourceBox.value === disk && base === disk;
+    // A file shown before its text first came has nothing typed in it to keep.
+    var clean = disk === null || (sourceBox.value === disk && base === disk);
     disk = message.text;
     versions = message.versions || [];
     listVersions();
@@ -24118,7 +24668,10 @@ function panZoom(view, stage, label, buttons) {
   }
 
   window.addEventListener('beforeunload', function (event) {
-    if (tiedFile() && sourceBox.value !== disk) { event.preventDefault(); event.returnValue = ''; }
+    var losing = EDIT && EDIT.kind === 'list'
+      ? Object.keys(buffers).some(unsaved)
+      : tiedFile() && sourceBox.value !== disk;
+    if (losing) { event.preventDefault(); event.returnValue = ''; }
   });
 
   /* ---- a page with no file: the text kept in this browser ---- */
@@ -24147,7 +24700,7 @@ function panZoom(view, stage, label, buttons) {
   function unsavedHere() { return sourceBox.value !== keptText && current === null; }
 
   function edited() {
-    if (EDIT && EDIT.kind !== 'file') {
+    if (EDIT && (EDIT.kind === 'local' || EDIT.kind === 'hosted')) {
       current = named(sourceBox.value);
       // The stored copy trails the typing: it isn't read until the page is opened again.
       clearTimeout(stowing);
@@ -24251,6 +24804,11 @@ function panZoom(view, stage, label, buttons) {
       event.preventDefault();
       var path = document.getElementById('save-path').value.trim();
       if (!path) return;
+      if (EDIT.kind === 'list') {
+        if (!/\.reladraw-page$/.test(path)) path += '.reladraw-page';
+        createSpec(path, false);
+        return;
+      }
       if (!/\.reladraw$/.test(path)) path += '.reladraw';
       create(path, false);
     });
@@ -24552,9 +25110,11 @@ function panZoom(view, stage, label, buttons) {
 
   function showOverview() {
     if (!LIST) return;
+    stash();
     openIndex = -1;
     setLevel(null);
     overview.hidden = false;
+    document.querySelector('main').classList.add('on-overview');
     pickMenu.hidden = true;
     heading.classList.remove('back');
     heading.removeAttribute('role');
@@ -24565,6 +25125,8 @@ function panZoom(view, stage, label, buttons) {
     diagramExports.forEach(function (row) { if (row) row.hidden = true; });
     paintOverview();
     labelOwnTheme();
+    // Served, the source shown is now the spec.
+    if (SERVED_LIST) showFile(specKey());
     var first = overview.querySelector('.card');
     if (first && document.activeElement === heading) first.focus();
   }
@@ -24572,9 +25134,18 @@ function panZoom(view, stage, label, buttons) {
   function openDiagram(index) {
     if (!LIST) return;
     var item = LIST.items[index];
+    if (!item || !item.data) return;
+    stash();
     openIndex = index;
     overview.hidden = true;
+    document.querySelector('main').classList.remove('on-overview');
     setLevel(null);
+    // Its findings, not the last diagram's: a written page carries each
+    // diagram's own; a served one keeps what was last checked of each.
+    if (!EDIT) {
+      checked = { text: item.data.source, findings: item.data.findings };
+      shownText = item.data.source;
+    }
     pickMenu.hidden = false;
     pickButton.querySelector('.name').textContent = item.label;
     each(pickRows.querySelectorAll('.row'), function (row, i) {
@@ -24586,6 +25157,7 @@ function panZoom(view, stage, label, buttons) {
     heading.setAttribute('tabindex', '0');
     heading.title = 'Every diagram on this page (o)';
     diagramExports.forEach(function (row) { if (row) row.hidden = false; });
+    if (SERVED_LIST) showFile(item.file, item);
     if (index !== dataIndex) {
       dataIndex = index;
       adopt(item.data, item.title);
@@ -24593,8 +25165,14 @@ function panZoom(view, stage, label, buttons) {
       document.title = item.title + ' · ' + LIST.title;
       redraw();
       labelOwnTheme();
+      if (SERVED_LIST) listFindings(item.error ? { message: item.error.message, line: item.error.line } : null);
     }
     drawnLine.textContent = item.title + ' · ' + item.drawn;
+    if (SERVED_LIST) {
+      liveLine();
+      // What is typed but not drawn, or what doesn't draw, is drawn now, to show why.
+      if (sourceBox.value !== item.data.source || item.error) { drawnText = null; draw(sourceBox.value); }
+    }
     // A diagram opens seen whole, as a page of one does.
     zoom.fit();
   }
@@ -24605,7 +25183,7 @@ function panZoom(view, stage, label, buttons) {
   var TILES_UP_TO = 8;
   function pickLayout(count) {
     if (count <= TILES_UP_TO) {
-      var across = Math.min(count, 4);
+      var across = Math.max(1, Math.min(count, 4));
       pickRows.classList.add('tiles');
       pickRows.setAttribute('data-across', String(across));
       pickRows.setAttribute('data-down', String(Math.ceil(count / across)));
@@ -24637,22 +25215,417 @@ function panZoom(view, stage, label, buttons) {
     markCursor();
   }
 
-  if (LIST) {
-    LIST.items[0].data = DATA;
+  /* ---- a served page of several diagrams ---- */
+
+  // Served, a page of several follows the spec and every diagram on it over
+  // one stream, and keeps each file's text apart: what is on disk, what the
+  // editor's text was loaded or saved from, and what was typed, so switching
+  // diagrams keeps what was typed in each. Edit edits what is in view: the
+  // spec on the overview, the diagram open otherwise. A folder or files
+  // imply a spec, which isn't a file until its first Save names one.
+  var SERVED_LIST = !!(EDIT && EDIT.kind === 'list');
+  // The key the implied spec is kept under, which is no file's path.
+  var IMPLIED = '';
+  var buffers = {};
+  var shownFile = null;
+  // What the server last said the page lists, and each diagram's last drawing.
+  var listing = null;
+  var drawnItems = {};
+  // The spec's diagrams as it last read, and why it doesn't read now, if it doesn't.
+  var specEntries = [];
+  var specProblem = null;
+  var drawnSpec = null;
+  var listStream = null;
+  var relisting = null;
+
+  function specKey() { return EDIT.from.spec || IMPLIED; }
+  function specFolder() { return EDIT.from.spec ? dirOf(EDIT.from.spec) : '.'; }
+  function specName() {
+    if (EDIT.from.spec) return EDIT.from.spec.split('/').pop().replace(/\.reladraw-page$/, '');
+    return listing ? listing.title : LIST.title;
+  }
+  function dirOf(path) { var at = path.lastIndexOf('/'); return at < 0 ? '.' : path.slice(0, at); }
+  // A path from a folder, as the server resolves it: . and .. taken out.
+  function joinPath(dir, path) {
+    var out = [];
+    (dir === '.' ? [] : dir.split('/')).concat(path.split('/')).forEach(function (part) {
+      if (part === '' || part === '.') return;
+      if (part === '..' && out.length && out[out.length - 1] !== '..') out.pop();
+      else out.push(part);
+    });
+    return out.join('/');
+  }
+  function bufferOf(file) {
+    if (!buffers[file]) buffers[file] = { disk: null, base: null, text: null, versions: [], at: Date.now(), changed: false, checked: null };
+    return buffers[file];
+  }
+  // The text this page has of a file: the editor's, for the one shown.
+  function textOf(file) {
+    if (file === shownFile) return sourceBox.value;
+    var b = buffers[file];
+    return b ? b.text : null;
+  }
+  // Typed and not saved: against the file, or for the implied spec, against what was implied.
+  function unsaved(file) {
+    var b = buffers[file];
+    if (!b) return false;
+    var against = file === shownFile ? (disk !== null ? disk : base) : (b.disk !== null ? b.disk : b.base);
+    var text = textOf(file);
+    return text !== null && against !== null && text !== against;
+  }
+
+  // The editor's state for the file shown, kept before another is shown.
+  function stash() {
+    if (!SERVED_LIST || shownFile === null) return;
+    var b = bufferOf(shownFile);
+    b.text = sourceBox.value;
+    b.disk = disk;
+    b.base = base;
+    b.versions = versions;
+    b.checked = checked;
+  }
+
+  // Puts a file in the editor, with its own state: the spec on the overview,
+  // a diagram when it is open.
+  function showFile(file, item) {
+    if (!SERVED_LIST) return;
+    shownFile = file;
+    var b = bufferOf(file);
+    disk = b.disk;
+    base = b.base;
+    versions = b.versions;
+    markedLine = 0;
+    var spec = file === specKey();
+    var implied = spec && !EDIT.from.spec;
+    fileName = file ? file.split('/').pop() : specName() + '.reladraw-page';
+    sourceBox.value = b.text !== null ? b.text : '';
+    if (!spec) {
+      checked = autoCheck && item && item.data ? { text: item.data.source, findings: item.data.findings } : b.checked;
+      drawnText = item && item.data ? item.data.source : null;
+      shownText = drawnText;
+    }
+    editorPane.querySelector('.file').textContent = implied ? 'the spec this page implies \u00b7 not saved to a file' : file;
+    writeButton.querySelector('.name').textContent = implied ? 'Save\u2026' : 'Save';
+    writeButton.title = implied
+      ? 'Save this spec as a .reladraw-page file in ' + EDIT.folder + ' (\u2318S or Ctrl+S)'
+      : 'Write the source to the file (\u2318S or Ctrl+S)';
+    formatOpen.hidden = spec;
+    formatButton.title = spec
+      ? 'Lay the spec out again, as reladraw format does (Shift+Alt+F)'
+      : 'Lay the source out again, as reladraw format does, with the nearest .reladraw-format (Shift+Alt+F)';
+    document.getElementById('versions-menu').hidden = implied;
+    changedStrip.hidden = !(b.disk !== null && b.text !== b.disk && b.base !== b.disk);
+    if (!changedStrip.hidden) changedStrip.querySelector('.what').textContent = fileName + ' changed on disk at ' + clock(new Date(b.at));
+    listVersions();
+    if (!editorPane.hidden) paintSource();
+    markUnsaved();
+  }
+
+  function readSpecText(text) {
+    try {
+      var spec = lib.parsePageSpec(text);
+      specProblem = null;
+      return spec;
+    } catch (error) {
+      specProblem = { message: error.message, line: error.line };
+      return null;
+    }
+  }
+
+  // A diagram drawn from the text this page has of it, or its last drawing
+  // when it doesn't draw, kept until its text changes. Before its text has
+  // come, the drawing the page was written with.
+  function drawItem(file) {
+    var text = textOf(file);
+    var was = drawnItems[file];
+    if (text === null) return was || null;
+    if (was && was.text === text) return was;
+    var now = { text: text, made: was ? was.made : null, error: null };
+    var name = file.split('/').pop();
+    try {
+      now.made = lib.pageData(text, name, autoCheck ? {} : { checks: false });
+    } catch (error) {
+      now.error = { message: error.message, line: error.line };
+      if (!now.made) { try { now.made = lib.pageData('', name, { checks: false }); } catch (e) {} }
+    }
+    drawnItems[file] = now;
+    return now;
+  }
+
+  function relistSoon() {
+    clearTimeout(relisting);
+    relisting = setTimeout(relist, 20);
+  }
+
+  // The overview made again from the spec as typed: its title, theme and
+  // diagrams in order, each drawn from what this page has of it. A spec
+  // that doesn't read keeps the diagrams it last listed, and says why.
+  function relist() {
+    clearTimeout(relisting);
+    // Before the spec's text has come, the cards stay as the page was written.
+    if (!SERVED_LIST || !lib || textOf(specKey()) === null) return;
+    var spec = readSpecText(textOf(specKey()));
+    if (spec) {
+      specEntries = spec.entries.map(function (entry) {
+        return { file: joinPath(specFolder(), entry.path), path: entry.path, label: entry.label, line: entry.line };
+      });
+      LIST.title = spec.title || specName();
+      LIST.theme = spec.theme || 'dark';
+    }
+    var openFile = openIndex >= 0 && LIST.items[openIndex] ? LIST.items[openIndex].file : null;
+    LIST.items = specEntries.map(function (entry) {
+      var drawn = drawItem(entry.file);
+      var missing = null;
+      if (!drawn) {
+        var gone = listing ? listing.missing.filter(function (one) { return one.file === entry.file; })[0] : null;
+        missing = gone ? gone.problem : entry.path + ' isn\u2019t read yet: save the spec, and the page reads it';
+      }
+      var made = drawn && drawn.made;
+      var title = made ? made.title : entry.path.split('/').pop().replace(/\.reladraw$/, '');
+      return {
+        file: entry.file, line: entry.line, label: entry.label || title, stated: entry.label, title: title,
+        drawn: made ? made.drawn : '', data: made ? made.data : null, error: drawn ? drawn.error : null, missing: missing,
+      };
+    });
+    dataIndex = -1;
+    var at = -1;
+    LIST.items.forEach(function (item, i) {
+      if (item.data === DATA) dataIndex = i;
+      if (item.file === openFile && item.data) at = i;
+    });
+    heading.textContent = LIST.title;
+    if (openFile !== null && at < 0) {
+      // The diagram open is no longer listed.
+      openIndex = -1;
+      buildCards();
+      showOverview();
+      return;
+    }
+    openIndex = at;
+    buildCards();
+    if (onOverview()) {
+      document.title = LIST.title;
+      paintOverview();
+      labelOwnTheme();
+    } else {
+      pickButton.querySelector('.name').textContent = LIST.items[openIndex].label;
+      document.title = LIST.items[openIndex].title + ' \u00b7 ' + LIST.title;
+    }
+    liveLine();
+  }
+
+  // What is wrong with the list, over the cards: the spec not reading, and
+  // the diagrams it names that aren't there. Each names its line in the spec.
+  function problemList() {
+    var list = element('ul', 'problems');
+    function add(line, text) {
+      var row = element('li');
+      if (line) {
+        var where = element('span', 'where goto', 'line ' + line);
+        where.title = 'Select the line in the spec';
+        where.onclick = function () { goToLine(line); };
+        row.append(where);
+      }
+      row.append(document.createTextNode(text));
+      list.append(row);
+    }
+    if (specProblem) add(specProblem.line, specProblem.message + ' \u2014 the cards are the spec as it last read');
+    LIST.items.forEach(function (item) { if (item.missing) add(item.line, item.missing); });
+    list.hidden = list.children.length === 0;
+    return list;
+  }
+
+  // A mark on each card and row whose file has typed text not saved.
+  function markCards() {
+    if (!SERVED_LIST) return;
+    function mark(box, on) {
+      if (!box) return;
+      var there = box.querySelector('.dirty');
+      if (on && !there) {
+        var dot = element('span', 'dirty', '\u25CF');
+        dot.title = 'Not saved to the file';
+        box.append(dot);
+      } else if (!on && there) there.remove();
+    }
+    each(overview.querySelectorAll('.card[data-file]'), function (card) { mark(card.querySelector('.top'), unsaved(card.getAttribute('data-file'))); });
+    each(pickRows.querySelectorAll('.row[data-file]'), function (row) { mark(row.querySelector('.line'), unsaved(row.getAttribute('data-file'))); });
+  }
+
+  function liveLine() {
+    if (!SERVED_LIST || down) return;
+    if (onOverview()) {
+      var from = EDIT.from.spec ? EDIT.from.spec
+        : EDIT.from.folder ? (EDIT.from.folder === '.' ? 'this folder' : EDIT.from.folder + '/')
+        : 'the files given';
+      drawnLine.textContent = LIST.items.length + ' diagrams \u00b7 ' + from + ' \u00b7 live';
+    } else if (shownFile) {
+      var b = bufferOf(shownFile);
+      drawnLine.textContent = shownFile + ' \u00b7 live, ' + (b.changed ? 'changed ' : 'read ') + clock(new Date(b.at));
+    }
+  }
+
+  // A file's text from the server. The one shown goes through the editor, as
+  // a page of one's does; another is taken in when nothing typed in it would
+  // be lost, and kept on disk's side until it is shown otherwise.
+  function hear(file, message) {
+    var b = bufferOf(file);
+    b.at = message.at;
+    b.changed = message.changed;
+    if (file === shownFile) {
+      heard(message);
+      liveLine();
+      markCards();
+      return;
+    }
+    var clean = b.disk === null || (b.text === b.disk && b.base === b.disk);
+    b.disk = message.text;
+    b.versions = message.versions || [];
+    if (clean) {
+      b.text = message.text;
+      b.base = message.text;
+    }
+    relistSoon();
+  }
+
+  function listQuery() {
+    var query = new URLSearchParams();
+    if (EDIT.from.spec) query.set('spec', EDIT.from.spec);
+    else if (EDIT.from.folder) query.set('folder', EDIT.from.folder);
+    else EDIT.from.files.forEach(function (file) { query.append('file', file); });
+    return query.toString();
+  }
+
+  function followList() {
+    if (listStream) listStream.close();
+    var events = listStream = new EventSource('/list-events?' + listQuery());
+    function back() {
+      if (!down) return;
+      down = false;
+      liveNote.hidden = true;
+      writeButton.disabled = false;
+    }
+    events.addEventListener('list', function (event) {
+      back();
+      listing = JSON.parse(event.data);
+      // With no spec, what the folder or files imply, unless it has been typed over.
+      if (!EDIT.from.spec && listing.implied !== null) {
+        if (shownFile === IMPLIED) {
+          if (base === null || sourceBox.value === base) {
+            base = listing.implied;
+            load(listing.implied);
+          }
+        } else {
+          var b = bufferOf(IMPLIED);
+          if (b.text === null || b.text === b.base) b.text = listing.implied;
+          b.base = listing.implied;
+        }
+      }
+      relistSoon();
+    });
+    events.addEventListener('source', function (event) {
+      back();
+      var message = JSON.parse(event.data);
+      hear(message.file, message);
+    });
+    events.onerror = function () {
+      if (down) return;
+      down = true;
+      writeButton.disabled = true;
+      drawnLine.textContent = (EDIT.from.spec || 'this page') + ' \u00b7 not live';
+      liveNote.textContent = 'The server has stopped, so this page can\u2019t save or follow its files. Start it again with reladraw serve in the same folder, and this page picks them up again. Export \u25BE still saves what you typed.';
+      liveNote.hidden = false;
+    };
+  }
+
+  // The implied spec's first Save: a .reladraw-page in the folder, its
+  // diagrams' paths written from wherever it goes. From then on the page
+  // follows that spec, as if it had been served with it.
+  function openSpecSaveAs() {
+    var path = document.getElementById('save-path');
+    document.getElementById('save-problem').textContent = '';
+    saveAs.querySelector('.about').textContent = 'A path inside that folder, such as library.reladraw-page or docs/library.reladraw-page. '
+      + 'Each diagram is written by its path from the spec\u2019s folder. If the file is there already, you\u2019ll be asked before it\u2019s replaced. '
+      + 'From then on this page follows the spec.';
+    if (!path.value || !/\.reladraw-page$/.test(path.value)) {
+      var folder = EDIT.from.folder && EDIT.from.folder !== '.' ? EDIT.from.folder + '/' : '';
+      path.value = folder + specName() + '.reladraw-page';
+    }
+    saveAs.showModal();
+    path.select();
+  }
+  function createSpec(path, replace) {
+    var text = sourceBox.value;
+    var problem = document.getElementById('save-problem');
+    return fetch('/create?file=' + encodeURIComponent(path), {
+      method: 'POST',
+      body: JSON.stringify({ text: text, replace: !!replace, from: '.' }),
+    }).then(function (answer) {
+      return answer.json().then(function (told) {
+        if (answer.status === 409 && told.exists) {
+          if (confirm(told.file + ' is there already. Replace it with this spec?')) return createSpec(path, true);
+          return;
+        }
+        if (!answer.ok) { problem.textContent = told.error || 'The server said ' + answer.status; return; }
+        saveAs.close();
+        delete buffers[IMPLIED];
+        EDIT.from = { spec: told.file };
+        buffers[told.file] = { disk: told.text, base: told.text, text: told.text, versions: [], at: told.at, changed: true, checked: null };
+        history.replaceState(null, '', '/' + told.file.split('/').map(encodeURIComponent).join('/'));
+        showFile(told.file);
+        drawnSpec = null;
+        relist();
+        followList();
+        saveFlash('Saved');
+      });
+    }).catch(function (error) {
+      problem.textContent = 'Couldn\u2019t save: ' + error.message + '. Is reladraw serve still running?';
+    });
+  }
+
+  function startList() {
+    fileMenu.hidden = true;
+    writeButton.hidden = false;
+    // Until each file's text comes, its card is the drawing the page was written with.
+    LIST.items.forEach(function (item) {
+      if (item.file && item.data) {
+        drawnItems[item.file] = { text: item.data.source, made: { data: item.data, title: item.title, drawn: item.drawn }, error: null };
+      }
+    });
+    specEntries = LIST.items.map(function (item) { return { file: item.file, path: item.file, label: item.stated, line: 0 }; });
+    if (onOverview()) showFile(specKey());
+    liveLine();
+    followList();
+  }
+
+  // The cards and the drop-down's rows, made again when a served page's
+  // list changes. A diagram that doesn't draw has its card say why, over its
+  // last drawing; one that isn't there has a card that opens nothing.
+  function buildCards() {
+    overview.textContent = '';
+    pickRows.textContent = '';
+    pickRows.classList.remove('tiles', 'columns');
+    if (SERVED_LIST) overview.append(problemList());
     pickLayout(LIST.items.length);
     var tiles = pickRows.classList.contains('tiles');
     var cards = element('div', 'cards');
     LIST.items.forEach(function (item, i) {
       var card = element('button', 'card');
       card.type = 'button';
-      card.title = 'Open ' + item.label;
+      card.title = item.data ? 'Open ' + item.label : item.missing;
+      if (item.file) card.setAttribute('data-file', item.file);
       var top = element('span', 'top');
       top.append(element('span', 'label', item.label));
       card.append(top);
       if (item.title !== item.label) card.append(element('span', 'title', item.title));
-      var thumb = element('span', 'thumb');
-      thumb.innerHTML = thumbnail(item.data.themes[item.data.current].svg, 'card' + i + '-');
-      card.append(thumb);
+      if (item.error) card.append(element('span', 'why', 'Doesn\u2019t draw: ' + (item.error.line ? 'line ' + item.error.line + ': ' : '') + item.error.message));
+      if (item.missing) {
+        card.disabled = true;
+        card.append(element('span', 'why', item.missing));
+      } else {
+        var thumb = element('span', 'thumb');
+        thumb.innerHTML = thumbnail(item.data.themes[item.data.current].svg, 'card' + i + '-');
+        card.append(thumb);
+      }
       card.onclick = function () { openDiagram(i); };
       cards.append(card);
       // The same letter on its card, for s, and its row in the drop-down,
@@ -24664,9 +25637,11 @@ function panZoom(view, stage, label, buttons) {
       var line = element('span', 'line');
       line.append(element('span', 'mark'), element('span', 'name', item.label));
       var title = item.title !== item.label ? element('span', 'title', item.title) : null;
+      if (item.file) row.setAttribute('data-file', item.file);
+      if (item.missing) row.disabled = true;
       if (tiles) {
         var small = element('span', 'thumb');
-        small.innerHTML = thumbnail(item.data.themes[item.data.current].svg, 'pick' + i + '-');
+        if (item.data) small.innerHTML = thumbnail(item.data.themes[item.data.current].svg, 'pick' + i + '-');
         row.append(small, line);
         if (title) row.append(title);
       } else {
@@ -24686,6 +25661,19 @@ function panZoom(view, stage, label, buttons) {
       pickRows.append(row);
     });
     overview.append(cards);
+    if (openIndex >= 0) {
+      each(pickRows.querySelectorAll('.row'), function (row, i) {
+        row.setAttribute('aria-checked', String(i === openIndex));
+        row.querySelector('.mark').textContent = i === openIndex ? '\u25CF' : '';
+      });
+    }
+    if (SERVED_LIST) markCards();
+  }
+
+  if (LIST) {
+    if (LIST.items.length) LIST.items[0].data = DATA;
+    else dataIndex = -1;
+    buildCards();
     heading.addEventListener('click', function () { if (openIndex >= 0) showOverview(); });
     heading.addEventListener('keydown', function (event) {
       if ((event.key === 'Enter' || event.key === ' ') && openIndex >= 0) { event.preventDefault(); showOverview(); }
@@ -24695,6 +25683,7 @@ function panZoom(view, stage, label, buttons) {
       if (event.target.closest && event.target.closest('input, textarea, select, [contenteditable]')) return;
       if (document.querySelector('dialog[open]')) return;
       var count = LIST.items.length;
+      if (event.key !== 'o' && count === 0) return;
       if (event.key === 'o') showOverview();
       else if (event.key === ']') openDiagram(openIndex < 0 ? 0 : (openIndex + 1) % count);
       else if (event.key === '[') openDiagram(openIndex < 0 ? count - 1 : (openIndex - 1 + count) % count);
@@ -24727,7 +25716,9 @@ function panZoom(view, stage, label, buttons) {
       var share = parseFloat(localStorage.getItem(SPLIT));
       if (share > 0 && share < 1) divide(share, false);
     } catch (e) {}
-    if (EDIT.kind === 'file') {
+    if (EDIT.kind === 'list') {
+      startList();
+    } else if (EDIT.kind === 'file') {
       sourceBox.value = DATA.source;
       tie(EDIT.file, DATA.source);
     } else {

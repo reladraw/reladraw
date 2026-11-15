@@ -1,30 +1,36 @@
 import { spawn } from 'node:child_process';
 import { watch, type FSWatcher } from 'node:fs';
-import { readFile, realpath, stat, writeFile } from 'node:fs/promises';
+import { readdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { createServer, request, type IncomingMessage, type ServerResponse } from 'node:http';
 import { homedir } from 'node:os';
-import { basename, dirname, extname, isAbsolute, join, relative, resolve as resolvePath, sep } from 'node:path';
+import { basename, dirname, extname, isAbsolute, join, posix, relative, resolve as resolvePath, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SourceError } from './errors.js';
 import { OFFERED, START } from './examples.js';
 import { SETTINGS_FILE, settingsFileText, withSettings } from './format-settings.js';
-import { drawPage, playgroundPage, type Example } from './page.js';
+import { drawListPage, drawPage, playgroundPage, type Example, type ListedDiagram, type ListFrom } from './page.js';
+import { impliedPageSpec, moveSpecPaths, PAGE_EXTENSION, parsePageSpec } from './page-spec.js';
+import { DEFAULT_THEME } from './themes.js';
 
 /**
  * `reladraw serve`: a page for one diagram, served on this machine and tied to
  * its file. The page redraws whenever the file changes on disk, whoever
- * changed it, so a person and an agent can both work on the one file.
+ * changed it, so a person and an agent can both work on the one file. Given a
+ * page spec, a folder or several files, the page is one of several diagrams,
+ * and follows the spec and every diagram on it.
  *
  * One server serves a folder, the one it was started in. Asked for a second
  * file in that folder, `serve` finds the server already running and opens a
  * page on it rather than starting another. It listens only on this machine,
- * and serves only `.reladraw` files inside the folder, and the library the
- * page draws with.
+ * and serves only `.reladraw` and `.reladraw-page` files inside the folder,
+ * and the library the page draws with.
  */
 
 /** The port tried first, and how many after it are tried before giving up. */
 export const FIRST_PORT = 4747;
 const PORTS = 20;
 
+// Pages of several diagrams aren't in the help until their docs are written.
 const HELP = `reladraw serve [<file.reladraw>] [--no-open]
 
 Serves a page for the diagram on this machine and opens it in the browser.
@@ -66,7 +72,8 @@ interface Followed {
   /** When the text was last read, or last changed. */
   at: number;
   changed: boolean;
-  listeners: Set<ServerResponse>;
+  /** Each page following the file, told whenever it changes. */
+  listeners: Set<(entry: Followed) => void>;
   watcher: FSWatcher | null;
   timer: NodeJS.Timeout | null;
   /** The file's versions since the server first read it, oldest first. */
@@ -112,7 +119,7 @@ async function entryFor(root: string, followed: Map<string, Followed>, path: str
 }
 
 function broadcast(entry: Followed): void {
-  for (const listener of entry.listeners) send(listener, entry);
+  for (const listener of entry.listeners) listener(entry);
 }
 
 async function body(req: IncomingMessage): Promise<string> {
@@ -126,7 +133,7 @@ async function body(req: IncomingMessage): Promise<string> {
 }
 
 export async function serve(args: string[]): Promise<number> {
-  let file: string | undefined;
+  const inputs: string[] = [];
   let open = true;
   for (const arg of args) {
     if (arg === '-h' || arg === '--help') {
@@ -135,26 +142,20 @@ export async function serve(args: string[]): Promise<number> {
     } else if (arg === '--no-open') {
       open = false;
     } else if (arg.startsWith('-')) {
-      process.stderr.write(`reladraw: serve doesn't take ${arg}; it takes a file and --no-open\n`);
-      return 1;
-    } else if (file !== undefined) {
-      process.stderr.write(`reladraw: serve takes one file; serve each in turn, and they share one server\n`);
+      process.stderr.write(`reladraw: serve doesn't take ${arg}; it takes a file, a page spec, a folder or several files, and --no-open\n`);
       return 1;
     } else {
-      file = arg;
+      inputs.push(arg);
     }
   }
 
   const root = await realpath(process.cwd());
-  let path = '';
-  if (file !== undefined) {
-    const inside = await insideRoot(root, file);
-    if (typeof inside !== 'string') {
-      process.stderr.write(`reladraw: ${inside.problem}\n`);
-      return 1;
-    }
-    path = inside;
+  const asked = await pageAsked(root, inputs);
+  if (typeof asked !== 'string') {
+    process.stderr.write(`reladraw: ${asked.problem}\n`);
+    return 1;
   }
+  const path = asked;
 
   // A server already serving this folder is used as it is.
   for (let port = FIRST_PORT; port < FIRST_PORT + PORTS; port++) {
@@ -185,16 +186,73 @@ export async function serve(args: string[]): Promise<number> {
   return new Promise<number>(() => {});
 }
 
+/** The page's address after the port: a path, with a query for a folder or several files. */
 function pageAddress(port: number, path: string): string {
-  return `http://127.0.0.1:${port}/${path.split('/').map(encodeURIComponent).join('/')}`;
+  const [where, query] = path.split('?');
+  return `http://127.0.0.1:${port}/${where!.split('/').map(encodeURIComponent).join('/')}${query !== undefined ? `?${query}` : ''}`;
+}
+
+/**
+ * The page the command line asks for, as its address on the server: nothing
+ * for the playground, a file's or a spec's path, or `.page` with the folder
+ * or the files; or what is wrong with what was given.
+ */
+async function pageAsked(root: string, inputs: string[]): Promise<string | { problem: string }> {
+  if (inputs.length === 0) return '';
+  const [first] = inputs;
+  if (inputs.length === 1) {
+    if (await isFolder(resolvePath(root, first!))) {
+      const folder = await folderInside(root, first!);
+      return typeof folder === 'string' ? `.page?${new URLSearchParams({ folder })}` : folder;
+    }
+    return insideRoot(root, first!);
+  }
+  const odd = await Promise.all(inputs.map(async (one) => (one.endsWith(PAGE_EXTENSION) || (await isFolder(resolvePath(root, one))) ? one : null)));
+  const alone = odd.find((one) => one !== null);
+  if (alone) return { problem: `${alone} makes a page of its own, so it goes on its own — reladraw serve ${alone}` };
+  const files: string[] = [];
+  for (const one of inputs) {
+    const inside = await insideRoot(root, one);
+    if (typeof inside !== 'string') return inside;
+    if (files.includes(inside)) return { problem: `${one} is given twice — once is enough` };
+    files.push(inside);
+  }
+  const query = new URLSearchParams();
+  for (const file of files) query.append('file', file);
+  return `.page?${query}`;
+}
+
+async function isFolder(path: string): Promise<boolean> {
+  return stat(path).then(
+    (found) => found.isDirectory(),
+    () => false,
+  );
+}
+
+/** A folder's path inside the served one, with forward slashes, `.` for that folder itself; or what is wrong with it. */
+async function folderInside(root: string, folder: string): Promise<string | { problem: string; status: number }> {
+  let real: string;
+  try {
+    real = await realpath(resolvePath(root, folder));
+    if (!(await stat(real)).isDirectory()) return { problem: `${folder} isn't a folder`, status: 404 };
+  } catch {
+    return { problem: `there is no folder ${folder}`, status: 404 };
+  }
+  const rel = relative(root, real);
+  if (rel.startsWith('..') || isAbsolute(rel)) {
+    return { problem: `${folder} is outside ${root}, the folder serve was started in; start it in a folder that holds it`, status: 403 };
+  }
+  return rel === '' ? '.' : rel.split(sep).join('/');
 }
 
 /**
  * The file's path inside the folder, with forward slashes, or what is wrong
- * with it: outside the folder, not a .reladraw file, or not there.
+ * with it: outside the folder, not a .reladraw file or a page spec, or not there.
  */
 async function insideRoot(root: string, file: string): Promise<string | { problem: string; status: number }> {
-  if (extname(file) !== '.reladraw') return { problem: `${file} isn't a .reladraw file`, status: 404 };
+  if (extname(file) !== '.reladraw' && extname(file) !== PAGE_EXTENSION) {
+    return { problem: `${file} isn't a .reladraw file or a ${PAGE_EXTENSION} spec`, status: 404 };
+  }
   const full = isAbsolute(file) ? file : resolvePath(root, file);
   let real: string;
   try {
@@ -282,9 +340,10 @@ async function handle(root: string, followed: Map<string, Followed>, req: Incomi
     return;
   }
 
-  if (path.startsWith('/lib/')) {
+  // The library's own files; anything else under /lib/ is a diagram in a
+  // folder called lib, served as any other.
+  if (/^\/lib\/[a-z0-9-]+\.js$/.test(path)) {
     const name = path.slice('/lib/'.length);
-    if (!/^[a-z0-9-]+\.js$/.test(name)) return notFound(res, path);
     try {
       const code = await readFile(join(LIB, name));
       res.writeHead(200, { 'content-type': TYPES['.js']!, 'cache-control': 'no-store' });
@@ -299,6 +358,18 @@ async function handle(root: string, followed: Map<string, Followed>, req: Incomi
     const inside = await insideRoot(root, url.searchParams.get('file') ?? '');
     if (typeof inside !== 'string') return refuse(res, inside);
     return follow(root, followed, inside, res);
+  }
+
+  if (path === '/list-events') {
+    const from = await listFrom(root, url);
+    if ('problem' in from) return refuse(res, from);
+    return followList(root, followed, from, res);
+  }
+
+  if (path === '/.page') {
+    const from = await listFrom(root, url);
+    if ('problem' in from) return refuse(res, from);
+    return listPage(root, followed, from, res);
   }
 
   // What changes a file comes only from a page this server served: a page on
@@ -335,6 +406,7 @@ async function handle(root: string, followed: Map<string, Followed>, req: Incomi
 
   const inside = await insideRoot(root, path.slice(1));
   if (typeof inside !== 'string') return refuse(res, inside);
+  if (inside.endsWith(PAGE_EXTENSION)) return listPage(root, followed, { spec: inside }, res);
   const text = await readFile(join(root, inside), 'utf8');
   let html: string;
   try {
@@ -368,45 +440,52 @@ function refuse(res: ServerResponse, why: { problem: string; status: number }): 
 async function follow(root: string, followed: Map<string, Followed>, path: string, res: ServerResponse): Promise<void> {
   res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
   const one = await entryFor(root, followed, path);
-  one.listeners.add(res);
-  send(res, one);
+  const tell = () => send(res, one);
+  one.listeners.add(tell);
+  tell();
   const keepAlive = setInterval(() => res.write(': still here\n\n'), 25_000);
   res.on('close', () => {
     clearInterval(keepAlive);
-    one.listeners.delete(res);
+    one.listeners.delete(tell);
   });
-  if (!one.watcher) {
-    const full = join(root, path);
-    const name = basename(full);
-    one.watcher = watch(dirname(full), (_event, changed) => {
-      if (changed !== null && changed.toString() !== name) return;
-      // Editors write in bursts; read once they settle.
-      if (one.timer) clearTimeout(one.timer);
-      one.timer = setTimeout(() => {
-        one.timer = null;
-        readFile(full, 'utf8').then(
-          (text) => {
-            if (text === one.text) return;
-            record(one, text, 'disk');
-            broadcast(one);
-          },
-          () => {
-            // Gone for the moment, as between an editor's delete and its
-            // rename; the next change brings it back.
-          },
-        );
-      }, 60);
-    });
-  }
+  watchEntry(root, path, one);
+}
+
+/** Watches a followed file, once, telling its pages when its text changes on disk. */
+function watchEntry(root: string, path: string, one: Followed): void {
+  if (one.watcher) return;
+  const full = join(root, path);
+  const name = basename(full);
+  one.watcher = watch(dirname(full), (_event, changed) => {
+    if (changed !== null && changed.toString() !== name) return;
+    // Editors write in bursts; read once they settle.
+    if (one.timer) clearTimeout(one.timer);
+    one.timer = setTimeout(() => {
+      one.timer = null;
+      readFile(full, 'utf8').then(
+        (text) => {
+          if (text === one.text) return;
+          record(one, text, 'disk');
+          broadcast(one);
+        },
+        () => {
+          // Gone for the moment, as between an editor's delete and its
+          // rename; the next change brings it back.
+        },
+      );
+    }, 60);
+  });
 }
 
 /**
  * The file's text, when it was read or changed and by whom, and its versions,
  * newest last, each with its text, so the page can offer any of them back.
+ * On a page of several, `file` says which file it is.
  */
-function send(res: ServerResponse, entry: Followed): void {
+function send(res: ServerResponse, entry: Followed, file?: string): void {
   const last = entry.versions[entry.versions.length - 1];
   const message = {
+    ...(file !== undefined ? { file } : {}),
     text: entry.text,
     at: entry.at,
     changed: entry.changed,
@@ -415,6 +494,185 @@ function send(res: ServerResponse, entry: Followed): void {
     versions: entry.versions,
   };
   res.write(`event: source\ndata: ${JSON.stringify(message)}\n\n`);
+}
+
+/** What a page of several diagrams lists, from its address's query: a spec, a folder, or files. */
+async function listFrom(root: string, url: URL): Promise<ListFrom | { problem: string; status: number }> {
+  const spec = url.searchParams.get('spec');
+  if (spec !== null) {
+    const inside = await insideRoot(root, spec);
+    if (typeof inside !== 'string') return inside;
+    if (!inside.endsWith(PAGE_EXTENSION)) return { problem: `${spec} isn't a ${PAGE_EXTENSION} spec`, status: 404 };
+    return { spec: inside };
+  }
+  const folder = url.searchParams.get('folder');
+  if (folder !== null) {
+    const inside = await folderInside(root, folder);
+    return typeof inside === 'string' ? { folder: inside } : inside;
+  }
+  const files: string[] = [];
+  for (const file of url.searchParams.getAll('file')) {
+    const inside = await insideRoot(root, file);
+    if (typeof inside !== 'string') return inside;
+    if (!inside.endsWith('.reladraw')) return { problem: `a page lists .reladraw diagrams, and ${file} isn't one`, status: 404 };
+    if (!files.includes(inside)) files.push(inside);
+  }
+  if (files.length === 0) return { problem: 'a page of several diagrams needs a spec, a folder or files', status: 404 };
+  return { files };
+}
+
+/**
+ * What a served page of several diagrams lists now: its title and theme, its
+ * diagrams by their paths inside the folder served, with their labels and the
+ * spec's line for each; the spec's diagrams that aren't there; why the spec
+ * doesn't read, if it doesn't; and with no spec, the spec the folder or files
+ * imply, with paths from the folder served.
+ */
+interface Listing {
+  title: string;
+  theme: string;
+  items: { file: string; label?: string; line?: number }[];
+  missing: { file: string; line: number; problem: string }[];
+  error: { message: string; line?: number } | null;
+  implied: string | null;
+}
+
+async function listingOf(root: string, followed: Map<string, Followed>, from: ListFrom): Promise<Listing> {
+  if ('spec' in from) {
+    const named = basename(from.spec).slice(0, -PAGE_EXTENSION.length);
+    const entry = await entryFor(root, followed, from.spec);
+    let read;
+    try {
+      read = parsePageSpec(entry.text ?? '');
+    } catch (error) {
+      if (!(error instanceof SourceError)) throw error;
+      return { title: named, theme: DEFAULT_THEME, items: [], missing: [], error: { message: error.message, line: error.line }, implied: null };
+    }
+    const items: Listing['items'] = [];
+    const missing: Listing['missing'] = [];
+    for (const one of read.entries) {
+      const file = posix.normalize(posix.join(posix.dirname(from.spec), one.path));
+      const inside = await insideRoot(root, file);
+      if (typeof inside === 'string') items.push({ file: inside, ...(one.label !== undefined ? { label: one.label } : {}), line: one.line });
+      else {
+        missing.push({
+          file,
+          line: one.line,
+          problem: inside.status === 403 ? `${one.path} is outside the folder reladraw serve was started in` : `there is no ${one.path} — a diagram's path is from the spec's folder`,
+        });
+      }
+    }
+    return { title: read.title ?? named, theme: read.theme ?? DEFAULT_THEME, items, missing, error: null, implied: null };
+  }
+  let files: string[];
+  let title: string;
+  if ('folder' in from) {
+    const names = (await readdir(join(root, from.folder), { withFileTypes: true }))
+      .filter((one) => one.isFile() && one.name.endsWith('.reladraw'))
+      .map((one) => one.name)
+      .sort((a, b) => a.localeCompare(b));
+    files = names.map((name) => (from.folder === '.' ? name : `${from.folder}/${name}`));
+    title = basename(join(root, from.folder));
+  } else {
+    files = from.files;
+    title = 'diagrams';
+  }
+  const implied =
+    files.length > 0 ? impliedPageSpec(title, files) : `page  title: ${JSON.stringify(title)}  kind: list\n`;
+  return { title, theme: DEFAULT_THEME, items: files.map((file) => ({ file })), missing: [], error: null, implied };
+}
+
+/** The page of several diagrams, drawn as it stands, which then follows them through `followList`. */
+async function listPage(root: string, followed: Map<string, Followed>, from: ListFrom, res: ServerResponse): Promise<void> {
+  const listing = await listingOf(root, followed, from);
+  const diagrams: ListedDiagram[] = [];
+  for (const item of listing.items) {
+    const entry = await entryFor(root, followed, item.file);
+    diagrams.push({ source: entry.text ?? '', file: basename(item.file), path: item.file, ...(item.label !== undefined ? { label: item.label } : {}) });
+  }
+  const { html } = drawListPage(listing.title, diagrams, new Date(), listing.theme, { kind: 'list', from, folder: shown(root) });
+  res.writeHead(200, { 'content-type': TYPES['.html']!, 'cache-control': 'no-store' });
+  res.end(html);
+}
+
+/**
+ * A page of several diagrams' stream: what it lists, now and whenever that
+ * changes, as a `list` event, and each file's text, the spec's included, as
+ * a `source` event naming the file, now and whenever it changes. One stream
+ * carries them all, since a browser opens only a few streams to one server.
+ * A spec that changes is read again for its list; a folder is watched for
+ * diagrams added to it or taken out.
+ */
+async function followList(root: string, followed: Map<string, Followed>, from: ListFrom, res: ServerResponse): Promise<void> {
+  res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
+  const subscribed = new Map<string, { entry: Followed; tell: (entry: Followed) => void }>();
+  let last: Listing | null = null;
+  let sent = '';
+  let closed = false;
+  let queue = Promise.resolve();
+  const relist = () => {
+    queue = queue.then(step).catch(() => {
+      // A folder or spec gone for the moment; the next change lists it again.
+    });
+  };
+  const step = async () => {
+    if (closed) return;
+    let next = await listingOf(root, followed, from);
+    // A spec that stops reading keeps the diagrams it last listed.
+    if (next.error && last) next = { ...last, error: next.error };
+    last = next;
+    const message = JSON.stringify(next);
+    if (message !== sent) {
+      sent = message;
+      res.write(`event: list\ndata: ${message}\n\n`);
+    }
+    const wanted = new Set(next.items.map((item) => item.file));
+    if ('spec' in from) wanted.add(from.spec);
+    for (const [file, one] of subscribed) {
+      if (wanted.has(file)) continue;
+      one.entry.listeners.delete(one.tell);
+      subscribed.delete(file);
+    }
+    for (const file of wanted) {
+      if (subscribed.has(file) || closed) continue;
+      let entry: Followed;
+      try {
+        entry = await entryFor(root, followed, file);
+        // Read afresh: the page was drawn from an earlier read, which no watcher may have followed.
+        const now = await readFile(join(root, file), 'utf8');
+        if (now !== entry.text) record(entry, now, 'disk');
+      } catch {
+        continue;
+      }
+      const tell = (changed: Followed) => {
+        send(res, changed, file);
+        if ('spec' in from && file === from.spec) relist();
+      };
+      entry.listeners.add(tell);
+      subscribed.set(file, { entry, tell });
+      watchEntry(root, file, entry);
+      send(res, entry, file);
+    }
+  };
+  let folderWatch: FSWatcher | null = null;
+  let settle: NodeJS.Timeout | null = null;
+  if ('folder' in from) {
+    folderWatch = watch(join(root, from.folder), (_event, changed) => {
+      if (changed !== null && !changed.toString().endsWith('.reladraw')) return;
+      if (settle) clearTimeout(settle);
+      settle = setTimeout(relist, 100);
+    });
+  }
+  const keepAlive = setInterval(() => res.write(': still here\n\n'), 25_000);
+  res.on('close', () => {
+    closed = true;
+    clearInterval(keepAlive);
+    if (settle) clearTimeout(settle);
+    folderWatch?.close();
+    for (const one of subscribed.values()) one.entry.listeners.delete(one.tell);
+    subscribed.clear();
+  });
+  relist();
 }
 
 function reply(res: ServerResponse, status: number, value: unknown): void {
@@ -456,10 +714,13 @@ async function save(root: string, followed: Map<string, Followed>, url: URL, req
  * with the file does.
  */
 async function create(root: string, followed: Map<string, Followed>, url: URL, req: IncomingMessage, res: ServerResponse): Promise<void> {
-  const asked = JSON.parse(await body(req)) as { text: string; replace?: boolean };
+  const asked = JSON.parse(await body(req)) as { text: string; replace?: boolean; from?: string };
   if (typeof asked.text !== 'string') return reply(res, 400, { error: 'text is wanted' });
   const typed = (url.searchParams.get('file') ?? '').trim();
-  if (extname(typed) !== '.reladraw') return reply(res, 400, { error: `${typed || 'The path'} isn't a .reladraw file` });
+  const spec = extname(typed) === PAGE_EXTENSION;
+  if (extname(typed) !== '.reladraw' && !spec) {
+    return reply(res, 400, { error: `${typed || 'The path'} isn't a .reladraw file${typeof asked.from === 'string' ? ` or a ${PAGE_EXTENSION} spec` : ''}` });
+  }
   if (isAbsolute(typed) || typed.split(/[\\/]/).includes('..')) {
     return reply(res, 400, { error: `Give a path inside ${shown(root)}, such as diagram.reladraw or docs/flow.reladraw` });
   }
@@ -481,13 +742,21 @@ async function create(root: string, followed: Map<string, Followed>, url: URL, r
     if (typeof inside !== 'string') return reply(res, inside.status, { error: inside.problem });
     if (!asked.replace) return reply(res, 409, { exists: true, file: inside });
   }
-  await writeFile(full, asked.text, 'utf8');
+  // A spec's diagrams are named from its own folder, and the spec the page
+  // implied named them from `from`, the folder served, so they are moved.
+  let text = asked.text;
+  if (spec && typeof asked.from === 'string') {
+    const was = asked.from;
+    const now = relative(root, folder).split(sep).join('/') || '.';
+    text = moveSpecPaths(text, (path) => posix.relative(now, posix.join(was, path)) || path);
+  }
+  await writeFile(full, text, 'utf8');
   const inside = await insideRoot(root, full);
   if (typeof inside !== 'string') return reply(res, inside.status, { error: inside.problem });
   const entry = followed.get(inside) ?? newEntry();
   followed.set(inside, entry);
-  record(entry, asked.text, 'you');
-  reply(res, 200, { file: inside, at: entry.at });
+  record(entry, text, 'you');
+  reply(res, 200, { file: inside, at: entry.at, text });
   broadcast(entry);
 }
 

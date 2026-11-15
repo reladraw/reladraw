@@ -353,3 +353,50 @@ function diagramLines(run: Statement[]): string[] {
     return text.trimEnd() === text ? text : text.trimEnd();
   });
 }
+
+/** A diagram's path as a spec writes it: quoted when it has a space or a quote in it. */
+function specPath(path: string): string {
+  return /[\s"]/.test(path) || path.startsWith('//') ? JSON.stringify(path) : path;
+}
+
+/**
+ * The spec a page of several diagrams implies when it was asked for without
+ * one, by a folder or by several files: its title, and each diagram by its
+ * path as given. `reladraw serve` shows it on the overview's Edit, and its
+ * first Save writes it.
+ */
+export function impliedPageSpec(title: string, paths: string[], about?: string): string {
+  const lines = [
+    ...(about ? [`// ${about}`] : []),
+    `page  title: ${JSON.stringify(title)}  kind: list`,
+    '',
+    ...paths.map((path) => `diagram ${specPath(path)}`),
+  ];
+  return formatPageSpec(lines.join('\n') + '\n');
+}
+
+/**
+ * The spec with each diagram's path rewritten by `move`, everything else as
+ * written: for a spec saved into another folder than the one its paths were
+ * written from. A spec that doesn't read is returned as it is.
+ */
+export function moveSpecPaths(text: string, move: (path: string) => string): string {
+  let pieces: Piece[];
+  try {
+    pieces = piecesOf(text);
+    readSpec(pieces);
+  } catch {
+    return text;
+  }
+  const lines = text.replace(/\r\n?/g, '\n').split('\n');
+  for (const piece of pieces) {
+    if (piece.kind !== 'statement') continue;
+    const { statement } = piece;
+    if (statement.tokens[0]!.token.text !== 'diagram') continue;
+    const at = statement.tokens[1];
+    if (!at || at.token.start === undefined || at.token.end === undefined) continue;
+    const raw = lines[at.line - 1]!;
+    lines[at.line - 1] = raw.slice(0, at.token.start) + specPath(move(at.token.text)) + raw.slice(at.token.end);
+  }
+  return lines.join('\n');
+}
