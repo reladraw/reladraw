@@ -1,15 +1,16 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { basename, dirname, resolve as resolvePath } from 'node:path';
+import { basename, dirname, join, resolve as resolvePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { nearMatch, readChecks, type Checks, type Finding } from './checks.js';
 import { SourceError } from './errors.js';
 import { format } from './format.js';
 import { DEFAULT_FORMAT, readFormatSettings, SETTINGS_FILE, settingsFileText, type FormatSettings } from './format-settings.js';
 import { draw, type DrawOptions } from './index.js';
-import { drawPage } from './page.js';
+import { drawListPage, drawPage, ListedDiagramError, type ListedDiagram } from './page.js';
+import { formatPageSpec, PAGE_EXTENSION, parsePageSpec, type PageSpec } from './page-spec.js';
 import { noteCommand, serve } from './serve.js';
 import { THEME_NAMES, THEMES } from './themes.js';
 
@@ -235,7 +236,7 @@ async function main(argv: string[]): Promise<number> {
   const command = verb as Command;
   if (command === 'format') return formatFiles(argv.slice(1));
 
-  let input: string | undefined;
+  const inputs: string[] = [];
   let out: string | undefined;
   let theme: string | undefined;
   let checks: string | undefined;
@@ -287,15 +288,12 @@ async function main(argv: string[]): Promise<number> {
     } else if (arg.startsWith('-') && arg !== '-') {
       process.stderr.write(`reladraw: unknown option ${arg}\n`);
       return 1;
-    } else if (input === undefined) {
-      input = arg;
     } else {
-      process.stderr.write(`reladraw: unexpected argument ${arg}\n`);
-      return 1;
+      inputs.push(arg);
     }
   }
 
-  if (input === undefined) {
+  if (inputs.length === 0) {
     process.stderr.write(`reladraw: no input file — reladraw ${command} <input.reladraw>\n`);
     return 1;
   }
@@ -321,16 +319,23 @@ async function main(argv: string[]): Promise<number> {
     overChecks = (fromFile) => readChecks(written, fromFile);
   }
 
-  const source = await readFile(input, 'utf8');
-
-  const options: DrawOptions = {
+  const optionsFor = (diagram: string): DrawOptions => ({
     ...(theme === undefined ? {} : { theme: THEMES[theme]! }),
     ...(guides ? { guides: true } : {}),
     // An icon's file is found from the diagram, not from wherever the tool
     // happens to be run.
-    readIconFile: (path) => readFileSync(resolvePath(dirname(input), path), 'utf8'),
+    readIconFile: (path) => readFileSync(resolvePath(dirname(diagram), path), 'utf8'),
     ...(noChecks ? { checks: false as const } : overChecks ? { checks: overChecks } : {}),
-  };
+  });
+
+  // A page spec, several diagrams or a folder make one page of them all.
+  const first = inputs[0]!;
+  if (inputs.length > 1 || first.endsWith(PAGE_EXTENSION) || isFolder(first)) {
+    return renderMany(command, inputs, out, page, optionsFor);
+  }
+  const input = first;
+  const source = await readFile(input, 'utf8');
+  const options = optionsFor(input);
   let drawn: { text: string; findings: Finding[] };
   try {
     if (page) {
@@ -359,6 +364,125 @@ async function main(argv: string[]): Promise<number> {
   const target = resolvePath(out ?? input.replace(/\.[^.]+$/, '') + (page ? '.html' : '.svg'));
   await mkdir(dirname(target), { recursive: true });
   await writeFile(target, drawn.text, 'utf8');
+  process.stderr.write(`${target}\n`);
+  return 0;
+}
+
+function isFolder(path: string): boolean {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * `render --page` or `check` of a page spec, of several diagrams, or of a
+ * folder: every diagram drawn, its findings printed under its own path, and
+ * for render one page of them all. A spec names its diagrams by their paths
+ * from its own folder, with the labels the page picks them by; a folder gives
+ * the `.reladraw` files directly in it, by name; several files go in the
+ * order given. The page is called what the spec or the folder is called, and
+ * several files need a name for it.
+ */
+async function renderMany(
+  command: Command,
+  inputs: string[],
+  out: string | undefined,
+  page: boolean,
+  optionsFor: (diagram: string) => DrawOptions,
+): Promise<number> {
+  const fail = (message: string): number => {
+    process.stderr.write(`${message}\n`);
+    return 1;
+  };
+  const first = inputs[0]!;
+  const what = first.endsWith(PAGE_EXTENSION) ? 'a page spec' : isFolder(first) ? 'a folder' : 'several diagrams';
+  if (command === 'render' && !page) {
+    return fail(`reladraw: ${what} ${inputs.length > 1 ? 'make' : 'makes'} a page, not an SVG — reladraw render --page ${inputs.join(' ')}`);
+  }
+  if (inputs.length > 1) {
+    const odd = inputs.find((one) => one.endsWith(PAGE_EXTENSION) || isFolder(one));
+    if (odd) return fail(`reladraw: ${odd} makes a page of its own, so it goes on its own — reladraw ${command}${page ? ' --page' : ''} ${odd}`);
+  }
+
+  let title: string;
+  let defaultOut: string | undefined;
+  let listed: { path: string; label?: string; line?: number }[];
+  let spec: string | undefined;
+  if (first.endsWith(PAGE_EXTENSION)) {
+    spec = first;
+    let text: string;
+    try {
+      text = await readFile(spec, 'utf8');
+    } catch {
+      return fail(`reladraw: can't read ${spec}`);
+    }
+    let read: PageSpec;
+    try {
+      read = parsePageSpec(text);
+    } catch (error) {
+      if (error instanceof SourceError) return fail(error.format(spec));
+      throw error;
+    }
+    title = read.title ?? basename(spec).slice(0, -PAGE_EXTENSION.length);
+    defaultOut = spec.slice(0, -PAGE_EXTENSION.length) + '.html';
+    listed = read.entries.map((entry) => ({ path: join(dirname(spec!), entry.path), ...(entry.label !== undefined ? { label: entry.label } : {}), line: entry.line }));
+  } else if (isFolder(first)) {
+    const folder = first.replace(/[/\\]+$/, '') || first;
+    const names = readdirSync(folder)
+      .filter((name) => name.endsWith('.reladraw') && statSync(join(folder, name)).isFile())
+      .sort((a, b) => a.localeCompare(b));
+    if (names.length === 0) return fail(`reladraw: there are no .reladraw files in ${first}`);
+    title = basename(resolvePath(folder));
+    defaultOut = `${folder}.html`;
+    listed = names.map((name) => ({ path: join(folder, name) }));
+  } else {
+    const notOne = inputs.find((one) => !one.endsWith('.reladraw'));
+    if (notOne) return fail(`reladraw: a page lists .reladraw diagrams, and ${notOne} isn't one`);
+    const twice = inputs.find((one, i) => inputs.findIndex((other) => resolvePath(other) === resolvePath(one)) !== i);
+    if (twice) return fail(`reladraw: ${twice} is given twice — once is enough`);
+    title = out && out !== '-' ? basename(out).replace(/\.html?$/i, '') : 'diagrams';
+    listed = inputs.map((path) => ({ path }));
+    if (command === 'render' && out === undefined) {
+      return fail(`reladraw: several diagrams make one page, so name it — reladraw render --page ${inputs.join(' ')} -o page.html`);
+    }
+  }
+
+  const diagrams: ListedDiagram[] = [];
+  for (const one of listed) {
+    let source: string;
+    try {
+      source = await readFile(one.path, 'utf8');
+    } catch {
+      return fail(
+        spec && one.line !== undefined
+          ? `${spec}:${one.line}: can't read ${one.path} — a diagram's path is from the spec's folder`
+          : `reladraw: can't read ${one.path}`,
+      );
+    }
+    diagrams.push({ source, file: basename(one.path), ...(one.label !== undefined ? { label: one.label } : {}), options: optionsFor(one.path) });
+  }
+
+  let made: ReturnType<typeof drawListPage>;
+  try {
+    made = drawListPage(title, diagrams);
+  } catch (error) {
+    if (error instanceof ListedDiagramError) return fail(error.cause.format(listed[error.index]!.path));
+    throw error;
+  }
+  made.findings.forEach((found, i) => {
+    for (const finding of found.findings) process.stderr.write(`${finding.format(listed[i]!.path)}\n`);
+  });
+  if (command === 'check') return 0;
+
+  if (out === '-') {
+    process.stdout.write(made.html);
+    return 0;
+  }
+  const target = resolvePath(out ?? defaultOut!);
+  await mkdir(dirname(target), { recursive: true });
+  await writeFile(target, made.html, 'utf8');
   process.stderr.write(`${target}\n`);
   return 0;
 }
@@ -424,7 +548,7 @@ async function formatFiles(args: string[]): Promise<number> {
     }
     let laid: string;
     try {
-      laid = format(source, settings);
+      laid = file.endsWith(PAGE_EXTENSION) ? formatPageSpec(source) : format(source, settings);
     } catch (error) {
       process.stderr.write(error instanceof SourceError ? `${error.format(file)}\n` : `reladraw: ${file}: ${(error as Error).message}\n`);
       status = 1;

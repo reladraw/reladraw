@@ -1,4 +1,5 @@
 import type { Finding } from './checks.js';
+import { SourceError } from './errors.js';
 import type { DrawOptions } from './index.js';
 import { dataOf, partsOf, type PageParts } from './page-data.js';
 import { PAN_ZOOM } from './viewer.js';
@@ -24,6 +25,61 @@ export function drawPage(
   const parts = partsOf(source, file, options, at);
   return { html: page(parts, editing ?? null), findings: parts.findings };
 }
+
+/** One diagram on a page of several: its source, its file's name, and the label the page picks it by. */
+export interface ListedDiagram {
+  source: string;
+  file: string;
+  label?: string;
+  options?: DrawOptions;
+}
+
+/**
+ * `reladraw render --page` of a page spec, several files or a folder: one
+ * page holding every diagram. It opens on an overview of them all, each under
+ * its label; a diagram opened from there fills the page as a page of one
+ * does, with a drop-down in the bar to switch to another and the page's title
+ * to go back. `title` heads the page. Findings come back with the file each
+ * belongs to.
+ */
+export function drawListPage(
+  title: string,
+  diagrams: ListedDiagram[],
+  at: Date = new Date(),
+): { html: string; findings: { file: string; findings: Finding[] }[] } {
+  const all = diagrams.map((one, index) => {
+    try {
+      return { one, parts: partsOf(one.source, one.file, one.options ?? {}, at) };
+    } catch (error) {
+      throw error instanceof SourceError ? new ListedDiagramError(index, error) : error;
+    }
+  });
+  const first = all[0]!.parts;
+  const list = {
+    title,
+    items: all.map(({ one, parts }, i) => ({
+      label: one.label ?? parts.title,
+      title: parts.title,
+      drawn: parts.drawn,
+      // The first is the page's own data, so it isn't carried twice.
+      data: i === 0 ? null : dataOf(parts),
+    })),
+  };
+  const html = page(first, null, undefined, list);
+  return { html, findings: all.map(({ one, parts }) => ({ file: one.file, findings: parts.findings })) };
+}
+
+/** A diagram on a page of several that doesn't draw: which one, by its place in the list, and why. */
+export class ListedDiagramError extends Error {
+  constructor(
+    readonly index: number,
+    override readonly cause: SourceError,
+  ) {
+    super(cause.message);
+  }
+}
+
+type ListData ={ title: string; items: { label: string; title: string; drawn: string; data: unknown }[] };
 
 /**
  * How a page's source can be edited, when it can: served by `reladraw serve`
@@ -87,20 +143,21 @@ interface Framing {
   library: string;
 }
 
-function page(parts: PageParts, editing: Editing | null, framing?: Framing): string {
+function page(parts: PageParts, editing: Editing | null, framing?: Framing, list?: ListData): string {
   const { themes, current } = parts;
   const shown = themes[current]!;
-  const data = { ...dataOf(parts), edit: editing };
-  const title = framing?.title ?? parts.title;
+  const data = { ...dataOf(parts), edit: editing, ...(list ? { list } : {}) };
+  const title = list?.title ?? framing?.title ?? parts.title;
   const noFile = editing !== null && editing.kind !== 'file';
   const filled: Record<string, string> = {
     panzoom: PAN_ZOOM,
     scheme: shown.scheme,
     title: escapeMarkup(title),
     head: framing?.head ?? '',
-    heading: escapeMarkup(framing?.heading ?? parts.title),
-    drawn: escapeMarkup(framing?.drawn ?? parts.drawn),
+    heading: escapeMarkup(list?.title ?? framing?.heading ?? parts.title),
+    drawn: escapeMarkup(list ? `${list.items.length} diagrams` : (framing?.drawn ?? parts.drawn)),
     links: noFile ? LINKS : '',
+    pick: list ? PICK : '',
     colors: [
       ...Object.entries(shown.colors).map(([key, value]) => `${key}: ${value};`),
       '--sel: #e0b25a; --up: #22b98c; --down: #e5484d;',
@@ -472,6 +529,31 @@ const PAGE = `<!doctype html>
   /* ---- a page with no file: the playground ---- */
   /* GitHub, as its mark beside the name. */
   .heading h1 { display: inline; vertical-align: middle; }
+  /* A page of several diagrams: its title goes back to the overview, and the drop-down switches. */
+  .heading h1.back { cursor: pointer; border-radius: 4px; }
+  .heading h1.back::before { content: '← '; color: var(--muted); }
+  .heading h1.back:hover { color: var(--accent); }
+  .heading h1.back:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  select.pick {
+    font: inherit; font-size: 13px; color: var(--ink); background: var(--page); vertical-align: middle; margin-left: 10px;
+    border: 1px solid color-mix(in srgb, var(--rule) 70%, transparent); border-radius: 6px; padding: 3px 6px; max-width: 16em;
+  }
+  select.pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  #overview { flex: 1; overflow: auto; padding: 20px; }
+  #overview:not([hidden]) ~ #split, #overview:not([hidden]) ~ #picture, #overview:not([hidden]) ~ #side, #overview:not([hidden]) ~ #editor { display: none; }
+  #overview .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 16px; }
+  #overview .card {
+    display: flex; flex-direction: column; gap: 4px; text-align: left; white-space: normal; padding: 12px 14px;
+    border: 1px solid color-mix(in srgb, var(--rule) 70%, transparent); border-radius: 10px; background: transparent;
+  }
+  #overview .card:hover { border-color: var(--accent); background: color-mix(in srgb, var(--ink) 5%, transparent); }
+  #overview .card .label { font-size: 15px; font-weight: 600; }
+  #overview .card .title { font-size: 12px; color: var(--muted); }
+  #overview .card .key { font-size: 11px; color: var(--muted); margin-left: auto; }
+  #overview .card .top { display: flex; align-items: baseline; gap: 8px; }
+  #overview .thumb { height: 200px; margin-top: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 6px; }
+  /* Scaled to fill its card either way, keeping its shape: a wide diagram isn't left a sliver. */
+  #overview .thumb svg { width: 100%; height: 100%; }
   .links { display: inline-flex; vertical-align: middle; margin-left: 10px; }
   .links a { display: inline-flex; color: var(--muted); padding: 2px; border-radius: 4px; }
   .links a:hover { color: var(--ink); }
@@ -583,7 +665,7 @@ const PAGE = `<!doctype html>
 <body>
 <header>
   <div class="heading">
-    <h1>{{heading}}</h1>{{links}}
+    <h1>{{heading}}</h1>{{links}}{{pick}}
     <p class="drawn">{{drawn}}</p>
   </div>
   <span id="mode" class="mode" role="group" aria-label="Mode" hidden>
@@ -635,6 +717,7 @@ const PAGE = `<!doctype html>
 </header>
 <div id="live" role="status" hidden></div>
 <main>
+  <section id="overview" aria-label="Every diagram on this page" hidden></section>
   <section id="editor" aria-label="Source" hidden>
     <div id="changed" role="alert" hidden><span class="what"></span><span class="gap"></span><button id="load-disk" type="button">Load it</button><button id="keep-mine" type="button">Keep mine</button></div>
     <div class="src-head">
@@ -702,6 +785,10 @@ const PAGE = `<!doctype html>
       <div class="cs-row"><div><kbd>p</kbd></div><span>show or hide the side panel</span></div>
       <div class="cs-row"><div><kbd>f</kbd></div><span>full screen</span></div>
     </section>
+    <section class="cs-card" style="--hue: var(--syn-type)" data-on="list"><h3>Diagrams</h3>
+      <div class="cs-row"><div><kbd>o</kbd></div><span>the overview of every diagram on this page</span></div>
+      <div class="cs-row"><div><kbd>[</kbd><kbd>]</kbd></div><span>the diagram before or after this one; from the overview, the first or last</span></div>
+    </section>
     <section class="cs-card" style="--hue: var(--syn-relation)"><h3>Selecting</h3>
       <div class="cs-row"><div><kbd>s</kbd></div><span>a letter on every box and line; type one to select it</span></div>
       <div class="cs-row"><div><kbd>/</kbd></div><span>filter what gets a letter: words in its text, or is:node, is:edge, is:container, style:name</span></div>
@@ -736,6 +823,9 @@ const PAGE = `<!doctype html>
   var DATA = {{data}};
   // How the source is edited, or null on a snapshot, which has no editor.
   var EDIT = DATA.edit;
+  // A page of several diagrams: its title and its diagrams, the first of
+  // which is the page's own data. Null on a page of one.
+  var LIST = DATA.list || null;
   // The page as written, taken before anything below changes it, so This
   // page saves what reladraw wrote rather than the current zoom and highlights.
   // A page with an editor makes a fresh snapshot instead (below).
@@ -2241,8 +2331,11 @@ const PAGE = `<!doctype html>
     graph = DATA.graph;
     collectStyles();
     shownTheme = chosenName && DATA.themes[chosenName] ? chosenName : DATA.current;
-    // A page with no file is headed reladraw, whatever the diagram is called.
-    if (!EDIT || EDIT.kind === 'file') {
+    // A page with no file is headed reladraw, whatever the diagram is called,
+    // and a page of several keeps its own title, which goes back to them all.
+    if (LIST) {
+      document.title = title + ' · ' + LIST.title;
+    } else if (!EDIT || EDIT.kind === 'file') {
       heading.textContent = title;
       document.title = title;
     }
@@ -3152,6 +3245,113 @@ const PAGE = `<!doctype html>
     });
   }
 
+  /* ---- a page of several diagrams ---- */
+
+  // It opens on the overview: a card for each diagram, under its label. A
+  // card, the drop-down, [ or ] open one, which fills the page as a page of
+  // one diagram does; the page's title, now marked ←, or o go back.
+  var overview = document.getElementById('overview');
+  var pickList = document.getElementById('pick-list');
+  // The diagram open, or -1 on the overview; and the one whose data DATA is.
+  var openIndex = -1;
+  var dataIndex = 0;
+  // What Export saves of one diagram, which the overview has none of.
+  var diagramExports = ['save-source', 'save-svg', 'save-png', 'copy-svg'].map(function (id) { return document.getElementById(id); })
+    .concat([document.querySelector('#save-list hr')]);
+
+  // A small copy of a drawing for its card, its ids made its own: an id
+  // shared with the drawing in the hidden picture would point an arrowhead
+  // at something not drawn.
+  function thumbnail(svgText, prefix) {
+    var ids = {};
+    svgText.replace(/\\sid="([^"]+)"/g, function (all, id) { ids[id] = true; return all; });
+    return svgText.replace(/(\\sid="|url\\(#|href="#)([^")]+)/g, function (all, lead, id) {
+      return ids[id] ? lead + prefix + id : all;
+    });
+  }
+
+  function showOverview() {
+    if (!LIST) return;
+    openIndex = -1;
+    setLevel(null);
+    overview.hidden = false;
+    pickList.hidden = true;
+    heading.classList.remove('back');
+    heading.removeAttribute('role');
+    heading.removeAttribute('tabindex');
+    heading.removeAttribute('title');
+    drawnLine.textContent = LIST.items.length + ' diagrams';
+    document.title = LIST.title;
+    diagramExports.forEach(function (row) { if (row) row.hidden = true; });
+    var first = overview.querySelector('.card');
+    if (first && document.activeElement === heading) first.focus();
+  }
+
+  function openDiagram(index) {
+    if (!LIST) return;
+    var item = LIST.items[index];
+    openIndex = index;
+    overview.hidden = true;
+    pickList.hidden = false;
+    pickList.value = String(index);
+    heading.classList.add('back');
+    heading.setAttribute('role', 'button');
+    heading.setAttribute('tabindex', '0');
+    heading.title = 'Every diagram on this page (o)';
+    diagramExports.forEach(function (row) { if (row) row.hidden = false; });
+    if (index !== dataIndex) {
+      dataIndex = index;
+      adopt(item.data, item.title);
+    } else {
+      document.title = item.title + ' · ' + LIST.title;
+      redraw();
+    }
+    drawnLine.textContent = item.title + ' · ' + item.drawn;
+    // A diagram opens seen whole, as a page of one does.
+    zoom.fit();
+  }
+
+  if (LIST) {
+    LIST.items[0].data = DATA;
+    var cards = element('div', 'cards');
+    LIST.items.forEach(function (item, i) {
+      var card = element('button', 'card');
+      card.type = 'button';
+      card.title = 'Open ' + item.label;
+      var top = element('span', 'top');
+      top.append(element('span', 'label', item.label));
+      card.append(top);
+      if (item.title !== item.label) card.append(element('span', 'title', item.title));
+      var thumb = element('span', 'thumb');
+      thumb.innerHTML = thumbnail(item.data.themes[item.data.current].svg, 'card' + i + '-');
+      card.append(thumb);
+      card.onclick = function () { openDiagram(i); };
+      cards.append(card);
+      var option = document.createElement('option');
+      option.value = String(i);
+      option.textContent = item.label;
+      pickList.append(option);
+    });
+    overview.append(cards);
+    pickList.onchange = function () { openDiagram(Number(pickList.value)); pickList.blur(); };
+    heading.addEventListener('click', function () { if (openIndex >= 0) showOverview(); });
+    heading.addEventListener('keydown', function (event) {
+      if ((event.key === 'Enter' || event.key === ' ') && openIndex >= 0) { event.preventDefault(); showOverview(); }
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.ctrlKey || event.metaKey || event.altKey || level) return;
+      if (event.target.closest && event.target.closest('input, textarea, select, [contenteditable]')) return;
+      if (document.querySelector('dialog[open]')) return;
+      var count = LIST.items.length;
+      if (event.key === 'o') showOverview();
+      else if (event.key === ']') openDiagram(openIndex < 0 ? 0 : (openIndex + 1) % count);
+      else if (event.key === '[') openDiagram(openIndex < 0 ? count - 1 : (openIndex - 1 + count) % count);
+      else return;
+      event.preventDefault();
+    });
+    showOverview();
+  }
+
   /* ---- the keyboard shortcuts ---- */
 
   // Every page has them; rows for editing and for a served file's versions
@@ -3159,7 +3359,7 @@ const PAGE = `<!doctype html>
   var keysBox = document.getElementById('keys-sheet');
   each(keysBox.querySelectorAll('[data-on]'), function (part) {
     var on = part.getAttribute('data-on');
-    part.hidden = on === 'edit' ? !EDIT : on === 'file' ? !tiedFile() : false;
+    part.hidden = on === 'edit' ? !EDIT : on === 'file' ? !tiedFile() : on === 'list' ? !LIST : false;
   });
   closeOnBackdrop(keysBox);
   document.getElementById('keys-open').onclick = function () { keysBox.showModal(); };
@@ -3336,6 +3536,9 @@ const CHEATSHEET = `
 `;
 
 /** Where a page with no file sends someone who wants more than the cheatsheet. */
+// The drop-down a page of several diagrams switches between them with; the script fills it.
+const PICK = `<select id="pick-list" class="pick" aria-label="Which diagram" title="Another diagram on this page ([ and ])" hidden></select>`;
+
 const LINKS = `<nav class="links"><a href="https://github.com/reladraw/reladraw" title="reladraw on GitHub" aria-label="reladraw on GitHub"><svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a></nav>`;
 
 /**
