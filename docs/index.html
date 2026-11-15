@@ -290,16 +290,18 @@
     background: color-mix(in srgb, var(--ink) 4%, var(--page));
   }
   #editor[hidden] { display: none; }
-  /* The picture's controls float over it: Check at its top left, the zoom
-     on a card at its bottom right. They sit beside the view, not in it, so a
-     press on them never starts a pan. */
+  /* The picture's controls float over its foot: Check at the bottom left, the
+     zoom on a card at the bottom right. They sit beside the view, not in it,
+     so a press on them never starts a pan. */
   #canvas { position: relative; flex: 1; display: flex; min-height: 0; }
   .floating { position: absolute; z-index: 4;
     background: color-mix(in srgb, var(--ink) 7%, var(--page));
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45); }
   .floating[hidden] { display: none; }
-  #check { left: 12px; top: 12px; padding: 5px 14px; }
+  #check { left: 12px; bottom: 12px; padding: 5px 14px; }
   #check:hover { background: color-mix(in srgb, var(--ink) 14%, var(--page)); }
+  /* The keys' strip shares the bottom left: it starts after Check. */
+  #canvas:has(#check:not([hidden])) #strip { left: 92px; max-width: calc(100% - 370px); }
   #zoom-card { right: 12px; bottom: 12px; display: flex; align-items: center; gap: 5px; padding: 4px 5px; border-radius: 9px;
     border: 1px solid color-mix(in srgb, var(--rule) 55%, transparent); }
   /* The card a shade darker than its buttons, so each reads as a button. */
@@ -18661,16 +18663,18 @@ const PAGE = `<!doctype html>
     background: color-mix(in srgb, var(--ink) 4%, var(--page));
   }
   #editor[hidden] { display: none; }
-  /* The picture's controls float over it: Check at its top left, the zoom
-     on a card at its bottom right. They sit beside the view, not in it, so a
-     press on them never starts a pan. */
+  /* The picture's controls float over its foot: Check at the bottom left, the
+     zoom on a card at the bottom right. They sit beside the view, not in it,
+     so a press on them never starts a pan. */
   #canvas { position: relative; flex: 1; display: flex; min-height: 0; }
   .floating { position: absolute; z-index: 4;
     background: color-mix(in srgb, var(--ink) 7%, var(--page));
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45); }
   .floating[hidden] { display: none; }
-  #check { left: 12px; top: 12px; padding: 5px 14px; }
+  #check { left: 12px; bottom: 12px; padding: 5px 14px; }
   #check:hover { background: color-mix(in srgb, var(--ink) 14%, var(--page)); }
+  /* The keys' strip shares the bottom left: it starts after Check. */
+  #canvas:has(#check:not([hidden])) #strip { left: 92px; max-width: calc(100% - 370px); }
   #zoom-card { right: 12px; bottom: 12px; display: flex; align-items: center; gap: 5px; padding: 4px 5px; border-radius: 9px;
     border: 1px solid color-mix(in srgb, var(--rule) 55%, transparent); }
   /* The card a shade darker than its buttons, so each reads as a button. */
@@ -19594,7 +19598,7 @@ const PAGE = `<!doctype html>
       list.append(wrong);
     }
     if (!checked) {
-      list.append(element('li', 'none', 'Automatic checking is off. Press Check in the bar above to look for overlaps and other places the picture may not read as meant.'));
+      list.append(element('li', 'none', 'Automatic checking is off. Press Check, above the source, to look for overlaps and other places the picture may not read as meant.'));
     } else {
       if (stale()) list.append(element('li', 'again', againText()));
       if (found().length === 0) list.append(element('li', 'none', 'No findings.'));
@@ -23477,7 +23481,7 @@ function panZoom(view, stage, label, buttons) {
       list.append(wrong);
     }
     if (!checked) {
-      list.append(element('li', 'none', 'Automatic checking is off. Press Check in the bar above to look for overlaps and other places the picture may not read as meant.'));
+      list.append(element('li', 'none', 'Automatic checking is off. Press Check, above the source, to look for overlaps and other places the picture may not read as meant.'));
     } else {
       if (stale()) list.append(element('li', 'again', againText()));
       if (found().length === 0) list.append(element('li', 'none', 'No findings.'));
