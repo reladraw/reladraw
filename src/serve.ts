@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { SourceError } from './errors.js';
 import { OFFERED, START } from './examples.js';
 import { SETTINGS_FILE, settingsFileText, withSettings } from './format-settings.js';
-import { drawListPage, drawPage, playgroundPage, type Example, type ListedDiagram, type ListFrom } from './page.js';
+import { drawListPage, drawPage, pageGrid, playgroundPage, type Example, type ListedDiagram, type ListFrom, type PageGrid } from './page.js';
 import { impliedPageSpec, moveSpecPaths, PAGE_EXTENSION, parsePageSpec } from './page-spec.js';
 import { DEFAULT_THEME } from './themes.js';
 
@@ -536,9 +536,11 @@ async function listFrom(root: string, url: URL): Promise<ListFrom | { problem: s
 interface Listing {
   title: string;
   theme: string;
-  items: { file: string; label?: string; group?: string; line?: number }[];
+  items: { file: string; label?: string; group?: string; cell?: { row: string; column: string }; line?: number }[];
   /** The spec's groups in order, empty ones included. */
   groups: string[];
+  /** A grid's rows and columns; none for a list. */
+  grid?: PageGrid;
   missing: { file: string; line: number; problem: string }[];
   error: { message: string; line?: number } | null;
   implied: string | null;
@@ -565,6 +567,7 @@ async function listingOf(root: string, followed: Map<string, Followed>, from: Li
           file: inside,
           ...(one.label !== undefined ? { label: one.label } : {}),
           ...(one.group !== undefined ? { group: one.group } : {}),
+          ...(one.cell !== undefined ? { cell: one.cell } : {}),
           line: one.line,
         });
       }
@@ -581,6 +584,7 @@ async function listingOf(root: string, followed: Map<string, Followed>, from: Li
       theme: read.theme ?? DEFAULT_THEME,
       items,
       groups: read.groups.map((one) => one.name),
+      ...(read.grid ? { grid: pageGrid(read.grid) } : {}),
       missing,
       error: null,
       implied: null,
@@ -616,9 +620,10 @@ async function listPage(root: string, followed: Map<string, Followed>, from: Lis
       path: item.file,
       ...(item.label !== undefined ? { label: item.label } : {}),
       ...(item.group !== undefined ? { group: item.group } : {}),
+      ...(item.cell !== undefined ? { cell: item.cell } : {}),
     });
   }
-  const { html } = drawListPage(listing.title, diagrams, new Date(), listing.theme, { kind: 'list', from, folder: shown(root) }, listing.groups);
+  const { html } = drawListPage(listing.title, diagrams, new Date(), listing.theme, { kind: 'list', from, folder: shown(root) }, listing.groups, listing.grid);
   res.writeHead(200, { 'content-type': TYPES['.html']!, 'cache-control': 'no-store' });
   res.end(html);
 }

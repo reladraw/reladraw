@@ -1355,11 +1355,30 @@ diagram hold.reladraw   "Place a hold"
 diagram renew.reladraw  "Renew"
 ```
 
-- **`page`** comes once, with the page's settings: `kind:`, which is required, and `title:` and `theme:`, which are optional. `list` is the only kind so far; `grid`, `versions`, `steps` and `drill-down` are refused as not built yet. The title heads the page, and defaults to the spec's file name. The theme colors the overview, and defaults to `dark`. A diagram opened from the overview keeps its own colors.
+- **`page`** comes once, with the page's settings: `kind:`, which is required, and `title:` and `theme:`, which are optional. The kinds are `list` and `grid` (below); `versions`, `steps` and `drill-down` are refused as not built yet. The title heads the page, and defaults to the spec's file name. The theme colors the overview, and defaults to `dark`. A diagram opened from the overview keeps its own colors.
 - **`diagram`** lists one diagram: its path from the spec's folder, quoted when it has a space, and then, optionally, a quoted label. The overview and the drop-down pick a diagram by its label, or by its title when it has none. The page lists the diagrams in the spec's order, and a path listed twice is refused.
 - **`group "…"`** starts a group, whose diagrams are the ones listed after it, up to the next `group`. The overview puts each group in a box headed by its name, and diagrams listed before the first group go in a box headed "Ungrouped". A group may have no diagrams yet; two groups with the same name are refused, and groups don't nest.
 
-A long `page` line may be broken over several lines, as a diagram's statements may. `reladraw format` lays a spec out too, lining up neighboring `diagram` lines in columns; `.reladraw-format`'s settings are for diagrams and don't apply to it. An unknown keyword or key, a key written twice, or a missing `page`, `kind:` or diagram is an error naming the line.
+```
+// each feature from three sides
+page  title: "Neighborhood library"  kind: grid  rows: "Feature"  columns: "Perspective"
+
+row    borrow  "Borrow"
+row    return  "Return"
+column desk    "At the desk"
+column code    "In the code"
+column deps    "Depends on"
+
+diagram borrow.desk  borrow/desk.reladraw
+diagram borrow.code  borrow/code.reladraw
+diagram borrow.deps  borrow/deps.reladraw
+diagram return.desk  return/desk.reladraw
+diagram return.code  return/code.reladraw
+```
+
+**A grid** puts its diagrams in rows and columns, such as several features each seen from the same few sides. `row` and `column` each name one row or column and give its quoted label, which heads it on the page; the name has no dot in it. In a grid, `diagram` names its cell first, row then column with a dot between (`borrow.desk`), and then the diagram's path. A cell has no label of its own: its row's and its column's name it. A cell may have no diagram, as `return.deps` above. `rows:` and `columns:` on `page` say what the rows and the columns are, and are optional. A cell naming a row or a column that isn't stated, a cell or a file given twice, two rows or two columns with the same name, a grid with no rows, no columns or no diagrams, and `group` in a grid are refused; so are `row`, `column`, `rows:` and `columns:` in a list.
+
+A long `page` line may be broken over several lines, as a diagram's statements may. `reladraw format` lays a spec out too, lining up neighboring `diagram` lines in columns, and neighboring `row` and `column` lines; `.reladraw-format`'s settings are for diagrams and don't apply to it. An unknown keyword or key, a key written twice, or a missing `page`, `kind:` or diagram is an error naming the line.
 
 ```
 reladraw render --page diagrams/
@@ -1369,6 +1388,8 @@ reladraw render --page borrow.reladraw return.reladraw -o lending.html
 A plain list needs no spec. A folder makes a page of the `.reladraw` files directly inside it, sorted by name and titled with the folder's name, written beside the folder as `diagrams.html`. Several files make one page in the order given, and `render` needs `-o` to name it. `render --page` of a spec writes the page beside the spec under its name, `library.html`. Without `--page`, `render` refuses all three, since they make a page, not an SVG. A spec or a folder goes on its own, not among other inputs. `check` takes the same inputs and prints each diagram's findings under its own path.
 
 **The page** opens on the overview: each diagram drawn small on a card under its label, in the page's theme. A click on a card opens that diagram, on the same page as `--page` writes for one diagram. The title then reads with a ← before it, and a click on it goes back to the overview. A drop-down beside the title switches between the diagrams. For eight diagrams or fewer it shows each one's drawing, and for more it lists the labels in columns, groups flowing down them under their names. From the keyboard, `o` goes back to the overview and `]` and `[` open the next and the previous diagram. `m` then `d` opens the drop-down, whose rows are lettered in the spec's order, and a row's letter opens it. On the overview, `s` puts the same letters on the cards.
+
+A grid's overview is a table: the columns' labels across the top, the rows' labels down the left, what each is in the corner, and each cell a drawing with no label, a cell with no diagram drawn as a dashed outline. With a diagram open, the drop-down's button names its row and its column, "Borrow · In the code", and opens the same table, the open diagram's row and column tinted. Up to 25 cells it shows each one's drawing; past that, plain cells under the labels. In it the arrow keys move to the nearest cell with a diagram in that direction, and Enter opens it, so "the same side of another feature" is `m` `d`, an arrow and Enter. `]` and `[` and the letters go in reading order, along each row and then on to the next, passing over empty cells.
 
 **Served**, the page follows the spec and every diagram on it: a diagram redraws on its card and when open as soon as its file changes, and a change to the spec relabels, reorders, regroups or drops the cards. A diagram that stops drawing says why on its card and opens to show the error. A diagram the spec names that isn't there is listed over the cards with its line, and the rest still draw. A folder served is followed too, so a diagram added to it gets a card and one taken out goes.
 
@@ -1497,6 +1518,7 @@ Pre-1.0, so the minor number is where a breaking change goes. Every removal is r
 **Unreleased**
 
 - **A page of several diagrams.** A page spec, a file ending `.reladraw-page`, lists diagrams with a label each, optionally under `group "…"` headings, and `reladraw render --page` of it writes one page that opens on an overview of them all, drawn small, with a drop-down to switch between them. A folder, or several files, make the same page without a spec. The page has its own `theme:`, and `o`, `[`, `]`, `m` `d` and `s` reach the diagrams from the keyboard. `reladraw serve` takes the same inputs and follows the spec and every diagram on it; Edit shows the spec on the overview and the open diagram's source otherwise, and the spec a folder implies can be saved as a file. `check` and `format` take a spec too. See [A page of several diagrams](#a-page-of-several-diagrams).
+- **A grid of diagrams.** `kind: grid` in a page spec names its rows and columns with `row` and `column`, and puts each diagram in a cell, `diagram borrow.desk borrow/desk.reladraw`. The overview is a table under the rows' and columns' labels, a cell may be empty, and the drop-down is the same table, where the arrow keys move from cell to cell. Served, it follows the spec and its diagrams as a list does.
 - **Help is in the page's bar**, beside Settings, on every page and in Edit and View alike, and `m` `h` reaches it. It holds the language cheatsheet where there is a source, a new sheet of every keyboard shortcut, and the syntax reference. It used to be in the source's bar, so it was gone whenever the source was hidden, and no page listed its keys.
 - Selected bare text takes the selection's color instead of glowing round every letter, which made it hard to read.
 

@@ -55,7 +55,7 @@ diagram pay.reladraw     "Pay"
 diagram refund.reladraw  "Refund"
 ```
 
-Paths are from the spec's folder; `group "…"` lines put the diagrams after them under a heading. `render --page`, `check` and `format` take a spec, a folder or several files too, and `render --page` of several files needs `-o`.
+Paths are from the spec's folder; `group "…"` lines put the diagrams after them under a heading. When the diagrams are the same few views of several things, such as each endpoint at the desk, in the code and in its dependencies, make it `kind: grid`: name each `row borrow "Borrow"` and `column code "In the code"`, then put each diagram in its cell, `diagram borrow.code  borrow/code.reladraw`. The overview is then a table, and the reader moves to the same view of another thing in one step. A cell may stay empty. `render --page`, `check` and `format` take a spec, a folder or several files too, and `render --page` of several files needs `-o`.
 
 A file with no errors and no findings has nothing on top of anything. That is still not the same as a good picture: re-read your source to confirm the arrangement says what you meant, and for a large diagram tell the user you have checked the findings but not seen the render.
 

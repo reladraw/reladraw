@@ -28,12 +28,32 @@ export function drawPage(
 }
 
 /** One diagram on a page of several: its source, its file's name, and the label the page picks it by. */
+/** A grid's rows and columns, in order, each with its label, and what each axis is. */
+export interface PageGrid {
+  rowsName?: string;
+  columnsName?: string;
+  rows: { name: string; label: string }[];
+  columns: { name: string; label: string }[];
+}
+
+/** A spec's grid as the page carries it: names and labels, without the lines they were stated on. */
+export function pageGrid(grid: { rowsName?: string; columnsName?: string; rows: { name: string; label: string }[]; columns: { name: string; label: string }[] }): PageGrid {
+  return {
+    ...(grid.rowsName !== undefined ? { rowsName: grid.rowsName } : {}),
+    ...(grid.columnsName !== undefined ? { columnsName: grid.columnsName } : {}),
+    rows: grid.rows.map(({ name, label }) => ({ name, label })),
+    columns: grid.columns.map(({ name, label }) => ({ name, label })),
+  };
+}
+
 export interface ListedDiagram {
   source: string;
   file: string;
   label?: string;
   /** The group it is listed under, one of the page's `groups`; none before the first. */
   group?: string;
+  /** In a grid, its cell, by its row's and its column's names. */
+  cell?: { row: string; column: string };
   options?: DrawOptions;
   /** Served: the diagram's path inside the folder served, which the page follows it by. */
   path?: string;
@@ -58,7 +78,9 @@ export function drawListPage(
   theme: string = DEFAULT_THEME,
   editing?: Extract<Editing, { kind: 'list' }>,
   groups: string[] = [],
+  grid?: PageGrid,
 ): { html: string; findings: { file: string; findings: Finding[] }[] } {
+  const axisLabel = (axis: { name: string; label: string }[], name: string) => axis.find((one) => one.name === name)?.label ?? name;
   const all = diagrams.map((one, index) => {
     try {
       return { one, parts: partsOf(one.source, one.file, one.options ?? {}, at) };
@@ -78,9 +100,12 @@ export function drawListPage(
     theme,
     palettes: palettes(),
     groups,
+    ...(grid ? { grid } : {}),
     items: all.map(({ one, parts }, i) => ({
-      label: one.label ?? parts.title,
+      // A cell is labeled by its row and its column.
+      label: grid && one.cell ? `${axisLabel(grid.rows, one.cell.row)} · ${axisLabel(grid.columns, one.cell.column)}` : one.label ?? parts.title,
       ...(one.group !== undefined ? { group: one.group } : {}),
+      ...(one.cell ? { cell: one.cell } : {}),
       // The label as the spec states it, apart from the title it falls back to.
       ...(editing ? { file: one.path ?? one.file, ...(one.label !== undefined ? { stated: one.label } : {}) } : {}),
       title: parts.title,
@@ -676,6 +701,37 @@ const PAGE = `<!doctype html>
   #overview .thumb { height: 200px; margin-top: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 6px; }
   /* Scaled to fill its card either way, keeping its shape: a wide diagram isn't left a sliver. */
   #overview .thumb svg { width: 100%; height: 100%; }
+  /* A grid: the columns' labels across the top, the rows' down the left, the
+     axis names in the corner, and each cell a drawing with no label of its
+     own. A cell with no diagram is a dashed outline. The same table is the
+     drop-down, the open diagram's row and column tinted. */
+  .grid-table:not([hidden]) { display: grid; grid-template-columns: auto repeat(var(--across), var(--cell)); gap: var(--gap); align-items: stretch; justify-content: start; }
+  #overview .grid-table { --cell: minmax(140px, 260px); --gap: 12px; }
+  .grid-table .corner { white-space: nowrap; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); padding: 0 10px 6px 0; }
+  .grid-table .column-head { align-self: end; text-align: center; font-weight: 600; color: color-mix(in srgb, var(--accent) 70%, var(--ink)); padding: 0 4px 6px; border-bottom: 1px solid var(--group-line); }
+  .grid-table .row-head { display: flex; align-items: center; justify-content: flex-end; text-align: right; font-weight: 600; color: color-mix(in srgb, var(--accent) 70%, var(--ink)); padding: 0 12px 0 0; border-right: 1px solid var(--group-line); }
+  #overview .grid-table .column-head, #overview .grid-table .row-head { font-size: 14px; }
+  .grid-table .empty-cell { border: 1px dashed color-mix(in srgb, var(--rule) 80%, transparent); border-radius: 8px; min-height: 2rem; }
+  #overview .grid-table .card { background: var(--card-bg); border-color: var(--card-line); padding: 8px; }
+  #overview .grid-table .card:hover { background: var(--card-over); border-color: var(--accent); }
+  #overview .grid-table .thumb { height: 150px; margin-top: 0; }
+  #overview .grid-table .empty-cell { min-height: 150px; }
+  #pick-rows.gridded:not([hidden]) { --cell: 9rem; --gap: 6px; width: max-content; max-width: calc(100vw - 32px); }
+  #pick-rows.gridded.plain:not([hidden]) { --cell: minmax(2.2rem, 6rem); }
+  #pick-rows.gridded .column-head, #pick-rows.gridded .row-head { font-size: 12px; }
+  #pick-rows.gridded .row {
+    flex-direction: column; align-items: stretch; justify-content: center; gap: 0; padding: 7px; position: relative;
+    background: var(--card-bg); border: 1px solid var(--card-line); border-radius: 6px;
+  }
+  #pick-rows.gridded .row:hover, #pick-rows.gridded .row.cur { background: var(--card-over); }
+  #pick-rows.gridded .row.tint, #pick-rows.gridded .empty-cell.tint { background: color-mix(in srgb, var(--accent) 30%, var(--card-bg)); }
+  #pick-rows.gridded .row.tint.cur, #pick-rows.gridded .row.tint:hover { background: color-mix(in srgb, var(--accent) 40%, var(--card-bg)); }
+  #pick-rows.gridded .row-head.tint, #pick-rows.gridded .column-head.tint { color: var(--ink); }
+  #pick-rows.gridded .row[aria-checked="true"] { border-color: var(--sel); box-shadow: inset 0 0 0 1px var(--sel); }
+  #pick-rows.gridded .thumb { height: 4.5rem; }
+  #pick-rows.gridded.plain .row { min-height: 2.2rem; }
+  #pick-rows.gridded .line { position: absolute; top: 2px; right: 3px; width: auto; }
+  #pick-rows.gridded .mark, #pick-rows.gridded .name { display: none; }
   .links { display: inline-flex; vertical-align: middle; margin-left: 10px; }
   .links a { display: inline-flex; color: var(--muted); padding: 2px; border-radius: 4px; }
   .links a:hover { color: var(--ink); }
@@ -3535,6 +3591,7 @@ const PAGE = `<!doctype html>
       row.setAttribute('aria-checked', String(i === index));
       row.querySelector('.mark').textContent = i === index ? '\\u25CF' : '';
     });
+    tintGrid();
     heading.classList.add('back');
     heading.setAttribute('role', 'button');
     heading.setAttribute('tabindex', '0');
@@ -3598,6 +3655,7 @@ const PAGE = `<!doctype html>
   // The arrows move as the drop-down is laid out: tiles run along their
   // rows, columns down theirs. A step off the edge stays put.
   function moveInPicker(key) {
+    if (pickRows.hasAttribute('data-grid')) { moveInGrid(key); return; }
     if (pickRows.hasAttribute('data-grouped')) {
       // Along the layout, the next in order, as ungrouped; across it, by place.
       var along = pickRows.classList.contains('tiles') ? { ArrowLeft: -1, ArrowRight: 1 } : { ArrowUp: -1, ArrowDown: 1 };
@@ -3846,9 +3904,14 @@ const PAGE = `<!doctype html>
     var spec = readSpecText(textOf(specKey()));
     if (spec) {
       specEntries = spec.entries.map(function (entry) {
-        return { file: joinPath(specFolder(), entry.path), path: entry.path, label: entry.label, group: entry.group, line: entry.line };
+        return { file: joinPath(specFolder(), entry.path), path: entry.path, label: entry.label, group: entry.group, cell: entry.cell, line: entry.line };
       });
       LIST.groups = spec.groups.map(function (one) { return one.name; });
+      // A grid as typed, without the lines its parts were stated on.
+      if (spec.grid) {
+        var strip = function (one) { return { name: one.name, label: one.label }; };
+        LIST.grid = { rowsName: spec.grid.rowsName, columnsName: spec.grid.columnsName, rows: spec.grid.rows.map(strip), columns: spec.grid.columns.map(strip) };
+      } else delete LIST.grid;
       LIST.title = spec.title || specName();
       LIST.theme = spec.theme || 'dark';
     }
@@ -3862,8 +3925,10 @@ const PAGE = `<!doctype html>
       }
       var made = drawn && drawn.made;
       var title = made ? made.title : entry.path.split('/').pop().replace(/\\.reladraw$/, '');
+      var label = entry.label || title;
+      if (LIST.grid && entry.cell) label = axisLabel(LIST.grid.rows, entry.cell.row) + ' \\u00b7 ' + axisLabel(LIST.grid.columns, entry.cell.column);
       return {
-        file: entry.file, line: entry.line, label: entry.label || title, stated: entry.label, group: entry.group, title: title,
+        file: entry.file, line: entry.line, label: label, stated: entry.label, group: entry.group, cell: entry.cell, title: title,
         drawn: made ? made.drawn : '', data: made ? made.data : null, error: drawn ? drawn.error : null, missing: missing,
       };
     });
@@ -4071,7 +4136,7 @@ const PAGE = `<!doctype html>
         drawnItems[item.file] = { text: item.data.source, made: { data: item.data, title: item.title, drawn: item.drawn }, error: null };
       }
     });
-    specEntries = LIST.items.map(function (item) { return { file: item.file, path: item.file, label: item.stated, group: item.group, line: 0 }; });
+    specEntries = LIST.items.map(function (item) { return { file: item.file, path: item.file, label: item.stated, group: item.group, cell: item.cell, line: 0 }; });
     if (onOverview()) showFile(specKey());
     liveLine();
     followList();
@@ -4085,6 +4150,13 @@ const PAGE = `<!doctype html>
     pickRows.textContent = '';
     pickRows.classList.remove('tiles', 'columns', 'flow', 'boxed');
     if (SERVED_LIST) overview.append(problemList());
+    pickRows.classList.remove('gridded', 'plain', 'grid-table');
+    pickRows.removeAttribute('data-grid');
+    if (LIST.grid) {
+      buildGrid();
+      if (SERVED_LIST) markCards();
+      return;
+    }
     var grouped = (LIST.groups || []).length > 0;
     var sections = grouped ? sectionsOf() : null;
     pickLayout(LIST.items.length, sections);
@@ -4197,6 +4269,148 @@ const PAGE = `<!doctype html>
       });
     }
     if (SERVED_LIST) markCards();
+  }
+
+  // A grid: the overview is a table of drawings under the rows' and columns'
+  // labels, and the drop-down is the same table, smaller. The diagrams are in
+  // reading order, so a cell's letter, ] and [ and the drop-down's rows all
+  // follow it; a cell with no diagram is no row, and nothing lands on it.
+  var GRID_DRAWINGS_UP_TO = 25;
+  function axisLabel(axis, name) {
+    for (var i = 0; i < axis.length; i += 1) if (axis[i].name === name) return axis[i].label;
+    return name;
+  }
+  function cellAt(r, c) {
+    for (var i = 0; i < LIST.items.length; i += 1) {
+      var cell = LIST.items[i].cell;
+      if (cell && cell.row === LIST.grid.rows[r].name && cell.column === LIST.grid.columns[c].name) return i;
+    }
+    return -1;
+  }
+  function gridPlace(index) {
+    var cell = LIST.items[index] && LIST.items[index].cell;
+    if (!cell) return null;
+    var r = -1, c = -1;
+    LIST.grid.rows.forEach(function (one, i) { if (one.name === cell.row) r = i; });
+    LIST.grid.columns.forEach(function (one, i) { if (one.name === cell.column) c = i; });
+    return r < 0 || c < 0 ? null : [r, c];
+  }
+  function gridTable(into, small) {
+    var grid = LIST.grid;
+    into.style.setProperty('--across', String(grid.columns.length));
+    var corner = element('div', 'corner');
+    if (grid.columnsName) corner.append(element('span', '', grid.columnsName + ' \\u2192'));
+    if (grid.rowsName) corner.append(element('span', '', grid.rowsName + ' \\u2193'));
+    into.append(corner);
+    grid.columns.forEach(function (one, c) {
+      var head = element('div', 'column-head', one.label);
+      head.setAttribute('data-head-c', String(c));
+      into.append(head);
+    });
+    var cells = [];
+    grid.rows.forEach(function (row, r) {
+      var head = element('div', 'row-head', row.label);
+      head.setAttribute('data-head-r', String(r));
+      into.append(head);
+      grid.columns.forEach(function (column, c) {
+        var at = cellAt(r, c);
+        var made = small(at, r, c);
+        made.setAttribute('data-r', String(r));
+        made.setAttribute('data-c', String(c));
+        into.append(made);
+        cells.push(made);
+      });
+    });
+    return cells;
+  }
+  function buildGrid() {
+    var count = LIST.grid.rows.length * LIST.grid.columns.length;
+    var drawings = count <= GRID_DRAWINGS_UP_TO;
+    var table = element('div', 'grid-table');
+    gridTable(table, function (i) {
+      if (i < 0) return element('div', 'empty-cell');
+      var item = LIST.items[i];
+      var card = element('button', 'card');
+      card.type = 'button';
+      card.title = item.data ? item.label + ': ' + item.title : item.missing;
+      if (item.file) card.setAttribute('data-file', item.file);
+      var top = element('span', 'top');
+      card.append(top);
+      if (item.error) card.append(element('span', 'why', 'Doesn\\u2019t draw: ' + (item.error.line ? 'line ' + item.error.line + ': ' : '') + item.error.message));
+      if (item.missing) {
+        card.disabled = true;
+        card.append(element('span', 'why', item.missing));
+      } else {
+        var thumb = element('span', 'thumb');
+        thumb.innerHTML = thumbnail(item.data.themes[item.data.current].svg, 'card' + i + '-');
+        card.append(thumb);
+      }
+      if (i < 26) {
+        var letter = String.fromCharCode(97 + i);
+        card.setAttribute('data-key', letter);
+        top.append(element('kbd', 'tag', letter));
+      }
+      card.onclick = function () { openDiagram(i); };
+      return card;
+    });
+    overview.append(table);
+    pickRows.classList.add('gridded', 'grid-table');
+    if (!drawings) pickRows.classList.add('plain');
+    pickRows.setAttribute('data-grid', '');
+    gridTable(pickRows, function (i) {
+      if (i < 0) return element('div', 'empty-cell');
+      var item = LIST.items[i];
+      var row = element('button', 'row');
+      row.type = 'button';
+      row.setAttribute('role', 'menuitemradio');
+      row.title = item.label + (item.title !== item.label ? ': ' + item.title : '');
+      if (item.file) row.setAttribute('data-file', item.file);
+      if (item.missing) row.disabled = true;
+      var line = element('span', 'line');
+      line.append(element('span', 'mark'), element('span', 'name', item.label));
+      if (drawings) {
+        var small = element('span', 'thumb');
+        if (item.data) small.innerHTML = thumbnail(item.data.themes[item.data.current].svg, 'pick' + i + '-');
+        row.append(small);
+      }
+      row.append(line);
+      if (i < 26) {
+        var letter = String.fromCharCode(97 + i);
+        row.setAttribute('data-key', letter);
+        line.append(element('kbd', '', letter));
+      }
+      row.onclick = function () { openDiagram(i); };
+      return row;
+    });
+    tintGrid();
+  }
+  // The open diagram's row and column, tinted in the drop-down.
+  function tintGrid() {
+    if (!LIST || !LIST.grid) return;
+    var at = openIndex >= 0 ? gridPlace(openIndex) : null;
+    each(pickRows.querySelectorAll('[data-r]'), function (cell) {
+      var r = Number(cell.getAttribute('data-r')), c = Number(cell.getAttribute('data-c'));
+      cell.classList.toggle('tint', !!at && (r === at[0] || c === at[1]));
+    });
+    each(pickRows.querySelectorAll('[data-head-r]'), function (head) { head.classList.toggle('tint', !!at && Number(head.getAttribute('data-head-r')) === at[0]); });
+    each(pickRows.querySelectorAll('[data-head-c]'), function (head) { head.classList.toggle('tint', !!at && Number(head.getAttribute('data-head-c')) === at[1]); });
+    each(pickRows.querySelectorAll('.row'), function (row, i) {
+      row.setAttribute('aria-checked', String(i === openIndex));
+    });
+  }
+  // In the grid, an arrow goes to the nearest cell that way with a diagram
+  // in it, along the row or the column; at the edge it stays put.
+  function moveInGrid(key) {
+    var dir = { ArrowLeft: [0, -1], ArrowRight: [0, 1], ArrowUp: [-1, 0], ArrowDown: [1, 0] }[key];
+    var at = gridPlace(cursor);
+    if (!dir || !at) return;
+    var r = at[0] + dir[0], c = at[1] + dir[1];
+    while (r >= 0 && c >= 0 && r < LIST.grid.rows.length && c < LIST.grid.columns.length) {
+      var i = cellAt(r, c);
+      if (i >= 0 && !LIST.items[i].missing) { cursor = i; markCursor(); return; }
+      r += dir[0];
+      c += dir[1];
+    }
   }
 
   if (LIST) {

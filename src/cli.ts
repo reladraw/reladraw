@@ -9,7 +9,7 @@ import { SourceError } from './errors.js';
 import { format } from './format.js';
 import { DEFAULT_FORMAT, readFormatSettings, SETTINGS_FILE, settingsFileText, type FormatSettings } from './format-settings.js';
 import { draw, type DrawOptions } from './index.js';
-import { drawListPage, drawPage, ListedDiagramError, type ListedDiagram } from './page.js';
+import { drawListPage, drawPage, ListedDiagramError, pageGrid, type ListedDiagram, type PageGrid } from './page.js';
 import { formatPageSpec, PAGE_EXTENSION, parsePageSpec, type PageSpec } from './page-spec.js';
 import { noteCommand, serve } from './serve.js';
 import { THEME_NAMES, THEMES } from './themes.js';
@@ -416,9 +416,10 @@ async function renderMany(
 
   let title: string;
   let defaultOut: string | undefined;
-  let listed: { path: string; label?: string; group?: string; line?: number }[];
+  let listed: { path: string; label?: string; group?: string; cell?: { row: string; column: string }; line?: number }[];
   let spec: string | undefined;
   let pageTheme: string | undefined;
+  let grid: PageGrid | undefined;
   let groups: string[] = [];
   if (first.endsWith(PAGE_EXTENSION)) {
     spec = first;
@@ -439,10 +440,12 @@ async function renderMany(
     pageTheme = read.theme;
     defaultOut = spec.slice(0, -PAGE_EXTENSION.length) + '.html';
     groups = read.groups.map((one) => one.name);
+    grid = read.grid && pageGrid(read.grid);
     listed = read.entries.map((entry) => ({
       path: join(dirname(spec!), entry.path),
       ...(entry.label !== undefined ? { label: entry.label } : {}),
       ...(entry.group !== undefined ? { group: entry.group } : {}),
+      ...(entry.cell !== undefined ? { cell: entry.cell } : {}),
       line: entry.line,
     }));
   } else if (isFolder(first)) {
@@ -483,13 +486,14 @@ async function renderMany(
       file: basename(one.path),
       ...(one.label !== undefined ? { label: one.label } : {}),
       ...(one.group !== undefined ? { group: one.group } : {}),
+      ...(one.cell !== undefined ? { cell: one.cell } : {}),
       options: optionsFor(one.path),
     });
   }
 
   let made: ReturnType<typeof drawListPage>;
   try {
-    made = drawListPage(title, diagrams, new Date(), pageTheme, undefined, groups);
+    made = drawListPage(title, diagrams, new Date(), pageTheme, undefined, groups, grid);
   } catch (error) {
     if (error instanceof ListedDiagramError) return fail(error.cause.format(listed[error.index]!.path));
     throw error;

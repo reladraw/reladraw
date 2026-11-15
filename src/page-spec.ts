@@ -19,18 +19,28 @@ import { THEME_NAMES } from './themes.js';
  * picks it by. `group "Lending"` starts a group, which the diagrams after it
  * belong to until the next `group`; the page puts its name over them. A
  * group may have no diagrams yet, and two may not share a name.
+ *
+ * A grid names its rows and columns, each once with its label, and puts each
+ * diagram in a cell, named row then column:
+ *
+ *     page  title: "Neighborhood library"  kind: grid  rows: "Feature"  columns: "Perspective"
+ *     row    borrow  "Borrow"
+ *     column desk    "At the desk"
+ *     diagram borrow.desk  borrow/desk.reladraw
+ *
+ * A cell may have no diagram.
  */
 export const PAGE_EXTENSION = '.reladraw-page';
 
 /** The page kinds this version makes. */
-export const PAGE_KINDS = ['list'] as const;
+export const PAGE_KINDS = ['list', 'grid'] as const;
 export type PageKind = (typeof PAGE_KINDS)[number];
 
 /** Kinds a spec may name that this version doesn't make, refused by name rather than as unknown words. */
-const LATER_KINDS = ['grid', 'versions', 'steps', 'drill-down'];
+const LATER_KINDS = ['versions', 'steps', 'drill-down'];
 
-const PAGE_KEYS = ['title', 'kind', 'theme'] as const;
-const KEYWORDS = ['page', 'diagram', 'group'] as const;
+const PAGE_KEYS = ['title', 'kind', 'theme', 'rows', 'columns'] as const;
+const KEYWORDS = ['page', 'diagram', 'group', 'row', 'column'] as const;
 
 export interface PageSpec {
   /** What the page is headed with; without one, the spec's file name. */
@@ -41,6 +51,24 @@ export interface PageSpec {
   entries: SpecEntry[];
   /** The groups, in order, empty ones included; none when the spec has no `group`. */
   groups: SpecGroup[];
+  /** A grid's rows and columns, in order; only for `kind: grid`. */
+  grid?: SpecGrid;
+}
+
+export interface SpecGrid {
+  /** What the rows are, such as "Feature"; without one, nothing is said. */
+  rowsName?: string;
+  /** What the columns are, such as "Perspective". */
+  columnsName?: string;
+  rows: SpecAxis[];
+  columns: SpecAxis[];
+}
+
+/** One row or one column of a grid: its name in cells, and its label. */
+export interface SpecAxis {
+  name: string;
+  label: string;
+  line: number;
 }
 
 export interface SpecEntry {
@@ -50,6 +78,8 @@ export interface SpecEntry {
   label?: string;
   /** The group it is listed under; none for a diagram before the first `group`. */
   group?: string;
+  /** In a grid, the cell it is in, by its row's and its column's names. */
+  cell?: { row: string; column: string };
   line: number;
 }
 
@@ -122,11 +152,26 @@ function commentOf(raw: string, tokens: Token[]): string {
   return at < 0 ? '' : after.slice(at).trimEnd();
 }
 
+/** The kind the spec's `page` statement names, read ahead of the rest, since a grid's diagram lines read differently; nothing when there is none to find. */
+function kindAhead(pieces: Piece[]): string | undefined {
+  for (const piece of pieces) {
+    if (piece.kind !== 'statement' || piece.statement.tokens[0]!.token.text !== 'page') continue;
+    const tokens = piece.statement.tokens;
+    const at = tokens.findIndex((one) => !one.token.quoted && one.token.text === 'kind:');
+    return at >= 0 ? tokens[at + 1]?.token.text : undefined;
+  }
+  return undefined;
+}
+
 function readSpec(pieces: Piece[]): PageSpec {
-  let page: { line: number; title?: string; kind?: string; kindLine?: number; theme?: string } | null = null;
+  let page: { line: number; title?: string; kind?: string; kindLine?: number; theme?: string; rows?: { text: string; line: number }; columns?: { text: string; line: number } } | null = null;
   const entries: SpecEntry[] = [];
   const groups: SpecGroup[] = [];
+  const rows: SpecAxis[] = [];
+  const columns: SpecAxis[] = [];
   const seen = new Map<string, number>();
+  const cells = new Map<string, number>();
+  const grid = kindAhead(pieces) === 'grid';
   for (const piece of pieces) {
     if (piece.kind !== 'statement') continue;
     const { tokens, line } = piece.statement;
@@ -135,12 +180,19 @@ function readSpec(pieces: Piece[]): PageSpec {
     if (head.quoted || !(KEYWORDS as readonly string[]).includes(head.text)) {
       const near = head.quoted ? undefined : nearMatch(head.text, KEYWORDS);
       throw new SourceError(
-        `a page spec's statements are page, diagram and group, and ${word} is none of them` + (near ? ` — did you mean ${near}?` : ''),
+        `a page spec's statements are page, diagram, group, row and column, and ${word} is none of them` + (near ? ` — did you mean ${near}?` : ''),
         line,
       );
     }
     if (head.text === 'group') {
+      if (grid) throw new SourceError('a grid places its diagrams by row and column, so it has no groups — use kind: list for groups', line);
       groups.push(readGroup(tokens.slice(1), line, groups));
+      continue;
+    }
+    if (head.text === 'row' || head.text === 'column') {
+      if (!grid) throw new SourceError(`${head.text} statements are for a grid, and this page isn't one — make it kind: grid, or take this line out`, line);
+      const axis = head.text === 'row' ? rows : columns;
+      axis.push(readAxis(head.text, tokens.slice(1), line, axis));
       continue;
     }
     if (head.text === 'page') {
@@ -149,6 +201,7 @@ function readSpec(pieces: Piece[]): PageSpec {
       const settings = readSettings(tokens.slice(1));
       for (const [key, value] of settings) {
         if (key.name === 'title') page.title = value.text;
+        else if (key.name === 'rows' || key.name === 'columns') page[key.name] = { text: value.text, line: key.line };
         else if (key.name === 'theme') {
           if (!(THEME_NAMES as readonly string[]).includes(value.text)) {
             const near = nearMatch(value.text, THEME_NAMES);
@@ -163,6 +216,10 @@ function readSpec(pieces: Piece[]): PageSpec {
           page.kindLine = key.line;
         }
       }
+      continue;
+    }
+    if (grid) {
+      entries.push(readCell(tokens.slice(1), line, seen, cells));
       continue;
     }
     // diagram <path> ["label"]
@@ -215,8 +272,38 @@ function readSpec(pieces: Piece[]): PageSpec {
       page.kindLine!,
     );
   }
+  if (page.kind !== 'grid') {
+    for (const key of ['rows', 'columns'] as const) {
+      const stated = page[key];
+      if (stated) throw new SourceError(`${key}: names a grid's ${key}, and this page isn't a grid — make it kind: grid, or take ${key}: out`, stated.line);
+    }
+  }
+  if (page.kind === 'grid') {
+    if (rows.length === 0) throw new SourceError('a grid has rows, and this one has none — add one: row  borrow  "Borrow"', page.line);
+    if (columns.length === 0) throw new SourceError('a grid has columns, and this one has none — add one: column  desk  "At the desk"', page.line);
+    for (const entry of entries) {
+      const { row, column } = entry.cell!;
+      for (const [which, name, axis] of [['row', row, rows], ['column', column, columns]] as const) {
+        if (axis.some((one) => one.name === name)) continue;
+        const near = nearMatch(name, axis.map((one) => one.name));
+        throw new SourceError(
+          `there is no ${which} called "${name}"` + (near ? ` — did you mean ${near}?` : ` — the ${which}s are ${axis.map((one) => one.name).join(', ')}`),
+          entry.line,
+        );
+      }
+    }
+    // Reading order: along each row, the rows in the order they were stated.
+    const place = (entry: SpecEntry) =>
+      rows.findIndex((one) => one.name === entry.cell!.row) * columns.length + columns.findIndex((one) => one.name === entry.cell!.column);
+    entries.sort((a, b) => place(a) - place(b));
+  }
   if (entries.length === 0) {
-    throw new SourceError('a list page lists diagrams, and this one has none — add one: diagram borrow.reladraw  "Borrow"', page.line);
+    throw new SourceError(
+      page.kind === 'grid'
+        ? 'a grid page shows diagrams, and this one has none — put one in a cell: diagram borrow.desk  borrow/desk.reladraw'
+        : 'a list page lists diagrams, and this one has none — add one: diagram borrow.reladraw  "Borrow"',
+      page.line,
+    );
   }
   return {
     ...(page.title !== undefined ? { title: page.title } : {}),
@@ -224,7 +311,83 @@ function readSpec(pieces: Piece[]): PageSpec {
     ...(page.theme !== undefined ? { theme: page.theme } : {}),
     entries,
     groups,
+    ...(page.kind === 'grid'
+      ? {
+          grid: {
+            ...(page.rows ? { rowsName: page.rows.text } : {}),
+            ...(page.columns ? { columnsName: page.columns.text } : {}),
+            rows,
+            columns,
+          },
+        }
+      : {}),
   };
+}
+
+/** `row borrow "Borrow"` or `column desk "At the desk"`: a name, then its label in quotes, the name not one used before. */
+function readAxis(which: 'row' | 'column', tokens: { token: Token; line: number }[], line: number, before: SpecAxis[]): SpecAxis {
+  const example = which === 'row' ? 'row  borrow  "Borrow"' : 'column  desk  "At the desk"';
+  const name = tokens[0];
+  if (!name) throw new SourceError(`a ${which} statement names the ${which} and gives its label: ${example}`, line);
+  if (name.token.quoted) {
+    throw new SourceError(`a ${which}'s name comes first, unquoted, and its label after it, in quotes: ${example}`, name.line);
+  }
+  if (name.token.text.endsWith(':')) throw new SourceError(`a ${which} takes no settings, so ${name.token.text} means nothing here`, name.line);
+  if (name.token.text.includes('.')) {
+    throw new SourceError(`a ${which}'s name can't have a dot in it: a cell is named row.column, so the dot is what splits them`, name.line);
+  }
+  const label = tokens[1];
+  if (!label) throw new SourceError(`a ${which} needs its label, in quotes, which the page heads it with: ${which} ${name.token.text}  "…"`, line);
+  if (!label.token.quoted) {
+    if (label.token.text.endsWith(':')) throw new SourceError(`a ${which} takes no settings, so ${label.token.text} means nothing here`, label.line);
+    throw new SourceError(`a ${which}'s label goes in quotes: ${which} ${name.token.text}  "${label.token.text}"`, label.line);
+  }
+  if (label.token.text.trim() === '') throw new SourceError(`a ${which}'s label is what the page heads it with, so it can't be empty`, label.line);
+  if (tokens.length > 2) {
+    const extra = tokens[2]!;
+    throw new SourceError(
+      `a ${which} statement is a name and a label, and ${extra.token.quoted ? `"${extra.token.text}"` : extra.token.text} is a third thing`,
+      extra.line,
+    );
+  }
+  const same = before.find((one) => one.name === name.token.text);
+  if (same) throw new SourceError(`there is already a ${which} called ${name.token.text}, on line ${same.line} — two ${which}s can't share a name`, line);
+  return { name: name.token.text, label: label.token.text, line };
+}
+
+/** A grid's `diagram borrow.desk borrow/desk.reladraw`: a cell, row then column, and the diagram in it. */
+function readCell(tokens: { token: Token; line: number }[], line: number, seen: Map<string, number>, cells: Map<string, number>): SpecEntry {
+  const example = 'diagram borrow.desk  borrow/desk.reladraw';
+  const cell = tokens[0];
+  if (!cell) throw new SourceError(`a grid's diagram statement names its cell, row then column, and its file: ${example}`, line);
+  const text = cell.token.text;
+  if (cell.token.quoted || text.endsWith('.reladraw')) {
+    throw new SourceError(`in a grid, a diagram names its cell first, row then column, and its file after: ${example}`, cell.line);
+  }
+  if (text.endsWith(':')) throw new SourceError(`a diagram names its cell first, before any setting: ${example}`, cell.line);
+  const parts = text.split('.');
+  if (parts.length !== 2 || parts[0] === '' || parts[1] === '') {
+    throw new SourceError(`a cell is named by its row and its column with a dot between, such as borrow.desk, and "${text}" isn't`, cell.line);
+  }
+  const pathToken = tokens[1];
+  if (!pathToken) throw new SourceError(`the cell ${text} needs its diagram's file: diagram ${text}  ${parts.join('/')}.reladraw`, line);
+  const path = pathToken.token.text;
+  if (!pathToken.token.quoted && path.endsWith(':')) throw new SourceError(`a diagram takes no settings yet, so ${path} means nothing here`, pathToken.line);
+  if (!path.endsWith('.reladraw')) throw new SourceError(`a page shows .reladraw diagrams, and "${path}" isn't one`, pathToken.line);
+  if (tokens.length > 2) {
+    const extra = tokens[2]!;
+    throw new SourceError(
+      `a grid's diagram statement is a cell and a file, and ${extra.token.quoted ? `"${extra.token.text}"` : extra.token.text} is a third thing — a cell's label is its row's and its column's`,
+      extra.line,
+    );
+  }
+  const before = cells.get(text);
+  if (before !== undefined) throw new SourceError(`the cell ${text} has a diagram already, on line ${before} — a cell holds one`, line);
+  cells.set(text, line);
+  const listed = seen.get(path);
+  if (listed !== undefined) throw new SourceError(`${path} is listed twice, here and on line ${listed} — once is enough`, line);
+  seen.set(path, line);
+  return { path, cell: { row: parts[0]!, column: parts[1]! }, line };
 }
 
 /** `group "Lending"`: a name in quotes and nothing else, not one an earlier group has. */
@@ -284,12 +447,17 @@ function readSettings(
       throw new SourceError(
         key === 'title' ? 'title: needs the title, in quotes: title: "Library"'
         : key === 'theme' ? 'theme: needs a theme: theme: nord'
+        : key === 'rows' ? 'rows: needs what the rows are, in quotes: rows: "Feature"'
+        : key === 'columns' ? 'columns: needs what the columns are, in quotes: columns: "Perspective"'
         : `kind: needs a kind: kind: ${PAGE_KINDS[0]}`,
         at,
       );
     }
     if (key === 'title' && !value.token.quoted) {
       throw new SourceError(`a title goes in quotes: title: "${value.token.text}"`, value.line);
+    }
+    if ((key === 'rows' || key === 'columns') && !value.token.quoted) {
+      throw new SourceError(`what the ${key} are goes in quotes: ${key}: "${value.token.text}"`, value.line);
     }
     out.push([{ name: key as (typeof PAGE_KEYS)[number], line: at }, value.token]);
     i += 1;
@@ -309,14 +477,23 @@ export function formatPageSpec(text: string): string {
   const before = readSpec(pieces);
   const out: string[] = [];
   let run: Statement[] = [];
+  let axes: Statement[] = [];
   const flush = () => {
-    if (run.length === 0) return;
-    out.push(...diagramLines(run));
+    if (run.length > 0) out.push(...diagramLines(run));
+    if (axes.length > 0) out.push(...axisLines(axes));
     run = [];
+    axes = [];
   };
   for (const piece of pieces) {
-    if (piece.kind === 'statement' && piece.statement.tokens[0]!.token.text === 'diagram') {
+    const head = piece.kind === 'statement' ? piece.statement.tokens[0]!.token.text : '';
+    if (piece.kind === 'statement' && head === 'diagram') {
+      if (axes.length > 0) flush();
       run.push(piece.statement);
+      continue;
+    }
+    if (piece.kind === 'statement' && (head === 'row' || head === 'column')) {
+      if (run.length > 0) flush();
+      axes.push(piece.statement);
       continue;
     }
     flush();
@@ -338,9 +515,29 @@ export function formatPageSpec(text: string): string {
 function stripLines(spec: PageSpec): unknown {
   return {
     ...spec,
-    entries: spec.entries.map(({ path, label, group }) => ({ path, label, group })),
+    entries: spec.entries.map(({ path, label, group, cell }) => ({ path, label, group, cell })),
     groups: spec.groups.map(({ name }) => name),
+    grid: spec.grid && {
+      ...spec.grid,
+      rows: spec.grid.rows.map(({ name, label }) => ({ name, label })),
+      columns: spec.grid.columns.map(({ name, label }) => ({ name, label })),
+    },
   };
+}
+
+/** Neighboring `row` and `column` lines, their names and labels in columns. */
+function axisLines(run: Statement[]): string[] {
+  const rows = run.map((statement) => {
+    const parts = statement.tokens.map((one) => written(statement, one));
+    return { keyword: parts[0]!, name: parts[1]!, label: parts[2]!, comment: commentsOf(statement).join('  ') };
+  });
+  const keywordWidth = Math.max(...rows.map((row) => row.keyword.length));
+  const nameWidth = Math.max(...rows.map((row) => row.name.length));
+  const labelWidth = Math.max(...rows.map((row) => row.label.length));
+  return rows.map((row) => {
+    const text = `${row.keyword.padEnd(keywordWidth)} ${row.name.padEnd(nameWidth)}  ${row.comment ? `${row.label.padEnd(labelWidth)}  ${row.comment}` : row.label}`;
+    return text.trimEnd();
+  });
 }
 
 function groupLine(statement: Statement): string {
