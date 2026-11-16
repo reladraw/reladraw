@@ -1774,6 +1774,7 @@ Pre-1.0, so the minor number is where a breaking change goes. Every removal is r
 **Unreleased**
 
 - A diagram with nothing in it draws as an empty picture the size of its margins. It used to be written with a width and height of `-Infinity`, which browsers refused, and a page of a folder with no diagrams in it filled the console with errors.
+- `reladraw serve` in a second folder, while another server already used the first port, said it was serving on that first port and opened the other server's page, which said the file wasn't there. It now names, and opens, the port it is actually on.
 
 **0.31.1**
 

@@ -312,11 +312,19 @@ function listen(root: string): Promise<number | null> {
   return new Promise((done) => {
     const attempt = (port: number) => {
       if (port >= FIRST_PORT + PORTS) return done(null);
-      server.once('error', () => attempt(port + 1));
-      server.listen(port, '127.0.0.1', () => {
-        server.removeAllListeners('error');
+      // Each try takes its own two listeners off again: a 'listening' left from a
+      // taken port would fire when a later port binds, and report the taken one.
+      const taken = () => {
+        server.off('listening', bound);
+        attempt(port + 1);
+      };
+      const bound = () => {
+        server.off('error', taken);
         done(port);
-      });
+      };
+      server.once('error', taken);
+      server.once('listening', bound);
+      server.listen(port, '127.0.0.1');
     };
     attempt(FIRST_PORT);
   });
