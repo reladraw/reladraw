@@ -2344,6 +2344,8 @@ function bounds(nodes: LayoutNode[], marks: LayoutMark[]) {
     maxX = Math.max(maxX, box.x + box.width);
     maxY = Math.max(maxY, box.y + box.height);
   }
+  // A diagram with nothing in it is an empty picture of just its margins, not one sized -Infinity.
+  if (minX === Infinity) return { minX: 0, minY: 0, maxX: 0, maxY: 0 };
   return { minX, minY, maxX, maxY };
 }
 
