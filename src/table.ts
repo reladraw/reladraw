@@ -11,6 +11,7 @@
 import type { Attrs, NodeStmt, Stmt } from './ast.js';
 import { SourceError } from './errors.js';
 import type { LayoutNode } from './model.js';
+import { gapPixels } from './place.js';
 
 /** The room between two cells of a row, in pixels. */
 const CELL_GAP = 14;
@@ -28,10 +29,12 @@ export interface TableInfo {
   rules: string[];
   /** The headings' row, if the table has one. */
   headings?: string;
+  /** `column-widths: 9, -, -`: the least each column is, in pixels; undefined where it is `-`. */
+  widths: (number | undefined)[];
 }
 
 /** The setting keys a table's bracket is stored under, `shape.headings`. */
-const TABLE_KEYS = ['shape.title.fill', 'shape.headings', 'shape.column-styles'];
+const TABLE_KEYS = ['shape.title.fill', 'shape.headings', 'shape.headings.style', 'shape.column-styles', 'shape.column-gap', 'shape.column-widths'];
 
 /** The cells of a row's text: split at each `|` that isn't escaped, `\|` kept as a bar. */
 export function cellsOf(text: string): string[] {
@@ -74,8 +77,13 @@ export function writeOutTables(
       ...(look['shape.title.fill'] !== undefined ? { titleFill: look['shape.title.fill'] } : {}),
       columns: [],
       rules: [],
+      widths: (look['shape.column-widths']?.split(',') ?? []).map((width) =>
+        width === '-' ? undefined : gapPixels(width, `"${table.name}" column-widths`, table.line),
+      ),
     };
     tables.push(info);
+    const columnGap = look['shape.column-gap'];
+    const cellGap = columnGap === undefined ? `${CELL_GAP}px` : (gapPixels(columnGap, `"${table.name}" column-gap`, table.line), columnGap);
 
     for (const key of ['layout', 'gather-children', 'padding']) {
       if (table.attrs[key] !== undefined) {
@@ -95,7 +103,23 @@ export function writeOutTables(
         throw new SourceError(`"${name}" is where the headings of "${table.name}" go — give the row another name`, table.line);
       }
       info.headings = name;
-      rowsAndSections.push({ kind: 'node', name, text: headings, statedText: true, textAttrs: { color: 'theme-muted' }, placements: [], attrs: {}, line: table.line });
+      // Muted unless `headings: "…" (style: …)` says how they look.
+      const style = look['shape.headings.style'];
+      for (const one of style?.split(' ') ?? []) {
+        if (!appearanceHasStyle(appearance, one, table.line)) {
+          throw new SourceError(`"${table.name}" headings: (style: ${one}) names a style that doesn't exist`, table.line);
+        }
+      }
+      rowsAndSections.push({
+        kind: 'node',
+        name,
+        text: headings,
+        statedText: true,
+        textAttrs: style === undefined ? { color: 'theme-muted' } : {},
+        placements: [],
+        attrs: style === undefined ? {} : { style },
+        line: table.line,
+      });
     }
     rowsAndSections.push(...kids);
     if (rowsAndSections.length > 0) {
@@ -137,7 +161,7 @@ export function writeOutTables(
         ...row.attrs,
         shape: 'rectangle',
         layout: 'row',
-        'layout.gap': `${CELL_GAP}px`,
+        'layout.gap': cellGap,
         'layout.align-children': 'top',
         'gather-children': 'left',
         'padding-top': `${ROW_PAD}px`,
@@ -150,7 +174,8 @@ export function writeOutTables(
         if (info.columns[index] === undefined) info.columns[index] = [];
         const name = `${row.name}.${index + 1}`;
         info.columns[index]!.push(name);
-        const column = columnStyles[index];
+        // The headings take their own style, never the columns'.
+        const column = row.name === info.headings ? undefined : columnStyles[index];
         const styles = [...(rowStyles?.split(' ') ?? []), ...(column !== undefined && column !== '-' ? [column] : [])];
         return {
           kind: 'node',
@@ -249,10 +274,10 @@ export function matchColumns(tables: TableInfo[], byName: Map<string, LayoutNode
       const ruled = byName.get(rule);
       if (ruled) ruled.ruleAbove = true;
     }
-    for (const column of table.columns) {
+    table.columns.forEach((column, index) => {
       const cells = column.map((name) => byName.get(name)).filter((cell): cell is LayoutNode => cell !== undefined);
-      const widest = Math.max(0, ...cells.map(natural));
+      const widest = Math.max(table.widths[index] ?? 0, ...cells.map(natural));
       for (const cell of cells) cell.appearance['min-width'] = `${Math.ceil(widest)}px`;
-    }
+    });
   }
 }

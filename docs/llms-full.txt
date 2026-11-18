@@ -473,13 +473,15 @@ node account.methods.deposit   "+ deposit(amount): void"
 node account.methods.balance   "+ balance(): Money"
 ```
 
-Its bracket takes three settings, in any order:
+Its bracket takes these settings, in any order:
 
 | setting | says |
 |---|---|
 | `title: (fill: …)` | the color of the band behind the name; otherwise the border's color, faint |
-| `headings: "a \| b"` | a first row naming the columns, split like any row, with a rule under it |
-| `column-styles: -, type, key` | a style for each column's cells, in order; `-` leaves a column as it is |
+| `headings: "a \| b"` | a first row naming the columns, split like any row, with a rule under it; muted, or in a style of its own with `headings: "a \| b" (style: head)` |
+| `column-styles: -, type, key` | a style for each column's cells, in order, under the headings; `-` leaves a column as it is |
+| `column-gap: wide` | the room between columns, as any gap: `tight`, `normal`, `wide`, a number or pixels |
+| `column-widths: 9, -, -` | the least each column is, in order, in the file's unit or pixels; `-` is as wide as it holds |
 
 `fill:` colors the body, as on any box, and the rules are drawn in the border's color and thickness. A row's own `style:` reaches its cells, under the column's. `\|` is a bar in a cell rather than a split. A table with an empty text, `""`, has no band.
 
@@ -1386,7 +1388,7 @@ node nas "NAS"  right of mirror
 edge mirror -> nas  style: backup
 ```
 
-A style is a named bundle of appearance, worn with `style:`. Color carries meaning through the style's name rather than being written per thing. A style takes `fill`, `border`, `line`, `text`, `badge`, `icon`, `shape`, `from-mark`, `to-mark`, `padding`, `corners` and a region's `opacity`, and a title's position inside `text: (…)`: `style zone  text: (outside top, align: left)`. It never says where a thing goes, so it can't carry a placement, a `gap:`, a `depth:`, or a line's `from:` or `to:`, and it can't carry a `url:`, a `description:` or a deck's `cards:`.
+A style is a named bundle of appearance, worn with `style:`. Color carries meaning through the style's name rather than being written per thing. A style takes `fill`, `border`, `line`, `text`, `badge`, `icon`, `shape`, `from-mark`, `to-mark`, `padding`, `corners` and a region's `opacity`, a title's position inside `text: (…)` (`style zone  text: (outside top, align: left)`), and how a box arranges what it holds and how big it is: `layout:`, `gather-children:`, `width:`, `height:` and their limits. It never places a thing against something else or adds one, so it can't carry a placement, a `gap:`, a `depth:`, or a line's `from:` or `to:`, nor `heading:` or `join-with:`, which name one node's own child; and it can't carry a `url:`, a `description:` or a deck's `cards:`.
 
 - **A style may span kinds.** It gives each thing only the keys that thing has, so the style above gives nodes their border and lines their color.
 - **A style must give a thing at least one key it has.** A style that dresses a thing in nothing is on the wrong thing.
@@ -1840,7 +1842,7 @@ Pre-1.0, so the minor number is where a breaking change goes. Every removal is r
 
 **Unreleased**
 
-- **A table.** `shape: table` draws a name over rows, for an ERD entity, a UML class or a key/value box: its children are the rows, `|` splits a row into cells that line up down the table, and a child holding rows of its own is a section under a rule. Its bracket takes `title: (fill: …)`, `headings: "…"` and `column-styles:`, a style may carry all of it, and a line can end at a row. Drawing one used to take a column layout, a gather and a left alignment on the box and two settings on every row. See [A table](#a-table).
+- **A table.** `shape: table` draws a name over rows, for an ERD entity, a UML class or a key/value box: its children are the rows, `|` splits a row into cells that line up down the table, and a child holding rows of its own is a section under a rule. Its bracket takes `title: (fill: …)`, `headings: "…"`, `column-styles:`, `column-gap:` and `column-widths:`, a style may carry all of it, and a line can end at a row. Drawing one used to take a column layout, a gather and a left alignment on the box and two settings on every row. See [A table](#a-table).
 - **Crow's-foot marks.** `erd-one`, `erd-zero-or-one`, `erd-one-or-many` and `erd-zero-or-many` draw a database diagram's cardinality at a line's end: `edge users [erd-one] -- [erd-zero-or-many] orders`.
 
 **0.31.2**
