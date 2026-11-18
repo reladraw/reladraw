@@ -1,4 +1,4 @@
-# Syntax reference — 0.31.2
+# Syntax reference — 0.32.0
 
 What the language accepts. The changelog at the end lists what changed in each published version; 0.17.0's changes are large, and its entry has a table of every old spelling and what to write instead.
 
@@ -1585,11 +1585,12 @@ Designed and absent from the code.
 
 Pre-1.0, so the minor number is where a breaking change goes. Every removal is refused by name with the replacement quoted, rather than dropped in silence: an older file stops with an error saying what to write instead.
 
-**Unreleased**
+**0.32.0**
 
-- **A table.** `shape: table` draws a name over rows, for an ERD entity, a UML class or a key/value box: its children are the rows, `|` splits a row into cells that line up down the table, and a child holding rows of its own is a section under a rule. Its bracket takes `title: (fill: …)`, `headings: "…"`, `column-styles:`, `column-gap:` and `column-widths:`, a style may carry all of it, and a line can end at a row. Drawing one used to take a column layout, a gather and a left alignment on the box and two settings on every row. See [A table](#a-table).
+- **A table.** `shape: table` draws a name over rows, for an ERD entity, a UML class or a key/value box: its children are the rows, `|` splits a row into cells that line up down the table, and a child holding rows of its own is a section under a rule. Its bracket takes `title: (fill: …)`, `headings: "…"`, `headings-style:`, `column-styles:`, `column-gap:` and `column-widths:`, a style may carry all of it, and a line can end at a row. Drawing one used to take a column layout, a gather and a left alignment on the box and two settings on every row. See [A table](#a-table).
 - **Crow's-foot marks.** `erd-one`, `erd-zero-or-one`, `erd-one-or-many` and `erd-zero-or-many` draw a database diagram's cardinality at a line's end: `edge users [erd-one] -- [erd-zero-or-many] orders`.
 - **`reladraw format` can open a long bracket**, one setting to a line, with `setting-per-line-at:` set to a length, a number of settings, or both. A bracket on one line is now written with a comma between its settings, which the language leaves optional. See [Formatting](#formatting).
+- The reference now says a style may carry `layout:`, `gather-children:` and sizes, which it always could; it never places a thing against another.
 
 **0.31.2**
 
