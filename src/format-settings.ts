@@ -10,6 +10,7 @@ import { SourceError } from './errors.js';
 export interface FormatSettings {
   'wrap-at': 'off' | number;
   'clause-per-line-at': 'off' | 'always' | number;
+  'setting-per-line-at': 'off' | { characters?: number; settings?: number };
   'first-line': 'text' | 'name';
   'continued-lines-indent': number | 'tab' | 'under-name' | 'under-text' | { underName: number };
   'clause-order': 'as-written' | string[];
@@ -90,6 +91,26 @@ export const SETTINGS: Setting[] = [
       if (value === 'off' || value === 'always') return value;
       if (SETTING_COUNT.test(value)) return Number(value);
       throw `clause-per-line-at: "${value}" is not one of its values — it takes off, always, or a number of characters such as 120`;
+    },
+  },
+  {
+    name: 'setting-per-line-at',
+    about: 'When a bracket of two or more settings opens onto lines of its own, one\nsetting to a line: past a line length, from a number of settings, or either.',
+    values: [
+      ['off', 'never'],
+      ['a number', 'on a line longer than that many characters, such as 60'],
+      ['3 settings', 'a bracket holding that many settings or more'],
+      ['60 or 3 settings', 'whichever comes first'],
+    ],
+    written: 'off',
+    read: (value) => {
+      if (value === 'off') return value;
+      const both = /^([1-9]\d*) or ([1-9]\d*) settings$/.exec(value);
+      if (both) return { characters: Number(both[1]), settings: Number(both[2]) };
+      const count = /^([1-9]\d*) settings$/.exec(value);
+      if (count) return { settings: Number(count[1]) };
+      if (SETTING_COUNT.test(value)) return { characters: Number(value) };
+      throw `setting-per-line-at: "${value}" is not one of its values — it takes off, a number of characters such as 60, a number of settings such as 3 settings, or both: 60 or 3 settings`;
     },
   },
   wordSetting('first-line', 'When a statement breaks onto more lines, where its first line ends.', [

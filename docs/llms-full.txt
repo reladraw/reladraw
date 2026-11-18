@@ -1750,6 +1750,7 @@ clause-gap: 2
 |---|---|
 | `wrap-at` | `off`, or a number of characters: past it, a statement wraps onto as few lines as fit |
 | `clause-per-line-at` | `off`, a number of characters, or `always`: past it, every clause gets its own line |
+| `setting-per-line-at` | `off`, a number of characters (`60`), a number of settings (`3 settings`), or both (`60 or 3 settings`): a bracket of two or more settings on a line past the length, or holding that many, opens one setting to a line |
 | `first-line` | `text` (keyword, name and texts), `name`: where a broken statement's first line ends |
 | `clause-order` | `as-written`, or a list of kinds: `placement`, and keys by name, such as `style, placement, fill` |
 | `columns` | `aligned`, `off` |
@@ -1763,13 +1764,26 @@ clause-gap: 2
 
 An unknown setting, one written twice, or a value it doesn't take is an error naming it.
 
-**Breaking a long statement.** With both at a number, a statement up to `wrap-at` stays on one line, one up to `clause-per-line-at` wraps, and a longer one goes one clause to a line. Its length is measured as it would be printed, lined up with its neighbors, so a short statement pushed past the width by a long neighbor's columns breaks too; its first line still lines up with theirs. A statement that can't break, such as a node's name and text with nothing after them, is left as it is, even when its columns carry it past the width. A break falls only between clauses, never inside one or inside a bracket, so a clause longer than the width stands alone on its line, past it. A statement broken by hand is broken again by these rules, or joined when they leave it short enough; one kept on its lines for a comment among them is left as it is. A comment at the end of a broken statement follows its last line.
+**Breaking a long statement.** With both at a number, a statement up to `wrap-at` stays on one line, one up to `clause-per-line-at` wraps, and a longer one goes one clause to a line. Its length is measured as it would be printed, lined up with its neighbors, so a short statement pushed past the width by a long neighbor's columns breaks too; its first line still lines up with theirs. A statement that can't break, such as a node's name and text with nothing after them, is left as it is, even when its columns carry it past the width. A break falls only between clauses, never inside one, so a clause longer than the width stands alone on its line, past it, unless `setting-per-line-at` opens its bracket. A statement broken by hand is broken again by these rules, or joined when they leave it short enough; one kept on its lines for a comment among them is left as it is. A comment at the end of a broken statement follows its last line.
 
 ```
 // wrap-at: 60
 node  confirm  "Confirm"
     below accept (gap: tight)  left of accept (gap: wide)
     style: plain
+```
+
+**Opening a bracket.** `setting-per-line-at` puts each setting of a long or full bracket on its own line, further in, and its `)` on the line after them. It measures each line as laid out, so after `clause-per-line-at` it looks at each clause's line alone. A bracket on one line is written with a comma between its settings.
+
+```
+// clause-per-line-at: always
+// setting-per-line-at: 60 or 3 settings
+style  table
+    shape: table (
+        headings: "Field | Type"
+        column-styles: -, dim
+        column-gap: 3
+    )
 ```
 
 **Ordering clauses.** `clause-order` lists the kinds of clause in the order they are written: `placement` for every relation, and a key by its name (`style`, `fill`, `via`). Kinds it leaves out follow, in the order written, and clauses of one kind keep theirs. A node's or edge's texts never move, since the language takes them only straight after the name; `text` in the list means a style's `text:` key. A clause never moves where moving it would change what the statement says.
@@ -1845,6 +1859,7 @@ Pre-1.0, so the minor number is where a breaking change goes. Every removal is r
 
 - **A table.** `shape: table` draws a name over rows, for an ERD entity, a UML class or a key/value box: its children are the rows, `|` splits a row into cells that line up down the table, and a child holding rows of its own is a section under a rule. Its bracket takes `title: (fill: …)`, `headings: "…"`, `column-styles:`, `column-gap:` and `column-widths:`, a style may carry all of it, and a line can end at a row. Drawing one used to take a column layout, a gather and a left alignment on the box and two settings on every row. See [A table](#a-table).
 - **Crow's-foot marks.** `erd-one`, `erd-zero-or-one`, `erd-one-or-many` and `erd-zero-or-many` draw a database diagram's cardinality at a line's end: `edge users [erd-one] -- [erd-zero-or-many] orders`.
+- **`reladraw format` can open a long bracket**, one setting to a line, with `setting-per-line-at:` set to a length, a number of settings, or both. A bracket on one line is now written with a comma between its settings, which the language leaves optional. See [Formatting](#formatting).
 
 **0.31.2**
 

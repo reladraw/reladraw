@@ -22,7 +22,7 @@ export function format(source: string, settings: FormatSettings = DEFAULT_FORMAT
   const { statements, starts } = clausesOf(source);
 
   const items = gatherItems(lines, statements, starts, settings);
-  const out = layOutItems(items, settings);
+  const out = openBrackets(layOutItems(items, settings), settings);
   // A file keeps the line breaks it came with, so formatting on Windows
   // doesn't turn every line into a change. The first break decides.
   const lineBreak = /\r\n/.test(source.match(/\r?\n/)?.[0] ?? '') ? '\r\n' : '\n';
@@ -302,18 +302,115 @@ function edgeHeadCells(head: { token: Token; line: string }[]): Cell[] {
  */
 function joinTokens(tokens: { token: Token; line: string }[]): string {
   let text = '';
+  let depth = 0;
   tokens.forEach(({ token, line }, index) => {
     const previous = tokens[index - 1];
     if (previous) {
       const opens = !previous.token.quoted && previous.token.text === '(';
       const closes = !token.quoted && (token.text === ')' || token.text === ',');
+      // Settings in a bracket are written with a comma between them, which
+      // the language leaves optional: `(a: 1 b: 2)` comes out `(a: 1, b: 2)`.
+      if (depth > 0 && !opens && !token.quoted && /^[A-Za-z][A-Za-z0-9_-]*:$/.test(token.text) && !text.endsWith(',')) text += ',';
       text += opens || closes ? '' : ' ';
     }
+    if (!token.quoted && token.text === '(') depth += 1;
+    if (!token.quoted && token.text === ')') depth = Math.max(0, depth - 1);
     const written = line.slice(token.start, token.end);
     // A comma the lexer joined on from further along the line.
     text += !token.quoted && token.text.endsWith(',') && !written.endsWith(',') ? `${written},` : written;
   });
   return text;
+}
+
+/**
+ * `setting-per-line-at`: a bracket of two or more settings on a line past the
+ * length, or holding at least the count, opens onto lines of its own, one
+ * setting to a line, its `)` on a line after them:
+ *
+ *     shape: table (
+ *         headings: "Field | Type"
+ *         column-gap: 3
+ *     )
+ *
+ * Done on the laid-out lines, since the brackets were joined onto one line
+ * when the clauses were read. A `"""` string's lines are left alone.
+ */
+function openBrackets(lines: string[], settings: FormatSettings): string[] {
+  const at = settings['setting-per-line-at'];
+  if (at === 'off') return lines;
+  const step = typeof settings['continued-lines-indent'] === 'number' ? ' '.repeat(settings['continued-lines-indent']) : settings['continued-lines-indent'] === 'tab' ? '\t' : ' '.repeat(4);
+  const out: string[] = [];
+  let inBlock = false;
+  for (const line of lines) {
+    const fences = line.split('"""').length - 1;
+    if (inBlock || fences > 0 || line.trimStart().startsWith('//')) {
+      if (fences % 2 === 1) inBlock = !inBlock;
+      out.push(line);
+      continue;
+    }
+    out.push(...openLine(line, at, step));
+  }
+  return out;
+}
+
+/** One line, with the first bracket that should open opened, and the rest of the line after its `)` done the same way. */
+function openLine(line: string, at: { characters?: number; settings?: number }, step: string): string[] {
+  const long = at.characters !== undefined && textWidth(line) > at.characters;
+  for (const bracket of bracketsIn(line)) {
+    const many = at.settings !== undefined && bracket.settings.length >= at.settings;
+    if (bracket.settings.length < 2 || !(long || many)) continue;
+    const indent = /^\s*/.exec(line)![0];
+    // A line in from the statement's first, so a `)` never starts a statement of its own.
+    const close = indent === '' ? step : indent;
+    const head = line.slice(0, bracket.open + 1).trimEnd();
+    const tail = line.slice(bracket.close + 1);
+    return [head, ...bracket.settings.map((setting) => close + step + setting), ...openLine(close + ')' + tail, at, step)];
+  }
+  return [line];
+}
+
+/**
+ * The brackets at the outermost level of a line, each with where it opens and
+ * closes and its settings: the text from each `key:` at its own level to the
+ * next, commas between them dropped. Quoted text and a trailing comment are
+ * skipped over.
+ */
+function bracketsIn(line: string): { open: number; close: number; settings: string[] }[] {
+  const found: { open: number; close: number; settings: string[] }[] = [];
+  let depth = 0;
+  let open = -1;
+  let starts: number[] = [];
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index]!;
+    if (char === '"') {
+      index += 1;
+      while (index < line.length && line[index] !== '"') index += line[index] === '\\' ? 2 : 1;
+      continue;
+    }
+    if (char === '/' && line[index + 1] === '/') break;
+    if (char === '(') {
+      depth += 1;
+      if (depth === 1) {
+        open = index;
+        starts = [];
+      }
+    } else if (char === ')' && depth > 0) {
+      depth -= 1;
+      if (depth === 0) {
+        const settings = starts.map((start, n) =>
+          line
+            .slice(start, n + 1 < starts.length ? starts[n + 1] : index)
+            .trim()
+            .replace(/,$/, ''),
+        );
+        found.push({ open, close: index, settings });
+      }
+    } else if (depth === 1 && /[A-Za-z]/.test(char) && (index === open + 1 || /[\s,]/.test(line[index - 1]!))) {
+      const key = /^[A-Za-z][A-Za-z0-9_-]*:/.exec(line.slice(index));
+      if (key) starts.push(index);
+    }
+  }
+  return found;
 }
 
 /** The width of a stretch of text in characters, counting each code point once. */
