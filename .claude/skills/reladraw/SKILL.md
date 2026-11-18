@@ -88,6 +88,20 @@ node drive "External HD"  badge: disk  below dump
 node aside "a remark that folds" (wrap: 20)  shape: none  right of drive
 ```
 
+**A database table, a UML class or a key/value box is `shape: table`**, never hand-built from a column layout. Its children are its rows, `|` splits a row into cells that line up down the table, and a child holding rows is a section under a rule. Name the use with a style, and join tables with the crow's-foot marks, from a row when the line leaves the table's side:
+
+```
+style type    text: (color: theme-muted)
+style entity  shape: table (column-styles: -, type)
+node users "users"  style: entity
+node users.id  "id | int"
+node orders "orders"  style: entity  right of users (gap: wide)
+node orders.user_id  "user_id | int"
+edge orders.user_id [erd-zero-or-many] -- [erd-one] users.id
+```
+
+The bracket also takes `headings: "name | type"` and `title: (fill: …)`.
+
 ### Placing
 
 ```
@@ -139,7 +153,7 @@ node note "a longer remark that folds" (size: small, wrap: 30)  shape: none  bel
 edge [<name>] <from> -> <to> ["<text>" [(<placement>)]] [attributes]
 ```
 
-`<-`, `<->` and `--` work too, and each end may carry a mark: `a <|-- b`, `a *--o b`, `a diamond--> b`. `from:` and `to:` name the side of the first and second name written: `from: right  to: left`.
+`<-`, `<->` and `--` work too, and each end may carry a mark: `a <|-- b`, `a *--o b`, `a diamond--> b`, and for a database's cardinality `a [erd-one] -- [erd-zero-or-many] b` (also `erd-zero-or-one`, `erd-one-or-many`). `from:` and `to:` name the side of the first and second name written: `from: right  to: left`.
 
 - **Straight by default**, between the two boxes and through anything in between, which is reported. `line: (path: square)` or `line: (path: curved)` for a route read off the line's own two boxes and sides.
 - **`via:` lists the places a line passes**: `via: cache top` runs just above `cache`; `via: between a and b` goes through the point between them; `via: proxy` goes through a box's center. This is how to take a line round something.

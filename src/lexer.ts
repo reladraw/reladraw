@@ -107,12 +107,13 @@ export function tokenizeLine(line: string, lineNumber: number, depth = 0): Token
         const c = line[i]!;
         if (c === '\\' && i + 1 < line.length) {
           const next = line[i + 1]!;
-          // `\/` and `\[` are the two escapes that must survive tokenizing.
-          // Neither of the things they escape is resolved here — the line break
-          // waits for `splitRuns` and the markup tag for `parseMarkup` — so
-          // collapsing either to a bare character now would lose the fact that
-          // the author asked for a literal. Every other escape resolves here.
-          text += next === '/' || next === '[' ? `\\${next}` : next;
+          // `\/`, `\[` and `\|` are the escapes that must survive tokenizing.
+          // None of the things they escape is resolved here — the line break
+          // waits for `splitRuns`, the markup tag for `parseMarkup` and a
+          // table's cells for the table — so collapsing one to a bare character
+          // now would lose the fact that the author asked for a literal. Every
+          // other escape resolves here.
+          text += next === '/' || next === '[' || next === '|' ? `\\${next}` : next;
           i += 2;
           continue;
         }

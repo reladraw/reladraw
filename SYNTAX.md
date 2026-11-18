@@ -119,6 +119,7 @@ Every node has one body, the thing drawn where it is, named by one of two keys.
 | `trapezoid` | a box narrower at one end, a flowchart's manual operation | `taper:`, `narrow: bottom \| top` |
 | `triangle` | a triangle, a flowchart's merge (down) or extract (up) | `aim: down \| up \| left \| right` |
 | `cylinder` | a cylinder standing, or `lying` on its side, for stored data | `cap:`, `lying` |
+| `table` | a name over rows of cells: an ERD entity, a UML class, a key/value box ([A table](#a-table)) | `title:`, `headings:`, `column-styles:` |
 | `none` | no outline, fill or padding: bare text, or an invisible container | |
 
 ```
@@ -179,6 +180,54 @@ node spec "spec"  shape: document  corners: sharp  right of api
 ```
 
 **Bare text.** `shape: none` is how to write a note, a caption or a title over a diagram. Its text starts one step smaller than a box's, because an aside at full size reads as a statement; `(size: normal)` overrides that. Nothing bounds bare text the way a border bounds a box, so give a sentence-length one a `wrap:`.
+
+### A table
+
+`shape: table` draws its name centered in a band at the top, and its children under it as rows, left-aligned. A `|` in a row's text splits it into cells, and the cells line up in columns down the whole table. A child that holds rows of its own is a section, with a rule above it.
+
+```
+style type  text: (color: theme-muted)
+style key   text: (color: orange)
+
+node users "users"  shape: table (headings: "column | type | key", column-styles: -, type, key)
+node users.id          "id | int | PK"
+node users.email       "email | text"
+node users.created_at  "created_at | timestamp"
+
+node account "Account"  shape: table  right of users
+node account.fields
+node account.fields.owner      "- owner: String"
+node account.fields.balance    "- balance: Money"
+node account.methods
+node account.methods.deposit   "+ deposit(amount): void"
+node account.methods.balance   "+ balance(): Money"
+```
+
+Its bracket takes three settings, in any order:
+
+| setting | says |
+|---|---|
+| `title: (fill: …)` | the color of the band behind the name; otherwise the border's color, faint |
+| `headings: "a \| b"` | a first row naming the columns, split like any row, with a rule under it |
+| `column-styles: -, type, key` | a style for each column's cells, in order; `-` leaves a column as it is |
+
+`fill:` colors the body, as on any box, and the rules are drawn in the border's color and thickness. A row's own `style:` reaches its cells, under the column's. `\|` is a bar in a cell rather than a split. A table with an empty text, `""`, has no band.
+
+**Rows are named, so a line can end at one**, meeting the table's side level with that row:
+
+```
+edge orders.user_id [erd-zero-or-many] -- [erd-one] users.id
+```
+
+**A style may carry the whole table**, its bracket included, which is how a file names what its tables are:
+
+```
+style erd_entity  shape: table (column-styles: -, type, key)
+node users "users"  style: erd_entity
+node users.id  "id | int | PK"
+```
+
+The table places and sizes its rows, so a placement, `layout:`, `width:` or `height:` on a row is refused, and so is `layout:`, `gather-children:` or `padding:` on the table. A section has no text of its own; one with a text is refused. `shape: erd`, `entity`, `record` and `class` are refused, naming `shape: table`.
 
 ### Your own icons
 
@@ -722,9 +771,13 @@ The arrow is a mark, a shaft, a mark. The shaft is `-` or `--`, and either mark 
 | `diamond` | a filled diamond | |
 | `odiamond` | an outlined diamond | |
 | `bar` | a stroke across the line | `\|` |
+| `erd-one` | exactly one: two bars | |
+| `erd-zero-or-one` | zero or one: a circle and a bar | |
+| `erd-one-or-many` | one or many: a bar and a crow's foot | |
+| `erd-zero-or-many` | zero or many: a circle and a crow's foot | |
 | `none` | nothing | |
 
-The `o` prefix means outlined. `o-->`, `odot--arrow`, `(odot)--(arrow)` and `[odot] -- [arrow]` are one picture. A mark must touch the shaft or be bracketed, since `edge a -- dot b` reads like a line to a node named `dot`.
+The `o` prefix means outlined. The `erd-` marks are crow's-foot notation for a database diagram, each a pair of marks, the most it can be nearest the box and the least just inside it: `edge users [erd-one] -- [erd-zero-or-many] orders`. `o-->`, `odot--arrow`, `(odot)--(arrow)` and `[odot] -- [arrow]` are one picture. A mark must touch the shaft or be bracketed, since `edge a -- dot b` reads like a line to a node named `dot`.
 
 `from-mark:` and `to-mark:` say the same one end at a time, which is how a style carries marks. **An end with nothing written is open, not empty**: a style may fill it, and `none` says "nothing here, whatever the style says". **A mark written in the arrow is final**: the line's own `to-mark:` may repeat it but not contradict it.
 
@@ -1514,6 +1567,11 @@ Designed and absent from the code.
 ## Changelog
 
 Pre-1.0, so the minor number is where a breaking change goes. Every removal is refused by name with the replacement quoted, rather than dropped in silence: an older file stops with an error saying what to write instead.
+
+**Unreleased**
+
+- **A table.** `shape: table` draws a name over rows, for an ERD entity, a UML class or a key/value box: its children are the rows, `|` splits a row into cells that line up down the table, and a child holding rows of its own is a section under a rule. Its bracket takes `title: (fill: …)`, `headings: "…"` and `column-styles:`, a style may carry all of it, and a line can end at a row. Drawing one used to take a column layout, a gather and a left alignment on the box and two settings on every row. See [A table](#a-table).
+- **Crow's-foot marks.** `erd-one`, `erd-zero-or-one`, `erd-one-or-many` and `erd-zero-or-many` draw a database diagram's cardinality at a line's end: `edge users [erd-one] -- [erd-zero-or-many] orders`.
 
 **0.31.2**
 

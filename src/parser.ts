@@ -799,6 +799,10 @@ function readAttr(
       }
       if (depth === 0) break;
     }
+    if (value.text === 'table') {
+      for (const [inside, set] of Object.entries(readTableBracket(inner, subject, line))) setOnce(attrs, `shape.${inside}`, set, subject, line);
+      return end + 1;
+    }
     const takes = Object.keys(SHAPE_SETTINGS[value.text] ?? {});
     if (takes.length === 0) {
       throw new SourceError(`${subject}: \`shape: ${value.text}\` takes no settings, so it has no bracket`, line);
@@ -1702,20 +1706,41 @@ function readArrow(head: Token[], line: number): { text: string; marks: EdgeMark
   if (shaft.text.endsWith('-')) bracketed();
 
   const text = pieces.join('');
-  const parts = /^([^-]*)(-+)([^-]*)$/.exec(text);
+  const parts = splitArrow(text);
   if (!parts) {
     throw new SourceError(`"${text}" is not an arrow — the line is one run of dashes, with a mark at either end`, line);
   }
-  if (parts[2]!.length > 2) {
-    throw new SourceError(`"${text}" has ${parts[2]!.length} dashes — the line is "-" or "--"`, line);
+  if (parts[1]!.length > 2) {
+    throw new SourceError(`"${text}" has ${parts[1]!.length} dashes — the line is "-" or "--"`, line);
   }
-  const from = readMark(parts[1]!, 'from', text, line);
-  const to = readMark(parts[3]!, 'to', text, line);
+  const from = readMark(parts[0], 'from', text, line);
+  const to = readMark(parts[2], 'to', text, line);
   return {
     text,
     marks: { ...(from !== undefined ? { from } : {}), ...(to !== undefined ? { to } : {}) },
     next: at,
   };
+}
+
+/** The marks whose names hold a dash, longest first, so `erd-one-or-many` is not read as `erd-one`. */
+const DASHED_MARKS = MARKS.filter((mark) => mark.includes('-')).sort((a, b) => b.length - a.length);
+
+/**
+ * An arrow as written, split into its left mark, its shaft and its right mark.
+ * A mark is bracketed, a name with dashes in it (`erd-one`), or whatever runs
+ * up to the first dash; the shaft is what is left, and must be all dashes.
+ */
+function splitArrow(text: string): [string, string, string] | undefined {
+  const bracket = (close: string): number => text.indexOf(close) + 1;
+  let left: string;
+  if (text.startsWith('[') || text.startsWith('(')) left = text.slice(0, bracket(text[0] === '[' ? ']' : ')'));
+  else left = DASHED_MARKS.find((mark) => text.startsWith(`${mark}-`)) ?? /^[^-]*/.exec(text)![0];
+  const rest = text.slice(left.length);
+  let right: string;
+  if (rest.endsWith(']') || rest.endsWith(')')) right = rest.slice(rest.lastIndexOf(rest.endsWith(']') ? '[' : '('));
+  else right = DASHED_MARKS.find((mark) => rest.endsWith(`-${mark}`)) ?? /[^-]*$/.exec(rest)![0];
+  const shaft = rest.slice(0, rest.length - right.length);
+  return /^-+$/.test(shaft) ? [left, shaft, right] : undefined;
 }
 
 /** One end of an arrow, as written: a mark word or glyph, perhaps bracketed, or nothing. */
@@ -2941,6 +2966,78 @@ function readModifiers(
  * `DIAGRAM_KEYS` follows: a modifier that silently does nothing is worse than an
  * error, because the picture moves and nothing says why.
  */
+/** What a table's bracket takes (design.org 5.1). */
+export const TABLE_SETTINGS = ['title', 'headings', 'column-styles'] as const;
+
+/**
+ * `shape: table (title: (fill: navy), headings: "name | type", column-styles: -, type, key)`.
+ * Unlike other shapes' settings, one is a text, one a bracket and one a list,
+ * so the table reads its own. Stored as `title.fill`, `headings` (the text)
+ * and `column-styles` (the names joined by commas, `-` for a column with none).
+ */
+function readTableBracket(tokens: Token[], subject: string, line: number): Record<string, string> {
+  const values: Record<string, string> = {};
+  const set = (key: string, value: string): void => {
+    if (values[key] !== undefined) throw new SourceError(`${subject}: \`shape: table\` says ${key.split('.')[0]}: twice — keep one`, line);
+    values[key] = value;
+  };
+  const closes = (at: number): boolean => !tokens[at]!.quoted && tokens[at]!.text === ')';
+  let at = 1;
+  while (at < tokens.length && !closes(at)) {
+    const keyToken = tokens[at]!;
+    // A comma between settings is punctuation, as in any bracket.
+    if (!keyToken.quoted && keyToken.text === ',') {
+      at += 1;
+      continue;
+    }
+    if (!isAttrKey(keyToken)) {
+      throw new SourceError(`${subject}: \`shape: table\` takes ${TABLE_SETTINGS.join(', ')} in its brackets, found "${keyToken.text}"`, line);
+    }
+    const key = keyToken.text.slice(0, -1);
+    at += 1;
+    if (key === 'headings') {
+      const value = tokens[at];
+      if (!value?.quoted) throw new SourceError(`${subject}: headings: takes the column names in quotes, split with |: headings: "name | type"`, line);
+      set('headings', value.text);
+      at += 1;
+    } else if (key === 'title') {
+      if (tokens[at]?.text !== '(' || tokens[at]?.quoted) {
+        throw new SourceError(`${subject}: title: takes a bracket, title: (fill: …), for the band behind the table's name`, line);
+      }
+      at += 1;
+      while (at < tokens.length && !closes(at)) {
+        const inner = tokens[at]!;
+        if (inner.text !== 'fill:' || inner.quoted) {
+          throw new SourceError(`${subject}: a table's title: takes fill:, the color of the band behind its name, found "${inner.text}"`, line);
+        }
+        const color = tokens[at + 1];
+        if (!color || color.quoted || isAttrKey(color) || color.text === ')') throw new SourceError(`${subject}: "fill" has no value`, line);
+        const clean = color.text.replace(/,$/, '');
+        checkColorWord(clean, subject, line);
+        set('title.fill', clean);
+        at += 2;
+      }
+      at += 1;
+    } else if (key === 'column-styles') {
+      const names: string[] = [];
+      while (at < tokens.length && !closes(at) && !isAttrKey(tokens[at]!)) {
+        const word = tokens[at]!;
+        if (word.quoted) throw new SourceError(`${subject}: column-styles: names styles, so its words take no quotes`, line);
+        for (const piece of word.text.split(',')) if (piece !== '' && piece !== 'and') names.push(piece);
+        at += 1;
+      }
+      if (names.length === 0) throw new SourceError(`${subject}: "column-styles" has no value`, line);
+      set('column-styles', names.join(','));
+    } else if (key === 'columns') {
+      throw new SourceError(`${subject}: a table's columns are styled with column-styles:, such as column-styles: -, type, key`, line);
+    } else {
+      throw new SourceError(`a table has no "${key}" — it takes ${TABLE_SETTINGS.join(', ')}`, line);
+    }
+  }
+  if (Object.keys(values).length === 0) throw new SourceError(`${subject}: \`shape: table\` opens empty brackets`, line);
+  return values;
+}
+
 function readBracket(
   tokens: Token[],
   start: number,

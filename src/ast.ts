@@ -574,9 +574,31 @@ export interface NodeStmt {
  * the shape, one rule for every shape; `none` says there is definitely nothing,
  * where an end with no mark written leaves it to a style.
  */
-export const MARKS = ['arrow', 'oarrow', 'dot', 'odot', 'diamond', 'odiamond', 'bar', 'none'] as const;
+export const MARKS = [
+  'arrow',
+  'oarrow',
+  'dot',
+  'odot',
+  'diamond',
+  'odiamond',
+  'bar',
+  'erd-one',
+  'erd-zero-or-one',
+  'erd-one-or-many',
+  'erd-zero-or-many',
+  'none',
+] as const;
 
 export type Mark = (typeof MARKS)[number];
+
+/**
+ * The crow's-foot pairs (design.org 6.1). Each says a cardinality, and is drawn
+ * as its notation's two marks, the minimum inside the maximum, so it is twice
+ * as long along the line as the other marks.
+ */
+export function isErdMark(mark: Mark): boolean {
+  return mark.startsWith('erd-');
+}
 
 /**
  * The glyphs that stand for a mark, by the end they are written at. A glyph

@@ -219,7 +219,7 @@ export const OUTLINES = [
 export type Outline = (typeof OUTLINES)[number];
 
 /** Every value `shape:` accepts, `none` included. */
-export const SHAPE_WORDS = [...OUTLINES, 'none'] as const;
+export const SHAPE_WORDS = [...OUTLINES, 'table', 'none'] as const;
 
 /**
  * What a node is drawn as: an outline, a picture, or nothing at all.
@@ -298,6 +298,15 @@ export function bodyFor(
     const look = { decision: 'diamond', terminal: 'pill', process: 'rectangle' }[shape];
     return refuse(`a shape is named for how it looks, so a ${shape} is \`shape: ${look}\``, line);
   }
+  if (shape === 'erd' || shape === 'entity' || shape === 'record' || shape === 'class') {
+    return refuse(
+      `a shape is named for how it looks, so ${shape === 'erd' ? 'an ERD entity' : `a ${shape}`} is \`shape: table\` — ` +
+        'name the use with a style, such as style erd_entity  shape: table',
+      line,
+    );
+  }
+  // Written out into rows and cells before anything is built, so it is never drawn as itself.
+  if (shape === 'table') return PLAIN;
 
   // Until 0.3.0 `shape:` also took an icon name and drew the node as that
   // picture. The two jobs are two parts and now have two keys, so an older file

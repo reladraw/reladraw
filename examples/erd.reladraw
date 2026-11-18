@@ -1,0 +1,33 @@
+// A shop's tables as an entity-relationship diagram, from GitHub issue #25.
+// Each table is a style worn once: its rows are its children, a | splits a
+// row into cells, and the columns line up. The crow's-foot marks say how many
+// rows on each side. A line beside a table can run from a row, as the foreign
+// keys' do; one above or below it joins the tables.
+
+style type    text: (color: theme-muted)
+style key     text: (color: theme-primary)
+style entity  shape: table (column-styles: -, type, key)
+
+node users "users"  style: entity
+node users.id          "id | int | PK"
+node users.email       "email | text"
+node users.created_at  "created_at | timestamp"
+
+node orders "orders"  style: entity  right of users (gap: 18)
+node orders.id        "id | int | PK"
+node orders.user_id   "user_id | int | FK"
+node orders.placed_at "placed_at | timestamp"
+
+node products "products"  style: entity  below users (gap: 10)
+node products.id     "id | int | PK"
+node products.name   "name | text"
+node products.price  "price | money"
+
+node items "order_items"  style: entity  x even with orders  even with products
+node items.order_id    "order_id | int | FK"
+node items.product_id  "product_id | int | FK"
+node items.quantity    "quantity | int"
+
+edge orders.user_id [erd-zero-or-many] -- [erd-one] users.id
+edge items [erd-one-or-many] -- [erd-one] orders
+edge items.product_id [erd-zero-or-many] -- [erd-one] products.id

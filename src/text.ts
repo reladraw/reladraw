@@ -155,13 +155,13 @@ export function splitRuns(runs: Run[]): Line[] {
   return tidy(lines);
 }
 
-/** Trim each line's ends, drop the empty ones, and resolve the `\/` escape. */
+/** Trim each line's ends, drop the empty ones, and resolve the `\/` and `\|` escapes. */
 function tidy(lines: Line[]): Line[] {
   const kept: Line[] = [];
   for (const line of lines) {
     const runs = line
       .map((run, index) => {
-        let text = run.text.replace(/\\\//g, '/');
+        let text = run.text.replace(/\\\//g, '/').replace(/\\\|/g, '|');
         if (index === 0) text = text.replace(/^\s+/, '');
         if (index === line.length - 1) text = text.replace(/\s+$/, '');
         return { ...run, text };

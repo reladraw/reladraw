@@ -22,6 +22,7 @@ export const OFFERED: readonly (readonly [file: string, name: string, about: str
   ['contents', 'inside a container', 'How children line up in a container wider than they are.'],
   ['shapes', 'shapes', 'The outlines a node can be drawn with, and the pictures it can be drawn as.'],
   ['icons', 'icons', 'The seven icons, and the ways to use one.'],
+  ['erd', 'tables', "A database's tables, their columns lined up, joined with crow's-foot marks."],
   ['overlays', 'sides and corners', 'Nodes placed against part of another node: a side, a corner, or its text.'],
   ['frames', "on the parent's edge", "A child placed on its own container's side or corner."],
   ['text', 'room for labels', "A line's text takes no room of its own; the gap it sits in is stated."],

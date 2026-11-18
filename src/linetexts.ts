@@ -10,7 +10,7 @@
  * The renderer and the checks both place texts through here, so what is
  * reported is what is drawn.
  */
-import type { TextSide } from './ast.js';
+import { isErdMark, type TextSide } from './ast.js';
 import { arrowLength } from './constants.js';
 import { SourceError } from './errors.js';
 import type { LayoutEdge, LayoutEdgeText } from './model.js';
@@ -299,7 +299,8 @@ export function placeLineTexts(edge: LayoutEdge, route: Route): PlacedText[] {
       const heading = headingAlong(on, fromEnd ? 0 : on.total);
       const size = turned(text.width, text.height, angleOf(text, heading));
       const half = (size.width / 2) * Math.abs(heading.x) + (size.height / 2) * Math.abs(heading.y);
-      const mark = on === whole && edge.marks[fromEnd ? 'from' : 'to'] !== 'none' ? arrowLength(edge.look.thickness) : 0;
+      const said = edge.marks[fromEnd ? 'from' : 'to'];
+      const mark = on === whole && said !== 'none' ? arrowLength(edge.look.thickness) * (isErdMark(said) ? 2 : 1) : 0;
       const gap = place.gap === undefined ? TEXT_GAP : gapPixels(place.gap, `${about}: gap:`, edge.line);
       const s = Math.min(on.total, mark + gap + half);
       return toWhole(fromEnd ? s : on.total - s);

@@ -38,6 +38,7 @@ import {
   widestLine,
 } from './constants.js';
 import { SourceError } from './errors.js';
+import { matchColumns, writeOutTables } from './table.js';
 import { type Body, bodyFor, type Icon, iconNamed, pastedIcon } from './icons.js';
 import { LINKS_KEY, linksOf, type Link, type LinkEntry } from './links.js';
 import { unsafeLinks } from './markdown.js';
@@ -423,7 +424,9 @@ export function resolve(doc: Document, options: ResolveOptions = {}): Layout {
       }
     }
   }
-  const { nodes, byName, roots } = buildTree(writeOutCards(doc.statements), styles, defaults, icons, fontSize);
+  const tabled = writeOutTables(writeOutCards(doc.statements), (attrs, line) => appearanceOf(attrs, styles, line));
+  const { nodes, byName, roots } = buildTree(tabled.statements, styles, defaults, icons, fontSize);
+  matchColumns(tabled.tables, byName, (cell) => factsFor(cell, measurer, fontSize).natural.width);
   // From here on, `edge each child of a -> b` and `edge a -> b, c` are the lines they stand for.
   const statements = expandEach(doc.statements, byName);
 

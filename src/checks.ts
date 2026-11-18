@@ -437,7 +437,7 @@ function markWidth(edge: LayoutEdge, which: 'from' | 'to'): number {
   const mark = edge.marks[which];
   if (mark === 'none') return thickness;
   if (mark === 'dot' || mark === 'odot') return (mark === 'dot' ? 0.8 : 0.82) * ARROW_MARKER_WIDTH * LINE_WIDTH;
-  const across = { arrow: 1, oarrow: 0.76, diamond: 0.76, odiamond: 0.62, bar: 0.9 }[mark];
+  const across = { arrow: 1, oarrow: 0.76, diamond: 0.76, odiamond: 0.62, bar: 0.9 }[mark as string] ?? 0.9;
   return across * ARROW_MARKER_WIDTH * thickness;
 }
 

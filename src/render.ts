@@ -1,6 +1,7 @@
 import {
   ARROW_LENGTH,
   ARROW_MARKER_WIDTH,
+  BORDER_WIDTH,
   DEFAULT_FONT_SIZE,
   ICON_LINES,
   LINE_WIDTH,
@@ -12,7 +13,7 @@ import {
   textStyleFor,
   widestLine,
 } from './constants.js';
-import type { Attrs, Mark, NodeCorners } from './ast.js';
+import { isErdMark, type Attrs, type Mark, type NodeCorners } from './ast.js';
 import { SourceError } from './errors.js';
 import { ICON_STROKE, type Icon, type IconTone, type LetterIcon, type Outline } from './icons.js';
 import { insideOutline,isBoxy, isRound, placePath, shapeOf, SUBPROCESS_INSET, type ShapeLook } from './outline.js';
@@ -637,7 +638,9 @@ function nodeSvg(
   // except its heading, which is its title: a badged box with nothing else in
   // it looks like the boxes beside it. Every rule that tried to tell a badge
   // from contents by looking was a guess; `badge:` and `heading:` say it.
-  const container = holdsContents(node);
+  // A table is one box with rows in it, not a backdrop for other boxes, so it
+  // wears a box's colors, and its rules show as its border does.
+  const container = holdsContents(node) && node.table === undefined;
   const border = borderOf(node.appearance, theme, container ? theme.containerStroke : theme.boxStroke);
   const fill = fillOf(node.appearance, theme, container ? containerFillOf(node, theme) : theme.boxFill);
   // A box is the one kind with two inkable parts, which is why its text needs
@@ -672,6 +675,12 @@ function nodeSvg(
   for (const extra of outlineDetail(outline, face.x, face.y, face.width, face.height, look)) {
     parts.push(`  <path d="${extra}" fill="none" stroke="${border}"${stroke.detail}/>`);
   }
+  let titleText = text;
+  if (node.table) {
+    const drawn = tableSvg(node, d, border, theme);
+    parts.push(...drawn.parts);
+    if (drawn.band !== undefined && node.textAttrs['color'] === undefined) titleText = textOnFill(drawn.band, theme) ?? text;
+  }
 
   // A leaf's text defaults to the middle of its box, a container's to the top
   // left of the band; both then read `at` for where it really goes. Where the
@@ -702,7 +711,7 @@ function nodeSvg(
   parts.push(
     sized(
       textBlock(node.lines, node.x, node.y, measurer, size, node.textBox, {
-        color: text,
+        color: titleText,
         align: textStyle.align,
         ink,
         reads: node.textAttrs['reads'],
@@ -712,6 +721,43 @@ function nodeSvg(
     ),
   );
   return parts;
+}
+
+/**
+ * A table's title band and its rules (design.org 5.1). The band runs from the
+ * top of the box to its first row, in `title: (fill: …)` or else the border's
+ * color, faint, over the box's fill; the rules are the border's color and
+ * thickness, under the band and above each row or section that has one.
+ * `band` is the band's color when it was stated, for the title's text to read on.
+ */
+function tableSvg(node: LayoutNode, outline: string, border: string, theme: Theme): { parts: string[]; band?: string } {
+  const parts: string[] = [];
+  const first = node.children[0];
+  const width = node.borderWidth ?? BORDER_WIDTH;
+  const rule = (y: number): string =>
+    `  <line x1="${round(node.x)}" y1="${round(y)}" x2="${round(node.x + node.width)}" y2="${round(y)}" stroke="${border}" stroke-width="${round(width)}"/>`;
+  const hasTitle = node.lines.some((line) => plain(line).length > 0);
+  const bottom = first ? first.y : node.y + node.height;
+  let band: string | undefined;
+  if (hasTitle) {
+    const id = `table-${node.name.replace(/[^\w.-]/g, '_')}`;
+    band = node.table?.titleFill;
+    parts.push(
+      `  <clipPath id="${id}"><path d="${outline}"/></clipPath>`,
+      `  <rect x="${round(node.x)}" y="${round(node.y)}" width="${round(node.width)}" height="${round(bottom - node.y)}" ` +
+        `fill="${band === undefined ? border : themeColor(band, theme)}"${band === undefined ? ' fill-opacity="0.18"' : ''} clip-path="url(#${id})"/>`,
+      `  <path d="${outline}" fill="none" stroke="${border}" stroke-width="${round(width)}"/>`,
+    );
+    if (first) parts.push(rule(bottom));
+  }
+  const ruled = (one: LayoutNode): void => {
+    for (const child of one.children) {
+      if (child.ruleAbove) parts.push(rule(child.y));
+      ruled(child);
+    }
+  };
+  ruled(node);
+  return { parts, ...(band !== undefined ? { band } : {}) };
 }
 
 /**
@@ -1097,13 +1143,12 @@ function drawEdge(
   } else if (route.pieces.some((piece) => 'c1' in piece)) {
     // A curved line is a spline through its points (design.org 6.3); a
     // straight leg of it, or a run along a side, stays straight.
-    const lead = arrowLength(edge.look.thickness);
-    const d = piecesPath(route, { start: edge.marks.from !== 'none' ? lead : 0, end: edge.marks.to !== 'none' ? lead : 0 });
+    const d = piecesPath(route, { start: markLead(edge, 'from'), end: markLead(edge, 'to') });
     parts.push(`  <path d="${d}" fill="none"${stroke}${markerEnd}${markerStart}/>`);
     ink = extentOfPoints(traceRoute(route));
   } else if (points.length > 2) {
-    const d =
-      edge.look.corners === 'rounded' ? roundedPath(points, arrowLength(edge.look.thickness)) : sharpPath(points);
+    const lead = Math.max(arrowLength(edge.look.thickness), markLead(edge, 'from'), markLead(edge, 'to'));
+    const d = edge.look.corners === 'rounded' ? roundedPath(points, lead) : sharpPath(points);
     parts.push(`  <path d="${d}" fill="none"${stroke}${markerEnd}${markerStart}/>`);
   } else {
     parts.push(
@@ -1458,9 +1503,39 @@ function markShape(mark: Mark, color: string, background: string): string {
       return `<path d="M 0.9 5 L 5 1.9 L 9.1 5 L 5 8.1 z" ${outline}/>`;
     case 'bar':
       return `<rect x="5.5" y="0.5" width="1.4" height="9" fill="${color}"/>`;
+    // The crow's-foot pairs, in a 20 by 10 box: the maximum against the box,
+    // the minimum just inside it.
+    case 'erd-one':
+      return [erdBar(15, color), erdBar(10.5, color)].join('');
+    case 'erd-zero-or-one':
+      return [erdBar(15, color), erdCircle(outline)].join('');
+    case 'erd-one-or-many':
+      return [erdFoot(color), erdBar(8.5, color)].join('');
+    case 'erd-zero-or-many':
+      return [erdFoot(color), erdCircle(outline)].join('');
     case 'none':
       return '';
   }
+}
+
+function erdBar(x: number, color: string): string {
+  return `<rect x="${x}" y="0.5" width="1.4" height="9" fill="${color}"/>`;
+}
+
+function erdCircle(outline: string): string {
+  return `<circle cx="7" cy="5" r="3" ${outline}/>`;
+}
+
+/** Three prongs from a point on the line, fanning out to meet the box. */
+function erdFoot(color: string): string {
+  return `<path d="M 20 0.7 L 11 5 L 20 9.3 M 11 5 L 20 5" fill="none" stroke="${color}" stroke-width="1.4"/>`;
+}
+
+/** How much of the line at this end a mark covers, which a curve leaves straight. */
+function markLead(edge: LayoutEdge, which: 'from' | 'to'): number {
+  const mark = edge.marks[which];
+  if (mark === 'none') return 0;
+  return arrowLength(edge.look.thickness) * (isErdMark(mark) ? 2 : 1);
 }
 
 /**
@@ -1480,9 +1555,13 @@ function freeEnd(edge: LayoutEdge, which: 'from' | 'to'): boolean {
  */
 function markMarker(mark: Mark, color: string, background: string, free: boolean): string {
   const round = mark === 'dot' || mark === 'odot';
-  const size = round ? ` markerUnits="userSpaceOnUse" markerWidth="${ARROW_MARKER_WIDTH * LINE_WIDTH}" markerHeight="${ARROW_MARKER_WIDTH * LINE_WIDTH}"` : ` markerWidth="${ARROW_MARKER_WIDTH}" markerHeight="${ARROW_MARKER_WIDTH}"`;
+  const erd = isErdMark(mark);
+  const size = round
+    ? ` markerUnits="userSpaceOnUse" markerWidth="${ARROW_MARKER_WIDTH * LINE_WIDTH}" markerHeight="${ARROW_MARKER_WIDTH * LINE_WIDTH}"`
+    : ` markerWidth="${ARROW_MARKER_WIDTH * (erd ? 2 : 1)}" markerHeight="${ARROW_MARKER_WIDTH}"`;
+  const refX = erd ? 20 : round && free ? 5 : 9;
   return [
-    `    <marker id="${markerId(mark, color, free)}" viewBox="0 0 10 10" refX="${round && free ? 5 : 9}" refY="5"${size} orient="auto-start-reverse">`,
+    `    <marker id="${markerId(mark, color, free)}" viewBox="0 0 ${erd ? 20 : 10} 10" refX="${refX}" refY="5"${size} orient="auto-start-reverse">`,
     `      ${markShape(mark, color, background)}`,
     '    </marker>',
   ].join('\n');
