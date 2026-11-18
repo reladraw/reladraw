@@ -478,12 +478,13 @@ Its bracket takes these settings, in any order:
 | setting | says |
 |---|---|
 | `title: (fill: …)` | the color of the band behind the name; otherwise the border's color, faint |
-| `headings: "a \| b"` | a first row naming the columns, split like any row, with a rule under it; muted, or in a style of its own with `headings: "a \| b" (style: head)` |
+| `headings: "a \| b"` | a first row naming the columns, split like any row, with a rule under it; muted unless `headings-style:` says otherwise |
+| `headings-style: head` | the style the headings row wears: its fill colors the row, and what it says about text reaches the headings |
 | `column-styles: -, type, key` | a style for each column's cells, in order, under the headings; `-` leaves a column as it is |
 | `column-gap: wide` | the room between columns, as any gap: `tight`, `normal`, `wide`, a number or pixels |
 | `column-widths: 9, -, -` | the least each column is, in order, in the file's unit or pixels; `-` is as wide as it holds |
 
-`fill:` colors the body, as on any box, and the rules are drawn in the border's color and thickness. A row's own `style:` reaches its cells, under the column's. `\|` is a bar in a cell rather than a split. A table with an empty text, `""`, has no band.
+`fill:` colors the body, as on any box, and the rules are drawn in the border's color and thickness. A row wears its own `style:`: a fill colors the row across the table, and what the style says about text reaches its cells, under the column's. A column's style is about its cells' text, so one that says nothing about text is refused. `\|` is a bar in a cell rather than a split. A table with an empty text, `""`, has no band.
 
 **Rows are named, so a line can end at one**, meeting the table's side level with that row:
 

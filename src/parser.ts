@@ -2967,7 +2967,7 @@ function readModifiers(
  * error, because the picture moves and nothing says why.
  */
 /** What a table's bracket takes (design.org 5.1). */
-export const TABLE_SETTINGS = ['title', 'headings', 'column-styles', 'column-gap', 'column-widths'] as const;
+export const TABLE_SETTINGS = ['title', 'headings', 'headings-style', 'column-styles', 'column-gap', 'column-widths'] as const;
 
 /**
  * `shape: table (title: (fill: navy), headings: "name | type", column-styles: -, type, key)`.
@@ -3000,26 +3000,20 @@ function readTableBracket(tokens: Token[], subject: string, line: number): Recor
       if (!value?.quoted) throw new SourceError(`${subject}: headings: takes the column names in quotes, split with |: headings: "name | type"`, line);
       set('headings', value.text);
       at += 1;
-      // `headings: "a | b" (style: head)`: the style the headings' cells wear.
       if (tokens[at]?.text === '(' && !tokens[at]!.quoted) {
-        at += 1;
-        if (tokens[at]?.text !== 'style:' || tokens[at]!.quoted) {
-          throw new SourceError(`${subject}: headings: takes style: in its bracket, such as headings: "name | type" (style: head)`, line);
-        }
-        at += 1;
-        const names: string[] = [];
-        while (at < tokens.length && !closes(at)) {
-          const word = tokens[at]!;
-          if (word.quoted || isAttrKey(word)) {
-            throw new SourceError(`${subject}: headings: takes only style: in its bracket, found "${word.text}"`, line);
-          }
-          for (const piece of word.text.split(',')) if (piece !== '' && piece !== 'and') names.push(piece);
-          at += 1;
-        }
-        if (names.length === 0) throw new SourceError(`${subject}: "style" has no value`, line);
-        set('headings.style', names.join(' '));
+        throw new SourceError(`${subject}: the headings take no bracket — their style is a setting of its own: headings-style: head`, line);
+      }
+    } else if (key === 'headings-style') {
+      // The style the headings' row wears, as column-styles: names the columns'.
+      const names: string[] = [];
+      while (at < tokens.length && !closes(at) && !isAttrKey(tokens[at]!)) {
+        const word = tokens[at]!;
+        if (word.quoted) throw new SourceError(`${subject}: headings-style: names a style, so it takes no quotes`, line);
+        for (const piece of word.text.split(',')) if (piece !== '' && piece !== 'and') names.push(piece);
         at += 1;
       }
+      if (names.length === 0) throw new SourceError(`${subject}: "headings-style" has no value`, line);
+      set('headings.style', names.join(' '));
     } else if (key === 'title') {
       if (tokens[at]?.text !== '(' || tokens[at]?.quoted) {
         throw new SourceError(`${subject}: title: takes a bracket, title: (fill: …), for the band behind the table's name`, line);

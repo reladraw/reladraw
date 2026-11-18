@@ -68,8 +68,16 @@ export function writeOutTables(
     const look = appearance(table.attrs, table.line);
     const columnStyles = look['shape.column-styles']?.split(',') ?? [];
     for (const style of columnStyles) {
-      if (style !== '-' && !appearanceHasStyle(appearance, style, table.line)) {
+      if (style === '-') continue;
+      if (!appearanceHasStyle(appearance, style, table.line)) {
         throw new SourceError(`"${table.name}" column-styles: names "${style}", and there is no style by that name`, table.line);
+      }
+      if (Object.keys(textOf(appearance({ style }, table.line))).length === 0) {
+        throw new SourceError(
+          `"${table.name}" column-styles: names "${style}", which says nothing about text, and a column's cells are text — ` +
+            `give it text: (…), such as style ${style}  text: (color: theme-muted)`,
+          table.line,
+        );
       }
     }
     const info: TableInfo = {
@@ -103,11 +111,11 @@ export function writeOutTables(
         throw new SourceError(`"${name}" is where the headings of "${table.name}" go — give the row another name`, table.line);
       }
       info.headings = name;
-      // Muted unless `headings: "…" (style: …)` says how they look.
+      // Muted unless `headings-style:` says how they look.
       const style = look['shape.headings.style'];
       for (const one of style?.split(' ') ?? []) {
         if (!appearanceHasStyle(appearance, one, table.line)) {
-          throw new SourceError(`"${table.name}" headings: (style: ${one}) names a style that doesn't exist`, table.line);
+          throw new SourceError(`"${table.name}" headings-style: names "${one}", and there is no style by that name`, table.line);
         }
       }
       rowsAndSections.push({
@@ -169,23 +177,27 @@ export function writeOutTables(
       };
       if (own['fill'] === undefined) attrs['fill'] = 'none';
       if (own['border'] === undefined && own['border.color'] === undefined) attrs['border'] = 'none';
-      const rowStyles = row.attrs['style'];
+      // A row's band is square, so a fill reads as a stripe across the table.
+      if (own['corners'] === undefined) attrs['corners'] = 'sharp';
+      // The row wears its style, so a fill colors the row; what the style says
+      // about text reaches the cells, under the column's, under the row's own words.
+      const rowText = textOf(own);
       const cells = cellsOf(row.text).map((text, index): NodeStmt => {
         if (info.columns[index] === undefined) info.columns[index] = [];
         const name = `${row.name}.${index + 1}`;
         info.columns[index]!.push(name);
         // The headings take their own style, never the columns'.
         const column = row.name === info.headings ? undefined : columnStyles[index];
-        const styles = [...(rowStyles?.split(' ') ?? []), ...(column !== undefined && column !== '-' ? [column] : [])];
+        const columnText = column === undefined || column === '-' ? {} : textOf(appearance({ style: column }, table.line));
         return {
           kind: 'node',
           name,
           text,
           statedText: true,
           // Against the cell's left side, since a column may be wider than this cell's text.
-          textAttrs: { ...withoutKeys(row.textAttrs, ['place', 'align']), place: 'inside left' },
+          textAttrs: { ...rowText, ...columnText, ...withoutKeys(row.textAttrs, ['place', 'align']), place: 'inside left' },
           placements: [],
-          attrs: { shape: 'none', ...(styles.length > 0 ? { style: styles.join(' ') } : {}) },
+          attrs: { shape: 'none' },
           line: row.line,
         };
       });
@@ -230,6 +242,14 @@ function appearanceHasStyle(appearance: (attrs: Attrs, line: number) => Attrs, s
   } catch {
     return false;
   }
+}
+
+/** What a style's `text: (…)` says, as a text's own bracket: `text.color` as `color`. */
+function textOf(look: Attrs): Attrs {
+  const said: Attrs = {};
+  for (const [key, value] of Object.entries(look)) if (key.startsWith('text.')) said[key.slice('text.'.length)] = value;
+  // A cell's text always sits against its left side.
+  return withoutKeys(said, ['place', 'align']);
 }
 
 function withoutKeys(attrs: Attrs, keys: string[]): Attrs {

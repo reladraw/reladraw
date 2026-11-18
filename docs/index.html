@@ -12210,7 +12210,7 @@ function readModifiers(tokens, start, subject, placement, line) {
  * error, because the picture moves and nothing says why.
  */
 /** What a table's bracket takes (design.org 5.1). */
-const TABLE_SETTINGS = ['title', 'headings', 'column-styles', 'column-gap', 'column-widths'];
+const TABLE_SETTINGS = ['title', 'headings', 'headings-style', 'column-styles', 'column-gap', 'column-widths'];
 /**
  * `shape: table (title: (fill: navy), headings: "name | type", column-styles: -, type, key)`.
  * Unlike other shapes' settings, one is a text, one a bracket and one a list,
@@ -12244,29 +12244,25 @@ function readTableBracket(tokens, subject, line) {
                 throw new SourceError(`${subject}: headings: takes the column names in quotes, split with |: headings: "name | type"`, line);
             set('headings', value.text);
             at += 1;
-            // `headings: "a | b" (style: head)`: the style the headings' cells wear.
             if (tokens[at]?.text === '(' && !tokens[at].quoted) {
-                at += 1;
-                if (tokens[at]?.text !== 'style:' || tokens[at].quoted) {
-                    throw new SourceError(`${subject}: headings: takes style: in its bracket, such as headings: "name | type" (style: head)`, line);
-                }
-                at += 1;
-                const names = [];
-                while (at < tokens.length && !closes(at)) {
-                    const word = tokens[at];
-                    if (word.quoted || isAttrKey(word)) {
-                        throw new SourceError(`${subject}: headings: takes only style: in its bracket, found "${word.text}"`, line);
-                    }
-                    for (const piece of word.text.split(','))
-                        if (piece !== '' && piece !== 'and')
-                            names.push(piece);
-                    at += 1;
-                }
-                if (names.length === 0)
-                    throw new SourceError(`${subject}: "style" has no value`, line);
-                set('headings.style', names.join(' '));
+                throw new SourceError(`${subject}: the headings take no bracket — their style is a setting of its own: headings-style: head`, line);
+            }
+        }
+        else if (key === 'headings-style') {
+            // The style the headings' row wears, as column-styles: names the columns'.
+            const names = [];
+            while (at < tokens.length && !closes(at) && !isAttrKey(tokens[at])) {
+                const word = tokens[at];
+                if (word.quoted)
+                    throw new SourceError(`${subject}: headings-style: names a style, so it takes no quotes`, line);
+                for (const piece of word.text.split(','))
+                    if (piece !== '' && piece !== 'and')
+                        names.push(piece);
                 at += 1;
             }
+            if (names.length === 0)
+                throw new SourceError(`${subject}: "headings-style" has no value`, line);
+            set('headings.style', names.join(' '));
         }
         else if (key === 'title') {
             if (tokens[at]?.text !== '(' || tokens[at]?.quoted) {
@@ -15205,8 +15201,14 @@ function writeOutTables(statements, appearance) {
         const look = appearance(table.attrs, table.line);
         const columnStyles = look['shape.column-styles']?.split(',') ?? [];
         for (const style of columnStyles) {
-            if (style !== '-' && !appearanceHasStyle(appearance, style, table.line)) {
+            if (style === '-')
+                continue;
+            if (!appearanceHasStyle(appearance, style, table.line)) {
                 throw new SourceError(`"${table.name}" column-styles: names "${style}", and there is no style by that name`, table.line);
+            }
+            if (Object.keys(textOf(appearance({ style }, table.line))).length === 0) {
+                throw new SourceError(`"${table.name}" column-styles: names "${style}", which says nothing about text, and a column's cells are text — ` +
+                    `give it text: (…), such as style ${style}  text: (color: theme-muted)`, table.line);
             }
         }
         const info = {
@@ -15236,11 +15238,11 @@ function writeOutTables(statements, appearance) {
                 throw new SourceError(`"${name}" is where the headings of "${table.name}" go — give the row another name`, table.line);
             }
             info.headings = name;
-            // Muted unless `headings: "…" (style: …)` says how they look.
+            // Muted unless `headings-style:` says how they look.
             const style = look['shape.headings.style'];
             for (const one of style?.split(' ') ?? []) {
                 if (!appearanceHasStyle(appearance, one, table.line)) {
-                    throw new SourceError(`"${table.name}" headings: (style: ${one}) names a style that doesn't exist`, table.line);
+                    throw new SourceError(`"${table.name}" headings-style: names "${one}", and there is no style by that name`, table.line);
                 }
             }
             rowsAndSections.push({
@@ -15302,7 +15304,12 @@ function writeOutTables(statements, appearance) {
                 attrs['fill'] = 'none';
             if (own['border'] === undefined && own['border.color'] === undefined)
                 attrs['border'] = 'none';
-            const rowStyles = row.attrs['style'];
+            // A row's band is square, so a fill reads as a stripe across the table.
+            if (own['corners'] === undefined)
+                attrs['corners'] = 'sharp';
+            // The row wears its style, so a fill colors the row; what the style says
+            // about text reaches the cells, under the column's, under the row's own words.
+            const rowText = textOf(own);
             const cells = cellsOf(row.text).map((text, index) => {
                 if (info.columns[index] === undefined)
                     info.columns[index] = [];
@@ -15310,16 +15317,16 @@ function writeOutTables(statements, appearance) {
                 info.columns[index].push(name);
                 // The headings take their own style, never the columns'.
                 const column = row.name === info.headings ? undefined : columnStyles[index];
-                const styles = [...(rowStyles?.split(' ') ?? []), ...(column !== undefined && column !== '-' ? [column] : [])];
+                const columnText = column === undefined || column === '-' ? {} : textOf(appearance({ style: column }, table.line));
                 return {
                     kind: 'node',
                     name,
                     text,
                     statedText: true,
                     // Against the cell's left side, since a column may be wider than this cell's text.
-                    textAttrs: { ...withoutKeys(row.textAttrs, ['place', 'align']), place: 'inside left' },
+                    textAttrs: { ...rowText, ...columnText, ...withoutKeys(row.textAttrs, ['place', 'align']), place: 'inside left' },
                     placements: [],
-                    attrs: { shape: 'none', ...(styles.length > 0 ? { style: styles.join(' ') } : {}) },
+                    attrs: { shape: 'none' },
                     line: row.line,
                 };
             });
@@ -15365,6 +15372,15 @@ function appearanceHasStyle(appearance, style, line) {
     catch {
         return false;
     }
+}
+/** What a style's `text: (…)` says, as a text's own bracket: `text.color` as `color`. */
+function textOf(look) {
+    const said = {};
+    for (const [key, value] of Object.entries(look))
+        if (key.startsWith('text.'))
+            said[key.slice('text.'.length)] = value;
+    // A cell's text always sits against its left side.
+    return withoutKeys(said, ['place', 'align']);
 }
 function withoutKeys(attrs, keys) {
     return Object.fromEntries(Object.entries(attrs).filter(([key]) => !keys.includes(key)));
