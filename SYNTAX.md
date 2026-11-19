@@ -1388,7 +1388,7 @@ With no file, `serve` opens the playground, served from this machine: the source
 reladraw note arch.reladraw "moved the cache under the API"
 ```
 
-`note` describes the change just made to a served file, for its Versions list, which shows it as an agent's. With no server serving the folder, it notes nothing, says so, and succeeds.
+`note` describes the change just made to a served file, for its Versions list, which shows it as an agent's. It reaches every server on the machine whose folder holds the file, wherever it is run from, so a file open on two pages is noted on both. With no server showing the file, it notes nothing, says so, and succeeds.
 
 ### A page of several diagrams
 
@@ -1584,6 +1584,10 @@ Designed and absent from the code.
 ## Changelog
 
 Pre-1.0, so the minor number is where a breaking change goes. Every removal is refused by name with the replacement quoted, rather than dropped in silence: an older file stops with an error saying what to write instead.
+
+**Unreleased**
+
+- `reladraw note` reaches every server whose folder holds the file, wherever it is run from. It used to reach only a server for exactly the folder it was run in, so a note run from a subfolder, or for a file served from a folder above, said nothing was noted.
 
 **0.32.0**
 

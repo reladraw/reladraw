@@ -871,12 +871,16 @@ async function saveSettings(
 
 const NOTE_HELP = `reladraw note <file.reladraw> "<what changed>"
 
-Describes the change just made to the file, for the page reladraw serve shows
-it on: the page's Versions menu lists it as the agent's, with this note. With
-no server running for the file's folder, nothing is noted.
+Describes the change just made to the file, for every page that shows it:
+each page's Versions menu lists it as the agent's, with this note. It reaches
+any server whose folder holds the file, wherever it is run from. With no
+server showing the file, nothing is noted.
 `;
 
-/** `reladraw note`: run from the folder the server serves, as serve is. */
+/**
+ * `reladraw note`: sends the note to every server on this machine whose
+ * folder holds the file, so a file open on two pages is noted on both.
+ */
 export async function noteCommand(args: string[]): Promise<number> {
   if (args.includes('-h') || args.includes('--help')) {
     process.stdout.write(NOTE_HELP);
@@ -887,26 +891,41 @@ export async function noteCommand(args: string[]): Promise<number> {
     process.stderr.write('reladraw: note takes a file and one quoted note: reladraw note diagram.reladraw "moved the cache under the API"\n');
     return 1;
   }
-  const root = await realpath(process.cwd());
-  const inside = await insideRoot(root, file);
-  if (typeof inside !== 'string') {
-    process.stderr.write(`reladraw: ${inside.problem}\n`);
+  if (extname(file) !== '.reladraw' && extname(file) !== PAGE_EXTENSION) {
+    process.stderr.write(`reladraw: ${file} isn't a .reladraw file or a ${PAGE_EXTENSION} spec\n`);
     return 1;
   }
-  for (let port = FIRST_PORT; port < FIRST_PORT + PORTS; port++) {
-    const there = await whoIsOn(port);
-    if (there?.root !== root) continue;
+  let real: string;
+  try {
+    real = await realpath(resolvePath(file));
+    if (!(await stat(real)).isFile()) throw new Error();
+  } catch {
+    process.stderr.write(`reladraw: there is no ${file}\n`);
+    return 1;
+  }
+  const ports = Array.from({ length: PORTS }, (_, i) => FIRST_PORT + i);
+  const servers = await Promise.all(ports.map(async (port) => ({ port, there: await whoIsOn(port) })));
+  let noted = 0;
+  let refused = 0;
+  for (const { port, there } of servers) {
+    if (there === null) continue;
+    const rel = relative(there.root, real);
+    if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) continue;
+    const inside = rel.split(sep).join('/');
     const answer = await fetch(`http://127.0.0.1:${port}/note?file=${encodeURIComponent(inside)}`, {
       method: 'POST',
       body: JSON.stringify({ note: text }),
     });
-    if (answer.ok) return 0;
-    process.stderr.write(`reladraw: the server didn't take the note: ${await answer.text()}\n`);
-    return 1;
+    if (answer.ok) noted++;
+    else {
+      refused++;
+      process.stderr.write(`reladraw: the server for ${there.root} didn't take the note: ${await answer.text()}\n`);
+    }
   }
+  if (refused > 0) return 1;
   // Not an error: an agent told to leave a note shouldn't be stopped by there
   // being no page to show it on.
-  process.stdout.write(`reladraw: no server is serving ${root}, so nothing was noted\n`);
+  if (noted === 0) process.stdout.write(`reladraw: no server is showing ${file}, so nothing was noted\n`);
   return 0;
 }
 

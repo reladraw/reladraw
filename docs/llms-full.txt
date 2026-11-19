@@ -50,7 +50,7 @@ diagram.reladraw:9: warning(edge-node-overlap): line api -> db crosses node cach
 6. `reladraw format diagram.reladraw` before handing the file over. It lines statements up in columns and evens out spacing, by the project's `.reladraw-format` if there is one, and changes nothing about what the file draws. A file you wrote then reads like one the user's project already has.
 7. Finish by showing the user the picture. Give the diagram a title with `diagram  title: "…"`, which heads the page, then run `reladraw serve diagram.reladraw` from the folder that holds the file (`cd` there first for a diagram in the outside folder of step 1), in the background, since it runs until stopped. It opens the page in the default browser: the diagram in its own colors, panning, zooming and going full screen, with an editor (Edit, or `e`) whose Save writes the file. Serve each diagram once: the page redraws by itself when you change the file, so there is nothing to tell the user to reload. One server per folder is all there is to it: serving a second file from the same folder opens its page on the server already running and returns at once, saying the folder is already served. That is success, not an error; don't stop the server, pick another port or retry, and don't wait on the second command, since it has finished. Don't build a page of your own around it. When there is no display to open it on, as in a remote or headless session, or when the user has said not to open it, add `--no-open` and give them the address it prints. When the user wants a page to send to someone, `reladraw render diagram.reladraw --page` writes `diagram.html`, one file that needs nothing running; put it in the outside folder of step 1 with `-o` for a diagram kept in the project, so it isn't committed by mistake. Write an SVG only when something will use it, such as a README picture: `reladraw render diagram.reladraw` writes `diagram.svg` beside the source.
 
-**The user edits the file too.** On the served page the user can change the diagram and save it, so read the file again before every change you make to it, even one you wrote a minute ago; what you remember may no longer be what is there. After each change, describe it in a few words, which the page's Versions menu shows as yours: `reladraw note diagram.reladraw "moved the cache under the API"`, run from the folder you served. With no server running it notes nothing and says so, which is fine.
+**The user edits the file too.** On the served page the user can change the diagram and save it, so read the file again before every change you make to it, even one you wrote a minute ago; what you remember may no longer be what is there. After each change, describe it in a few words, which the page's Versions menu shows as yours: `reladraw note diagram.reladraw "moved the cache under the API"`, from any folder. With no server showing the file it notes nothing and says so, which is fine.
 
 **Several diagrams go on one page.** When you have drawn more than one diagram for the same question, such as a view per endpoint or the steps of a change, serve them together rather than one page each: `reladraw serve diagrams/` for a folder, or `reladraw serve a.reladraw b.reladraw` for files. The page opens on an overview of them all, drawn small, with a drop-down to switch between them, and follows every file. To fix their order and give each a short label, write a page spec, `diagrams.reladraw-page`, and serve that:
 
@@ -1658,7 +1658,7 @@ With no file, `serve` opens the playground, served from this machine: the source
 reladraw note arch.reladraw "moved the cache under the API"
 ```
 
-`note` describes the change just made to a served file, for its Versions list, which shows it as an agent's. With no server serving the folder, it notes nothing, says so, and succeeds.
+`note` describes the change just made to a served file, for its Versions list, which shows it as an agent's. It reaches every server on the machine whose folder holds the file, wherever it is run from, so a file open on two pages is noted on both. With no server showing the file, it notes nothing, says so, and succeeds.
 
 ### A page of several diagrams
 
@@ -1854,6 +1854,10 @@ Designed and absent from the code.
 ## Changelog
 
 Pre-1.0, so the minor number is where a breaking change goes. Every removal is refused by name with the replacement quoted, rather than dropped in silence: an older file stops with an error saying what to write instead.
+
+**Unreleased**
+
+- `reladraw note` reaches every server whose folder holds the file, wherever it is run from. It used to reach only a server for exactly the folder it was run in, so a note run from a subfolder, or for a file served from a folder above, said nothing was noted.
 
 **0.32.0**
 
