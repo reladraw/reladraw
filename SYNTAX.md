@@ -1,4 +1,4 @@
-# Syntax reference — 0.32.0
+# Syntax reference — 0.32.1
 
 What the language accepts. The changelog at the end lists what changed in each published version; 0.17.0's changes are large, and its entry has a table of every old spelling and what to write instead.
 
@@ -1585,7 +1585,7 @@ Designed and absent from the code.
 
 Pre-1.0, so the minor number is where a breaking change goes. Every removal is refused by name with the replacement quoted, rather than dropped in silence: an older file stops with an error saying what to write instead.
 
-**Unreleased**
+**0.32.1**
 
 - `reladraw note` reaches every server whose folder holds the file, wherever it is run from. It used to reach only a server for exactly the folder it was run in, so a note run from a subfolder, or for a file served from a folder above, said nothing was noted.
 - A file that isn't there is named as missing. `reladraw serve` and `reladraw note` used to say a missing `notes.txt` wasn't a `.reladraw` file, and `render` and `check` printed the system's raw `ENOENT` error; each now says there is no file or folder by that name.
