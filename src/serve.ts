@@ -227,6 +227,13 @@ async function pageAsked(root: string, inputs: string[]): Promise<string | { pro
   return `.page?${query}`;
 }
 
+async function exists(path: string): Promise<boolean> {
+  return stat(path).then(
+    () => true,
+    () => false,
+  );
+}
+
 async function isFolder(path: string): Promise<boolean> {
   return stat(path).then(
     (found) => found.isDirectory(),
@@ -255,10 +262,12 @@ async function folderInside(root: string, folder: string): Promise<string | { pr
  * with it: outside the folder, not a .reladraw file or a page spec, or not there.
  */
 async function insideRoot(root: string, file: string): Promise<string | { problem: string; status: number }> {
+  const full = isAbsolute(file) ? file : resolvePath(root, file);
   if (extname(file) !== '.reladraw' && extname(file) !== PAGE_EXTENSION) {
+    // A path that isn't there says so, rather than blaming its kind.
+    if (!(await exists(full))) return { problem: `there is no file or folder ${file}`, status: 404 };
     return { problem: `${file} isn't a .reladraw file or a ${PAGE_EXTENSION} spec`, status: 404 };
   }
-  const full = isAbsolute(file) ? file : resolvePath(root, file);
   let real: string;
   try {
     real = await realpath(full);
@@ -892,7 +901,11 @@ export async function noteCommand(args: string[]): Promise<number> {
     return 1;
   }
   if (extname(file) !== '.reladraw' && extname(file) !== PAGE_EXTENSION) {
-    process.stderr.write(`reladraw: ${file} isn't a .reladraw file or a ${PAGE_EXTENSION} spec\n`);
+    process.stderr.write(
+      (await exists(resolvePath(file)))
+        ? `reladraw: ${file} isn't a .reladraw file or a ${PAGE_EXTENSION} spec\n`
+        : `reladraw: there is no file or folder ${file}\n`,
+    );
     return 1;
   }
   let real: string;

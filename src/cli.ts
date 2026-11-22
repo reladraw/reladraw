@@ -342,6 +342,10 @@ async function main(argv: string[]): Promise<number> {
     return renderMany(command, inputs, out, page, optionsFor);
   }
   const input = first;
+  if (!existsSync(input)) {
+    process.stderr.write(`reladraw: there is no file or folder ${input}\n`);
+    return 1;
+  }
   const source = await readFile(input, 'utf8');
   const options = optionsFor(input);
   let drawn: { text: string; findings: Finding[] };
