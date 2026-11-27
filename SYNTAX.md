@@ -1575,6 +1575,10 @@ Designed and absent from the code.
 
 Pre-1.0, so the minor number is where a breaking change goes. Every removal is refused by name with the replacement quoted, rather than dropped in silence: an older file stops with an error saying what to write instead.
 
+**Unreleased**
+
+- An icon name that isn't Lucide's is answered with icons Lucide files under that word, too: `icon: mobile` suggests `smartphone` and `tablet`, and `icon: hard-disk` suggests `hard-drive`.
+
 **0.33.0**
 
 - **The icons are Lucide's.** `icon:`, `badge:` and a link's badge take any of [Lucide](https://lucide.dev)'s few thousand icons by its name, such as `server`, `smartphone` or `cloud`, all listed at [lucide.dev/icons](https://lucide.dev/icons). There used to be seven, drawn for reladraw. `laptop`, `package` and `database` keep their names with Lucide's pictures; `disk`, `desktop`, `cubes` and `cube` are refused, naming `hard-drive`, `monitor`, `boxes` and `box`. A name that isn't an icon is refused with the nearest ones. Icons are now drawn in lines with no shading, so a diagram with icons looks lighter, though nothing moves.

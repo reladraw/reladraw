@@ -15,6 +15,7 @@
 
 import { SourceError } from './errors.js';
 import { LUCIDE, LUCIDE_ROOT, LUCIDE_VERSION } from './lucide.js';
+import { LUCIDE_TAGS } from './lucide-tags.js';
 import { readShapeLook, type ShapeLook } from './outline.js';
 
 /**
@@ -65,27 +66,53 @@ const RENAMED: Readonly<Record<string, string>> = {
   instance: 'box',
 };
 
+/** Each Lucide tag, and the icons filed under it with where it comes in their list. */
+let tagIndex: Map<string, { name: string; at: number }[]> | undefined;
+function iconsTagged(tag: string): { name: string; at: number }[] {
+  if (!tagIndex) {
+    tagIndex = new Map();
+    for (const [name, joined] of Object.entries(LUCIDE_TAGS)) {
+      joined.split(';').forEach((each, at) => {
+        const list = tagIndex!.get(each) ?? [];
+        list.push({ name, at });
+        tagIndex!.set(each, list);
+      });
+    }
+  }
+  return tagIndex.get(tag) ?? [];
+}
+
 /**
  * The built-in names nearest to one that isn't, best first: a name that holds
- * it or is held by it (`phone` → `smartphone`), one sharing a word with it
- * (`cloud-server` → `server`), then one a few letters away (`databse`).
+ * it or is held by it (`phone` → `smartphone`), one a few letters away
+ * (`databse`), one Lucide files under that word (`mobile` → `smartphone`),
+ * then one sharing a word with it (`cloud-server` → `server`).
+ *
+ * Among the icons filed under the word, one that has it early in its tags, and
+ * a plain name over a compound one, comes first: `mobile` is the fourth tag of
+ * `smartphone` but the fourth of `smartphone-charging` too.
  */
 export function nearestIcons(named: string, count = 5): string[] {
   const words = named.split('-').filter((word) => word.length > 1);
-  const scored: { name: string; score: number }[] = [];
+  const best = new Map<string, number>();
+  const offer = (name: string, score: number) => {
+    if (score < (best.get(name) ?? Infinity)) best.set(name, score);
+  };
   for (const name of Object.keys(LUCIDE)) {
-    let score: number;
     if (name.includes(named) || named.includes(name)) {
-      score = Math.abs(name.length - named.length);
+      offer(name, Math.abs(name.length - named.length));
     } else if (words.some((word) => name.split('-').includes(word))) {
-      score = 20 + name.length;
+      offer(name, 40 + name.length);
     } else {
       const distance = editDistance(named, name, 3);
-      if (distance > 2) continue;
-      score = 10 + distance;
+      if (distance <= 2) offer(name, 10 + distance);
     }
-    scored.push({ name, score });
   }
+  const asTag = named.replace(/-/g, ' ');
+  for (const { name, at } of [...iconsTagged(named), ...(asTag === named ? [] : iconsTagged(asTag))]) {
+    offer(name, 15 + at + 3 * (name.split('-').length - 1));
+  }
+  const scored = [...best].map(([name, score]) => ({ name, score }));
   scored.sort((a, b) => a.score - b.score || a.name.localeCompare(b.name));
   return scored.slice(0, count).map(({ name }) => name);
 }

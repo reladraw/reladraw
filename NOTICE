@@ -56,7 +56,7 @@ THE SOFTWARE.
 
 Icons
 
-reladraw's built-in icons (src/lucide.ts) are Lucide's, from lucide-static 1.82.0
+reladraw's built-in icons (src/lucide.ts) and their tags (src/lucide-tags.ts) are Lucide's, from lucide-static 1.82.0
 (https://lucide.dev). Lucide's license follows as Lucide ships it.
 
 ISC License
