@@ -534,7 +534,7 @@ const CHEATSHEET = `
       <div class="cs-row"><code>badge: database</code><span>the picture beside the text, in the box</span></div>
       <div class="cs-row"><code>layout: deck  cards: "v1" "v2"</code><span>a stack of cards, one per text, front first</span></div>
       <div class="cs-row"><code>icon logo """&lt;svg …&gt;…&lt;/svg&gt;"""</code><span>your own picture, used as icon: logo</span></div>
-      <p class="cs-note">Pictures: <code>disk</code> <code>desktop</code> <code>laptop</code> <code>package</code> <code>cubes</code> <code>cube</code> <code>database</code>.</p>
+      <p class="cs-note">Pictures are Lucide's icons, by Lucide's names, all listed at <a href="https://lucide.dev/icons" target="_blank" rel="noopener">lucide.dev/icons</a>: <code>server</code> <code>database</code> <code>laptop</code> <code>smartphone</code> <code>hard-drive</code> <code>boxes</code>.</p>
     </section>
     <section class="cs-card" style="--hue: var(--syn-value)"><h3>Text</h3>
       <div class="cs-row"><code>node a "Server" (size: large)</code><span>small, normal or large</span></div>

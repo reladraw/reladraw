@@ -20,10 +20,10 @@ node cluster ""  shape: none
 
 node cluster.hub "Cloud sync"  badge: package  style: synced
 
-node cluster.desktop1       "Desktop 1 / Linux" (inside top, align: left)    above-left of cluster.hub (gap: tight)   badge: desktop
+node cluster.desktop1       "Desktop 1 / Linux" (inside top, align: left)    above-left of cluster.hub (gap: tight)   badge: monitor
 node cluster.desktop1.files "shared folder / [dim]synced[/dim]"  style: synced
 
-node cluster.desktop2       "Desktop 2 / Windows" (inside top, align: left)  above-right of cluster.hub (gap: tight)  badge: desktop
+node cluster.desktop2       "Desktop 2 / Windows" (inside top, align: left)  above-right of cluster.hub (gap: tight)  badge: monitor
 node cluster.desktop2.files "shared folder / [dim]synced[/dim]"  style: synced
 
 node cluster.laptop1        "Laptop 1 / macOS" (inside top, align: left)     below-left of cluster.hub (gap: tight)   badge: laptop
@@ -39,7 +39,7 @@ edge cluster.laptop2.files  <-> cluster.hub  style: synced  from: left   to: bot
 
 
 // --- The database dumps -----------------------------------------------------
-// The dumps sit a wide gap left of the machines, level with the Docker cubes,
+// The dumps sit a wide gap left of the machines, level with the Docker boxes,
 // and the server a gap left of the dumps.
 
 node dumps ""  left of cluster (gap: wide)  even with server.docker  shape: none  layout: column
@@ -51,19 +51,19 @@ node dumps_note "Written by nightly cron job." (wrap: 30)  below dumps (gap: tig
 
 // --- The server -------------------------------------------------------------
 
-node server         "Home Server" (inside top, align: left)  left of dumps  even with cluster  badge: desktop
+node server         "Home Server" (inside top, align: left)  left of dumps  even with cluster  badge: monitor
 node server.mirror  "shared folder / mirror"  style: backup  width: server.docker
 node server.deploy  "deploy dir"  below server.mirror  width: server.docker
 
-// The cubes are nodes rather than ornament: two of them are where the dump
+// The boxes are nodes rather than ornament: two of them are where the dump
 // arrows start. The lower pair is centered under the upper three by naming two
 // targets and nothing else.
 node server.docker  "Docker" (inside bottom)  below server.deploy (gap: wide)
-node server.docker.a  icon: cube
-node server.docker.b  right of server.docker.a (gap: tight)  icon: cube
-node server.docker.db1  right of server.docker.b (gap: tight)  icon: cube
-node server.docker.c  below server.docker.a and server.docker.b (gap: tight)  icon: cube
-node server.docker.db2  below server.docker.b and server.docker.db1 (gap: tight)  icon: cube
+node server.docker.a  icon: box
+node server.docker.b  right of server.docker.a (gap: tight)  icon: box
+node server.docker.db1  right of server.docker.b (gap: tight)  icon: box
+node server.docker.c  below server.docker.a and server.docker.b (gap: tight)  icon: box
+node server.docker.db2  below server.docker.b and server.docker.db1 (gap: tight)  icon: box
 
 edge server.deploy -> server.docker  "compose up"
 
@@ -86,7 +86,7 @@ edge cluster.desktop1.files -> server.deploy  "deploy script"                 fr
 
 // --- The backup drive -------------------------------------------------------
 
-node drive          "External HD" (inside top, align: left)  left of server  top even with server  badge: disk  layout: column (widths: match)
+node drive          "External HD" (inside top, align: left)  left of server  top even with server  badge: hard-drive  layout: column (widths: match)
 node drive.mirror   "shared folder / backup"  style: backup
 node drive.archive  "archive"
 

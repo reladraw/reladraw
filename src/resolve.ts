@@ -943,7 +943,7 @@ function collectDefaults(
 /**
  * One bundle laid over a weaker one, key by key — except the body, which is
  * one thing said by either of two words. A default's `shape: cylinder` under
- * a style's `icon: disk` is not a node with two bodies; the style said what
+ * a style's `icon: hard-drive` is not a node with two bodies; the style said what
  * this node is drawn as, and that settles it.
  */
 function over(base: Attrs, top: Attrs): Attrs {

@@ -15,8 +15,8 @@ node server.backup  right of server.docker (gap: tight)
 // Empty quotes are the other half: a node that is deliberately blank.
 
 node pool ""  right of server (gap: wide)  shape: none
-node pool.one  icon: cube
-node pool.two  right of pool.one (gap: tight)  icon: cube
+node pool.one  icon: box
+node pool.two  right of pool.one (gap: tight)  icon: box
 
 // A stated text still wins.
 

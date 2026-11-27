@@ -519,6 +519,7 @@ export const PAGE_STYLE = String.raw`
   .cs-note { margin: 0; padding: 7px 12px 9px; font-size: 12px; color: var(--muted);
     border-top: 1px solid color-mix(in srgb, var(--rule) 25%, transparent); }
   .cs-note code { font: 11.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--ink); }
+  .cs-note a { color: var(--accent); }
   .cs-none { margin: 0; padding: 24px 16px; color: var(--muted); }
   .cs-none[hidden] { display: none; }
   /* The keyboard shortcuts: the cheatsheet's cards, for the page's keys. */

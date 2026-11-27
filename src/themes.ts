@@ -26,8 +26,6 @@ export interface Theme {
   edge: string;
   /** An icon's drawn line. */
   iconInk: string;
-  /** The body an icon's lines enclose. */
-  iconShade: string;
   /** The theme's signature color, which `theme-primary` names. */
   primary: Accent;
   /** Its second color, which `theme-secondary` names. */
@@ -169,7 +167,6 @@ export const DARK_THEME: Theme = {
   // system. One pair for the whole set is the deliberate difference: an icon
   // should read as part of the diagram's palette, not as clip art dropped in.
   iconInk: '#8d8d8e',
-  iconShade: '#3e3d58',
   // The reference's two colored boxes: `synced` is the green, `dump` the red.
   // The green's fill is sampled rather than mixed, so the benchmark written in
   // theme colors renders as it did in hex. The red's is mixed, as every other
@@ -189,7 +186,6 @@ const LIGHT_THEME: Theme = {
   mutedText: '#6e7781',
   edge: '#7c83a0',
   iconInk: '#57606a',
-  iconShade: '#d6d9e6',
   primary: accent('#3a7d44', '#ffffff', '#ffffff'),
   secondary: accent('#b3423a', '#ffffff', '#ffffff'),
 };
@@ -212,7 +208,6 @@ export const THEMES: Readonly<Record<string, Theme>> = {
     mutedText: '#657b83',
     edge: '#268bd2',
     iconInk: '#839496',
-    iconShade: '#0f4a58',
     primary: accent('#268bd2', '#002b36', '#fdf6e3'),
     secondary: accent('#cb4b16', '#002b36', '#fdf6e3'),
   },
@@ -227,7 +222,6 @@ export const THEMES: Readonly<Record<string, Theme>> = {
     mutedText: '#93a1a1',
     edge: '#268bd2',
     iconInk: '#657b83',
-    iconShade: '#e0d9c3',
     primary: accent('#268bd2', '#fdf6e3', '#fdf6e3'),
     secondary: accent('#cb4b16', '#fdf6e3', '#fdf6e3'),
   },
@@ -242,7 +236,6 @@ export const THEMES: Readonly<Record<string, Theme>> = {
     mutedText: '#a89984',
     edge: '#d79921',
     iconInk: '#a89984',
-    iconShade: '#504945',
     primary: accent('#fe8019', '#282828', '#282828'),
     secondary: accent('#8ec07c', '#282828', '#282828'),
   },
@@ -256,7 +249,6 @@ export const THEMES: Readonly<Record<string, Theme>> = {
     mutedText: '#7c6f64',
     edge: '#b57614',
     iconInk: '#7c6f64',
-    iconShade: '#d5c4a1',
     primary: accent('#af3a03', '#fbf1c7', '#fbf1c7'),
     secondary: accent('#427b58', '#fbf1c7', '#fbf1c7'),
   },
@@ -271,7 +263,6 @@ export const THEMES: Readonly<Record<string, Theme>> = {
     mutedText: '#9399b2',
     edge: '#89b4fa',
     iconInk: '#a6adc8',
-    iconShade: '#45475a',
     primary: accent('#cba6f7', '#1e1e2e', '#1e1e2e'),
     secondary: accent('#fab387', '#1e1e2e', '#1e1e2e'),
   },
@@ -286,7 +277,6 @@ export const THEMES: Readonly<Record<string, Theme>> = {
     mutedText: '#7c7f93',
     edge: '#7287fd',
     iconInk: '#6c6f85',
-    iconShade: '#ccd0da',
     primary: accent('#8839ef', '#eff1f5', '#eff1f5'),
     secondary: accent('#fe640b', '#eff1f5', '#eff1f5'),
   },
@@ -301,7 +291,6 @@ export const THEMES: Readonly<Record<string, Theme>> = {
     mutedText: '#7b88a1',
     edge: '#81a1c1',
     iconInk: '#aeb7c6',
-    iconShade: '#434c5e',
     primary: accent('#88c0d0', '#2e3440', '#2e3440'),
     secondary: accent('#d08770', '#2e3440', '#2e3440'),
   },
@@ -316,7 +305,6 @@ export const THEMES: Readonly<Record<string, Theme>> = {
     mutedText: '#6272a4',
     edge: '#bd93f9',
     iconInk: '#b6b9cc',
-    iconShade: '#565a70',
     primary: accent('#bd93f9', '#282a36', '#282a36'),
     secondary: accent('#ff79c6', '#282a36', '#282a36'),
   },
@@ -332,7 +320,6 @@ export const THEMES: Readonly<Record<string, Theme>> = {
     mutedText: '#a0a0a0',
     edge: '#ffc799',
     iconInk: '#a0a0a0',
-    iconShade: '#282828',
     primary: accent('#ffc799', '#101010', '#101010'),
     secondary: accent('#99ffe4', '#101010', '#101010'),
   },
@@ -348,7 +335,6 @@ export const THEMES: Readonly<Record<string, Theme>> = {
     mutedText: '#c8c8c8',
     edge: '#ffffff',
     iconInk: '#ffffff',
-    iconShade: '#3a3a3a',
     primary: accent('#ffd400', '#000000', '#000000'),
     secondary: accent('#00e5ff', '#000000', '#000000'),
   },
@@ -362,7 +348,6 @@ export const THEMES: Readonly<Record<string, Theme>> = {
     mutedText: '#3d3d3d',
     edge: '#000000',
     iconInk: '#000000',
-    iconShade: '#d0d0d0',
     primary: accent('#0033cc', '#ffffff', '#ffffff'),
     secondary: accent('#b00000', '#ffffff', '#ffffff'),
   },
@@ -378,7 +363,6 @@ export const THEMES: Readonly<Record<string, Theme>> = {
     mutedText: '#666666',
     edge: '#333333',
     iconInk: '#000000',
-    iconShade: '#ffffff',
     // Grays, and pale ones for fills: a box set apart without spending color.
     primary: accent('#333333', '#ffffff', '#ffffff', '#e6e6e6'),
     secondary: accent('#777777', '#ffffff', '#ffffff', '#f2f2f2'),

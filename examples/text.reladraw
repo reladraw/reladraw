@@ -40,9 +40,9 @@ node shelf.two "second"  below shelf.one (gap: tight)  style: plain
 // the text at the top or bottom of the box. Joined to the text, the picture and
 // the text are centered in the box together.
 node tall "Top"     right of shelf (gap: wide)  style: plain
-node tall.disk  icon: disk  1 right of tall text  top even with tall text  join-with: tall text
+node tall.disk  icon: hard-drive  1 right of tall text  top even with tall text  join-with: tall text
 node deep "Bottom"  below tall (gap: tight)  style: plain
-node deep.disk  icon: disk  1 right of deep text  bottom even with deep text  join-with: deep text
+node deep.disk  icon: hard-drive  1 right of deep text  bottom even with deep text  join-with: deep text
 
 // Marked words take their style's size as well as its color. A line that is
 // all small is spaced as a small line, and a small word mid-line sits on the

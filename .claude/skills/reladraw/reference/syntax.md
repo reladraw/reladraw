@@ -14,7 +14,7 @@ A file is a list of statements. Each starts at the beginning of a line, and noth
 
 ```
 node desktop1 "Desktop 1 / Linux" (inside top, align: left)
-  badge: desktop
+  badge: monitor
 node desktop1.files "shared folder"
 ```
 
@@ -47,7 +47,7 @@ An indented line with nothing to continue, at the top of the file or after a bla
 A statement is a positional head (the keyword, a name and a text) followed by attributes and placements in any order:
 
 ```
-node server "Home Server" (inside top)  left of cluster  badge: desktop
+node server "Home Server" (inside top)  left of cluster  badge: monitor
 //   ^      ^             ^             ^                ^
 //   name   text          its bracket   a placement      an attribute
 ```
@@ -145,25 +145,15 @@ A flowchart shape geometry has no word for is named `flow-` and what it means, a
 | `flow-punched-tape` | paper tape: wavy top and bottom |
 | `flow-collate` | collate: two triangles point to point, its text on a patch where they meet |
 
-`icon:` is a picture the node is drawn *as*, with no box:
-
-| icon | means |
-|---|---|
-| `disk` | a physical drive |
-| `desktop` | a workstation |
-| `laptop` | a portable machine |
-| `package` | something stored as a whole: an archive, a bucket, a sync root |
-| `cubes` | several interchangeable units; always three, since it is the symbol for "several", not a count |
-| `cube` | one of them |
-| `database` | a store queried rather than read as files |
+`icon:` is a picture the node is drawn *as*, with no box. The pictures are [Lucide](https://lucide.dev)'s icons, named as Lucide names them and all listed at [lucide.dev/icons](https://lucide.dev/icons): `server`, `database`, `laptop`, `smartphone`, `hard-drive`, `cloud`, `package`, and a few thousand more. They are drawn in lines of the theme's icon color. `boxes` is the symbol for "several", not a count; where the number matters they are separate nodes, each `icon: box`.
 
 ```
 node dump "db dump / (app 1)"  shape: document
 node aside "Written by a nightly cron job." (wrap: 30)  shape: none  below dump (gap: tight)
-node svc  icon: cube  right of dump
+node svc  icon: box  right of dump
 ```
 
-Writing both keys is an error naming both. An unknown name is refused with the whole set, and so is a setting the shape doesn't take. A shape is named for how it looks, `diamond` and never `decision`, and no picture has two names. An icon is named for what it is: `package`, not `open-box`.
+Writing both keys is an error naming both. An unknown shape is refused with the whole set, and so is a setting the shape doesn't take. An unknown icon is refused with the nearest names, `icon: phon` asking whether you meant `phone` or `megaphone`, and the address of the full list. A shape is named for how it looks, `diamond` and never `decision`, and no picture has two names.
 
 **Size and text.** A shape grows until its text, with its padding, fits at the shape's middle, the center of its area: a diamond is twice the padded text each way, and a triangle's text sits a third of the way from its base. A stated `width:` and `height:` stretch the shape to fill them, which is how a diamond is made flatter; a text that no longer fits is drawn as it is and reported as `text-overflow`. The text-position words of a [node's text](#where-it-sits), such as `(inside bottom)`, move it off the middle. `flow-collate`'s text sits on a patch of its own fill where its two triangles meet; `(fill: none)` in the text's bracket draws it without one.
 
@@ -261,21 +251,21 @@ A file (`icon rack "./rack.svg"`) is found relative to the diagram's own file. O
 `badge: <icon>` makes a picture part of the node's label: the whole text, however many lines, with the picture beside it, placed as one unit.
 
 ```
-node drive "External HD"  badge: disk
+node drive "External HD"  badge: hard-drive
 ```
 
 It is shorthand for a child joined to the text ([Joined to the text](#joined-to-the-text)), and this is what it stands for:
 
 ```
 node drive "External HD"
-node drive.badge  icon: disk  1 right of drive text  join-with: drive text
+node drive.badge  icon: hard-drive  1 right of drive text  join-with: drive text
 ```
 
-The text keeps its own position words, so `node d1 "Desktop 1 / Linux" (inside top, align: left)  badge: desktop` puts the label, picture and all, in the top-left corner. On a box with nothing else in it the label is centered; on a box with children it takes the title's place and the children go under it. The picture is two lines of text tall and can be named like any child (`below drive.badge`, `edge a -> drive.badge`). Declaring `drive.badge` yourself beside a `badge:` is an error naming both ways out. Only a box can wear one.
+The text keeps its own position words, so `node d1 "Desktop 1 / Linux" (inside top, align: left)  badge: monitor` puts the label, picture and all, in the top-left corner. On a box with nothing else in it the label is centered; on a box with children it takes the title's place and the children go under it. The picture is two lines of text tall and can be named like any child (`below drive.badge`, `edge a -> drive.badge`). Declaring `drive.badge` yourself beside a `badge:` is an error naming both ways out. Only a box can wear one.
 
-With an empty text, `node flag "" badge: disk`, the node is exactly the picture and its padding, since an empty text takes no room.
+With an empty text, `node flag "" badge: hard-drive`, the node is exactly the picture and its padding, since an empty text takes no room.
 
-**A picture that is a thing of its own is a child**, placed like any other: `node drive.mark  icon: disk  1 right of drive text` beside the text. Placed against the text without `join-with:`, it is not part of the label: the text stays where it would be without it, and the box grows to hold both. In the corner of a box its other children size, `node laptop.mark  icon: laptop  inside laptop top-right  stays above laptop.photos` ([Against its own parent](#against-its-own-parent)). A corner of a box with nothing in it but its text is on the text.
+**A picture that is a thing of its own is a child**, placed like any other: `node drive.mark  icon: hard-drive  1 right of drive text` beside the text. Placed against the text without `join-with:`, it is not part of the label: the text stays where it would be without it, and the box grows to hold both. In the corner of a box its other children size, `node laptop.mark  icon: laptop  inside laptop top-right  stays above laptop.photos` ([Against its own parent](#against-its-own-parent)). A corner of a box with nothing in it but its text is on the text.
 
 ### Padding
 
@@ -314,11 +304,11 @@ node notes "notes"  below resolver (gap: tight)  shape: none
 A placement may name several targets, joined by `and` or commas: `right of a, b and c`. It places against the box bounding them all, a region nobody had to declare. A distance and a direction after the `and` or comma start another placement instead: `right of a and 2 above c top` is `right of a  2 above c top`. To place against a point and a box together, name the point first: `point p  2 above c top-center`, then `right of a and p`. A lone direction centers on that region, which is how one row is offset against another:
 
 ```
-node a  icon: cube
-node b  right of a (gap: tight)  icon: cube
-node c  right of b (gap: tight)  icon: cube
-node d  below a and b (gap: tight)  icon: cube
-node e  below b and c (gap: tight)  icon: cube
+node a  icon: box
+node b  right of a (gap: tight)  icon: box
+node c  right of b (gap: tight)  icon: box
+node d  below a and b (gap: tight)  icon: box
+node e  below b and c (gap: tight)  icon: box
 ```
 
 A comma promises another target, so `right of a, gap: tight` is refused, naming the comma.
@@ -601,7 +591,7 @@ A box may name one child as its heading, `heading: d1.head`, followed by the pos
 ```
 node d1  heading: d1.head (inside top, align: left)  layout: column
 node d1.head ""  shape: none  layout: row (gap: tight)
-node d1.head.icon  icon: desktop
+node d1.head.icon  icon: monitor
 node d1.head.name  "Desktop 1" (size: normal)  shape: none
 node d1.files "shared folder"
 ```
@@ -614,7 +604,7 @@ The heading child places nothing itself and isn't the anchor. Refused by name: a
 
 ```
 node tall "Top"  height: 8
-node tall.disk  icon: disk  1 right of tall text  top even with tall text  join-with: tall text
+node tall.disk  icon: hard-drive  1 right of tall text  top even with tall text  join-with: tall text
 ```
 
 A unit that includes a box's text is placed by the text's position words: on a leaf it is centered as a pair, on a container it takes the title's place. Joins chain. In a container whose title its side words place and which has an unplaced child, a child placed only against the text, or against what is joined to it, is joined without saying so: `node d1.nw "3"  right of d1 text  even with d1 text` goes with the title. The box then holds two groups nothing relates, each fully stated; if they land on each other, that is reported as an overlap. `a` must be something one of the node's placements is against, and must be its own container's text or a sibling. A node joined to the text may be placed only against the text and what is joined to it. A box whose every child is joined to its text draws as a leaf. `badge:` is the short form.
@@ -1585,6 +1575,10 @@ Designed and absent from the code.
 
 Pre-1.0, so the minor number is where a breaking change goes. Every removal is refused by name with the replacement quoted, rather than dropped in silence: an older file stops with an error saying what to write instead.
 
+**Unreleased**
+
+- **The icons are Lucide's.** `icon:`, `badge:` and a link's badge take any of [Lucide](https://lucide.dev)'s few thousand icons by its name, such as `server`, `smartphone` or `cloud`, all listed at [lucide.dev/icons](https://lucide.dev/icons). There used to be seven, drawn for reladraw. `laptop`, `package` and `database` keep their names with Lucide's pictures; `disk`, `desktop`, `cubes` and `cube` are refused, naming `hard-drive`, `monitor`, `boxes` and `box`. A name that isn't an icon is refused with the nearest ones. Icons are now drawn in lines with no shading, so a diagram with icons looks lighter, though nothing moves.
+
 **0.32.1**
 
 - `reladraw note` reaches every server whose folder holds the file, wherever it is run from. It used to reach only a server for exactly the folder it was run in, so a note run from a subfolder, or for a file served from a folder above, said nothing was noted.
@@ -1720,7 +1714,7 @@ Pre-1.0, so the minor number is where a breaking change goes. Every removal is r
 
 - **`stays above`, `stays below`, `stays left of` and `stays right of`** keep a child placed in its box's corner clear of the other children: `node laptop.mark  icon: laptop  inside laptop top-right  stays above laptop.photos`. The laptop stays in the corner, and the box makes room. See [Against its own parent](#against-its-own-parent).
 - **Breaking: a corner and a sibling saying the same axis are refused.** `node c.j "j"  inside c top-right  right of c.k` used to be centered between the two, neither in the corner nor beside `c.k`, straddling the box's edge. The error offers `right of c.k  inside c top` to sit beside `c.k`, and `stays right of c.k` to keep the corner. The same goes for `inside c top-right  above c.k` up and down.
-- **A new finding, `node-overflow`**: a child placed in its box's corner or against its side that the box has no room for there, such as `node drive.mark  icon: disk  inside drive top-right` on a box one line tall. It used to run out of the box with nothing said.
+- **A new finding, `node-overflow`**: a child placed in its box's corner or against its side that the box has no room for there, such as `node drive.mark  icon: hard-drive  inside drive top-right` on a box one line tall. It used to run out of the box with nothing said.
 - **A child in its box's corner that covers one of the box's other children is reported** as `node-overlap`, with the `stays` that would keep it clear. Being placed `inside` a box used to excuse it from covering anything in that box, not only the box.
 - **A child beside a sibling and against its parent's top stays inside the parent.** `node c.j "j"  right of c.k  inside c top` used to be drawn wholly outside `c`, with nothing reported. Being against the parent's top only measures its height from the finished box; across, the box holds it like any other child.
 - **Breaking: a hex color without its `#` is refused.** `fill: 444444` used to be passed to the viewer as is, which drew nothing. The error says to write `#444444`.
@@ -1973,7 +1967,7 @@ No syntax changes, and no file that worked is refused. Lines move: every line th
 **0.3.0** — the vocabulary, reworked in one breaking version so there is one migration rather than five.
 
 - `box` is `node` and `link` is `edge`. The string on either is its *text*; "label" is not a word the language has.
-- A node's **body** is `shape: rectangle | document | none` or `icon: <name>`, and writing both is an error naming both. `note` is gone — a note is `node … shape: none`. `shape: instance` is gone — the icon is `cube`, and a node drawn as one is `icon: cube`.
+- A node's **body** is `shape: rectangle | document | none` or `icon: <name>`, and writing both is an error naming both. `note` is gone — a note is `node … shape: none`. `shape: instance` is gone — the icon is `cube`, and a node drawn as one is `icon: box`.
 - A node drawn as a picture and given no text of its own shows none. A node with a body still falls back to its name.
 - The decoration icon is `badge:`, which freed `icon:` for the body. It is a shorthand for a child placed beside the text, so a container's badge now sits beside its title rather than in the far corner. It is refused on a picture and on a `shape: none` node, where it used to draw nothing.
 - A placement may target a *part* of a node — its text, a side or one of nine named points — with `inside`, `outside` and `on` reading a direction off it.

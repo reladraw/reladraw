@@ -79,12 +79,12 @@ node <name> ["<text>" [(<text settings>)]] [<placement> | <attribute>] ...
 
 Leave the text out and the node shows its name (`node parser` reads "parser"). Write `""` for a deliberately blank node. Inside a text, ` / ` (a slash with a space on each side) is a line break; `TCP/IP` and URLs survive.
 
-The body is `shape: rectangle | document | circle | diamond | pill | parallelogram | hexagon | trapezoid | triangle | cylinder | none` (`none` is bare text, for notes and captions; a flowchart shape with no geometric name is `flow-` and its meaning, such as `flow-subprocess` or `flow-delay`; settings follow in a bracket, `shape: triangle (aim: up)`) or `icon: disk | desktop | laptop | package | cubes | cube | database`, a picture with no box. `badge: <icon>` puts a picture beside the text as part of the label. A picture outside the set is declared with `icon <name>` and SVG between `"""` marks; prefer the built-ins.
+The body is `shape: rectangle | document | circle | diamond | pill | parallelogram | hexagon | trapezoid | triangle | cylinder | none` (`none` is bare text, for notes and captions; a flowchart shape with no geometric name is `flow-` and its meaning, such as `flow-subprocess` or `flow-delay`; settings follow in a bracket, `shape: triangle (aim: up)`) or `icon: <name>`, a picture with no box. The pictures are Lucide's icons by Lucide's names (`server`, `database`, `laptop`, `smartphone`, `hard-drive`, `cloud`, `boxes`, …), all listed at https://lucide.dev/icons; look a name up there rather than guessing, and an unknown one is refused with the nearest names. `badge: <icon>` puts a picture beside the text as part of the label. A picture Lucide lacks, such as a product's logo, is declared with `icon <name>` and SVG between `"""` marks.
 
 ```
 node dump  "nightly dump"  shape: document
-node unit  icon: cube  right of dump
-node drive "External HD"  badge: disk  below dump
+node unit  icon: box  right of dump
+node drive "External HD"  badge: hard-drive  below dump
 node aside "a remark that folds" (wrap: 20)  shape: none  right of drive
 ```
 

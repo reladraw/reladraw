@@ -67,7 +67,7 @@ node under "outside bottom"  outside column bottom  style: mark
 
 // A part target works on a picture as readily as on a box. The count is
 // bigger than the small picture, so it sits on the corner rather than inside.
-node unit  icon: cube  right of plate
+node unit  icon: box  right of plate
 node tag "x3"  on unit bottom-right  style: mark
 
 // Saying `inside` or `on` says the overlap is meant, for that pair and nothing

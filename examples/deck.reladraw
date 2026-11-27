@@ -7,7 +7,7 @@ style plain  fill: theme-fill  border: theme-border
 // The usual case: a front card with rows, and two more like it behind. A card
 // that holds things is written as a child, and then every card is.
 node drives           ""  layout: deck
-node drives.1         "Drive 1" (inside top, align: left)  badge: disk  layout: column (widths: match)
+node drives.1         "Drive 1" (inside top, align: left)  badge: hard-drive  layout: column (widths: match)
 node drives.1.backup  "shared folder / backup"  style: plain
 node drives.1.archive "archive"                 style: plain
 node drives.2         "Drive 2"

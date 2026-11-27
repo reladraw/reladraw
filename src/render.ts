@@ -15,7 +15,7 @@ import {
 } from './constants.js';
 import { isErdMark, type Attrs, type Mark, type NodeCorners } from './ast.js';
 import { SourceError } from './errors.js';
-import { ICON_STROKE, type Icon, type IconTone, type LetterIcon, type Outline } from './icons.js';
+import { type Icon, type LetterIcon, type Outline } from './icons.js';
 import { insideOutline,isBoxy, isRound, placePath, shapeOf, SUBPROCESS_INSET, type ShapeLook } from './outline.js';
 import { monospaceMeasurer, type Measurer } from './measure.js';
 import { joinedToText, outlineStated, type DepthStatement, type Layout, type LayoutEdge, type LayoutMark, type LayoutNode, type LineLook } from './model.js';
@@ -1026,7 +1026,7 @@ export function letterColors(icon: LetterIcon, theme: Theme): { fill: string; te
   return { fill, text };
 }
 
-/** One icon, scaled from its own grid onto a square of `side` at `x, y`. */
+/** One icon, fitted to a square of `side` at `x, y`. */
 function drawIcon(icon: Icon, x: number, y: number, side: number, theme: Theme): string {
   if ('letters' in icon) {
     const colors = letterColors(icon, theme);
@@ -1038,34 +1038,14 @@ function drawIcon(icon: Icon, x: number, y: number, side: number, theme: Theme):
       `  <text x="${round(x + r)}" y="${round(y + r)}" text-anchor="middle" dominant-baseline="central" font-size="${size}px" font-weight="700" fill="${colors.text}">${escapeXml(icon.letters)}</text>`,
     ].join('\n');
   }
-  if ('inner' in icon) {
-    // Its own viewBox fits it to the square, centered and in proportion.
-    // `color` is set only when the drawing does not set it, so `currentColor`
-    // means the theme's icon line unless the author said otherwise.
-    const color = /(^|\s)color=/.test(icon.attrs) ? '' : ` color="${theme.iconInk}"`;
-    return [
-      `  <svg x="${round(x)}" y="${round(y)}" width="${round(side)}" height="${round(side)}"${color} ${icon.attrs}>`,
-      icon.inner,
-      '  </svg>',
-    ].join('\n');
-  }
-  const scale = side / icon.grid;
-  const color = (tone: IconTone | undefined): string =>
-    tone === 'ink' ? theme.iconInk : tone === 'shade' ? theme.iconShade : theme.background;
-
-  const paths = icon.paths.map((path) => {
-    const fill = path.fill === undefined ? 'none' : color(path.fill);
-    const stroke =
-      path.stroke === undefined
-        ? ''
-        : ` stroke="${color(path.stroke)}" stroke-width="${ICON_STROKE}" stroke-linejoin="round"`;
-    return `    <path d="${path.d}" fill="${fill}"${stroke}/>`;
-  });
-
+  // Its own viewBox fits it to the square, centered and in proportion.
+  // `color` is set only when the drawing does not set it, so `currentColor`
+  // means the theme's icon line unless the author said otherwise.
+  const color = /(^|\s)color=/.test(icon.attrs) ? '' : ` color="${theme.iconInk}"`;
   return [
-    `  <g transform="translate(${round(x)} ${round(y)}) scale(${round(scale * 1000) / 1000})">`,
-    ...paths,
-    '  </g>',
+    `  <svg x="${round(x)}" y="${round(y)}" width="${round(side)}" height="${round(side)}"${color} ${icon.attrs}>`,
+    icon.inner,
+    '  </svg>',
   ].join('\n');
 }
 
