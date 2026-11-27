@@ -1,4 +1,4 @@
-# Syntax reference — 0.33.0
+# Syntax reference — 0.33.1
 
 What the language accepts. The changelog at the end lists what changed in each published version; 0.17.0's changes are large, and its entry has a table of every old spelling and what to write instead.
 
@@ -1575,7 +1575,7 @@ Designed and absent from the code.
 
 Pre-1.0, so the minor number is where a breaking change goes. Every removal is refused by name with the replacement quoted, rather than dropped in silence: an older file stops with an error saying what to write instead.
 
-**Unreleased**
+**0.33.1**
 
 - An icon name that isn't Lucide's is answered with icons Lucide files under that word, too: `icon: mobile` suggests `smartphone` and `tablet`, and `icon: hard-disk` suggests `hard-drive`.
 
