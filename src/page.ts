@@ -539,10 +539,11 @@ const CHEATSHEET = `
     <section class="cs-card" style="--hue: var(--syn-value)"><h3>Text</h3>
       <div class="cs-row"><code>node a "Server" (size: large)</code><span>small, normal or large</span></div>
       <div class="cs-row"><code>node a "Server" (color: theme-muted)</code><span>the text's color</span></div>
+      <div class="cs-row"><code>node a "Server" (weight: bold, italic: on, underline: on)</code><span>bold, italic, underlined</span></div>
       <div class="cs-row"><code>node a "A long label" (wrap: 24)</code><span>folds at 24 characters</span></div>
       <div class="cs-row"><code>node a "Server" (inside top, align: left)</code><span>where a container's title sits: on top, outside top, center</span></div>
       <div class="cs-row"><code>style dim  text: (color: theme-muted)</code><span>in a style, the bracket hangs off text:</span></div>
-      <div class="cs-row"><code>node a "name / [dim]quieter[/dim]"</code><span>those words in style dim's text color</span></div>
+      <div class="cs-row"><code>node a "name / [dim]quieter[/dim]"</code><span>those words in style dim's text color, size and face</span></div>
       <div class="cs-row"><code>node a "a \\/ b"</code><span>a slash that doesn't break the line; \\[ for a bracket</span></div>
     </section>
     <section class="cs-card" style="--hue: var(--syn-comment)"><h3>Comments</h3>

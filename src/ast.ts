@@ -513,8 +513,11 @@ export type Attrs = Record<string, string>;
  * `at` and `align` are independent and neither implies the other. `at` is where
  * the block of text sits in the node — one of the nine named positions — and
  * `align` is how its lines range against each other once it is there.
+ *
+ * `weight`, `italic` and `underline` change the letters and not their room
+ * (see `Face` in text.ts), so like `color` they never move anything.
  */
-export const TEXT_KEYS = ['color', 'size', 'wrap', 'align', 'at'] as const;
+export const TEXT_KEYS = ['color', 'size', 'weight', 'italic', 'underline', 'wrap', 'align', 'at'] as const;
 
 /**
  * What an edge's line takes in its bracket: `line: (path: square, pattern:
@@ -835,7 +838,7 @@ export const POINT_KEYS = ['style', 'fill', 'depth'] as const;
 /** Which way from its dot a point's text sits (design.org 7.4); the first is the default. */
 export const POINT_TEXT_SIDES = ['above', 'below', 'left', 'right', 'above-right', 'above-left', 'below-right', 'below-left'] as const;
 /** What a point's or a region's text takes in its bracket besides its position words. */
-export const MARK_TEXT_KEYS = ['color', 'size', 'wrap', 'align', 'reads', 'gap'] as const;
+export const MARK_TEXT_KEYS = ['color', 'size', 'weight', 'italic', 'underline', 'wrap', 'align', 'reads', 'gap'] as const;
 export const REGION_KEYS = ['style', 'fill', 'opacity', 'border', 'padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left', 'depth'] as const;
 
 /**

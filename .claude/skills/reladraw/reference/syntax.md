@@ -466,7 +466,7 @@ node db   "DB"   below api
 region trust "trust boundary" (inside top, align: left)  web top-left to db bottom-right  padding: 1
 ```
 
-Both start one step smaller than a box's text, as bare text does, and take `color:`, `size:`, `wrap:`, `align:` and `reads: up` or `down`.
+Both start one step smaller than a box's text, as bare text does, and take `color:`, `size:`, `weight:`, `italic:`, `underline:`, `wrap:`, `align:` and `reads: up` or `down`.
 
 ## Containers
 
@@ -678,11 +678,20 @@ node aside "Written nightly." (size: small, wrap: 30)  shape: none
 |---|---|
 | `color` | a color or a theme color |
 | `size` | `small`, `normal` or `large`; a multiple of normal (`1.2`); or pixels (`16px`) |
+| `weight` | `bold` or `normal` |
+| `italic` | `on` or `off` |
+| `underline` | `on` or `off` |
 | `wrap` | a count of characters to fold at, on top of ` / ` |
 | `align` | how the text's own lines range: `left`, `center`, `right`, or where along a side for a title (below) |
 | `fill` | on a `flow-collate` only, the patch behind its text: a color, or `none` |
 
 `small` is 21/25 of normal and `large` the same step the other way. The names are preferred: bundled into a style, a size says *why* one text is smaller. `wrap:` is a character count, not a distance: it is how a text is made narrow and tall to sit beside something.
+
+Bold, italic and underlined text take no more room than plain text, so like a color they never move anything.
+
+```
+node shape "Shape" (italic: on)  shape: table
+```
 
 A style has no text of its own, so it hangs the bracket off a key: `style aside  text: (size: small, color: theme-muted)`. On a node or an edge, `text:` is refused: the bracket goes after the text.
 
@@ -727,14 +736,18 @@ node rack.b "web-2"
 
 ### Markup
 
-A stretch of text can borrow a style's text color and size:
+A stretch of text can borrow a style's text color, size, weight, italic and underline:
 
 ```
 style dim  text: (color: theme-muted, size: small)
 node files "shared folder / [dim]synced[/dim]"
+
+style static  text: (underline: on)
+node order "Order"  shape: table
+node order.make "[static]create() : Order[/static]"
 ```
 
-The opener names a style, never a color, so the marked words borrow a meaning the file already has. A name no style answers to is refused, and so is a style that gives text neither a color nor a size.
+The opener names a style, never a color, so the marked words borrow a meaning the file already has. A name no style answers to is refused, and so is a style that says none of those five. A marked stretch takes what its style says over what its text says, so `italic: off` in a style sets words upright inside an italic text.
 
 **A line is as tall as its largest text.** A line that is all small is spaced as a small line, so the box is shorter. A small stretch mid-line, `"3 [dim]files[/dim] waiting"`, sits on the same baseline as the words around it, and the line keeps the normal spacing. With `wrap:`, a small character counts as less than a whole one, by the ratio of the two sizes. The closer repeats the name, so a mismatched close is refused by name. Marks don't nest, and a mark may cross a line break. A bare `[` is an error; write `\[` for a literal one.
 
@@ -1574,6 +1587,10 @@ Designed and absent from the code.
 ## Changelog
 
 Pre-1.0, so the minor number is where a breaking change goes. Every removal is refused by name with the replacement quoted, rather than dropped in silence: an older file stops with an error saying what to write instead.
+
+**Unreleased**
+
+- **Bold, italic and underlined text.** A text's bracket takes `weight: bold`, `italic: on` and `underline: on`, a style carries them as `text: (…)`, and marked words take them from their style, so `[static]create()[/static]` can be underlined, as UML draws a static member. None of them moves anything. `bold:`, `font-weight:`, `font-style:` and `text-decoration:` are refused, naming the setting to write.
 
 **0.33.1**
 

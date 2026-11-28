@@ -137,7 +137,7 @@ A title goes `(inside top)` by default, centered along it; `(inside top, align: 
 
 ### Text
 
-Everything a text says about itself goes in brackets after it: `color`, `size` (`small | normal | large`), `wrap` (fold every n characters) and `align`.
+Everything a text says about itself goes in brackets after it: `color`, `size` (`small | normal | large`), `weight: bold`, `italic: on`, `underline: on`, `wrap` (fold every n characters) and `align`.
 
 ```
 style dim  text: (color: theme-muted)
@@ -145,7 +145,7 @@ node grinder "Grinder / [dim]medium-fine[/dim]"
 node note "a longer remark that folds" (size: small, wrap: 30)  shape: none  below grinder (gap: tight)
 ```
 
-`[dim]…[/dim]` borrows a style's text color and size for a stretch of text; a line that is all small is spaced as a small line. A style hangs the bracket off a key: `style aside  text: (size: small, color: theme-muted)`. **Always give bare text a `(wrap: n)`**, or a sentence is one long line across whatever is beside it.
+`[dim]…[/dim]` borrows a style's text color, size, weight, italic and underline for a stretch of text; a line that is all small is spaced as a small line. A style hangs the bracket off a key: `style aside  text: (size: small, color: theme-muted)`. **Always give bare text a `(wrap: n)`**, or a sentence is one long line across whatever is beside it.
 
 ### Lines
 

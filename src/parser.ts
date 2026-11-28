@@ -1131,7 +1131,7 @@ function readEdgeTextBracket(
         );
       }
       if (!(EDGE_TEXT_KEYS as readonly string[]).includes(key)) {
-        throw new SourceError(`a text on a line has no "${key}" — it takes ${EDGE_TEXT_KEYS.join(', ')}, and relations such as \`above s1\` or \`right of edge\``, line);
+        throw new SourceError(`a text on a line has no "${key}" — ${faceKeyHint(key)}it takes ${EDGE_TEXT_KEYS.join(', ')}, and relations such as \`above s1\` or \`right of edge\``, line);
       }
       const value = plain(tokens[i + 1]);
       if (value === undefined || isAttrKey(tokens[i + 1]!) || value === ')') {
@@ -3072,6 +3072,24 @@ function readTableBracket(tokens: Token[], subject: string, line: number): Recor
   return values;
 }
 
+/**
+ * The keys someone reaching for bold, italic or underline is likely to try,
+ * from CSS or from habit, pointed at the one reladraw takes. Written to sit
+ * ahead of the list of keys; empty for any other key.
+ */
+function faceKeyHint(key: string): string {
+  const fix: Record<string, string> = {
+    bold: 'weight: bold',
+    'font-weight': 'weight: bold',
+    'font-style': 'italic: on',
+    style: 'italic: on',
+    slant: 'italic: on',
+    decoration: 'underline: on',
+    'text-decoration': 'underline: on',
+  };
+  return fix[key] === undefined ? '' : `write \`${fix[key]}\`; `;
+}
+
 function readBracket(
   tokens: Token[],
   start: number,
@@ -3099,7 +3117,8 @@ function readBracket(
     }
     const key = keyToken.text.slice(0, -1);
     if (!keys.includes(key)) {
-      throw new SourceError(`${about.kind} has no "${key}" — it takes ${(about.listed ?? keys).join(', ')}`, about.line);
+      const hint = keys.includes('weight') ? faceKeyHint(key) : '';
+      throw new SourceError(`${about.kind} has no "${key}" — ${hint}it takes ${(about.listed ?? keys).join(', ')}`, about.line);
     }
     const valueToken = tokens[i + 1];
     if (!valueToken || valueToken.quoted || isAttrKey(valueToken) || valueToken.text === ')') {

@@ -22,7 +22,7 @@ import { joinedToText, outlineStated, type DepthStatement, type Layout, type Lay
 import { DARK_THEME, THEMES, overlapFill, regionTint, textOnFill, themeColor, type Theme } from './themes.js';
 import { crossingPoints, planLines, traceRoute, visibleRuns, type Point, type Route } from './lines.js';
 import { patchPadding, placeLineTexts } from './linetexts.js';
-import { plain, type Line, type Run } from './text.js';
+import { plain, sameFace, type Face, type Line, type Run } from './text.js';
 import { linkLabel, linksOf, type Link } from './links.js';
 import { markdownPlain } from './markdown.js';
 
@@ -1655,7 +1655,12 @@ function textBlock(
       // to what the `subtext:` it replaced produced.
       const colors = line.map((run) => style.ink(run, style.color));
       const sizes = line.map((run) => run.size);
-      const uniform = colors.every((color) => color === colors[0]) && sizes.every((size) => size === sizes[0]);
+      // A face goes on the element whose letters it changes, never on one
+      // that holds plain runs too: an underline can't be taken off a child.
+      const uniform =
+        colors.every((color) => color === colors[0]) &&
+        sizes.every((size) => size === sizes[0]) &&
+        line.every((run) => sameFace(run.face, line[0]!.face));
       const sizeAttr = (size: number | undefined) => (size === undefined ? '' : ` font-size="${size}px"`);
       const body = uniform
         ? escapeXml(plain(line))
@@ -1663,13 +1668,24 @@ function textBlock(
             .map((run, run_index) => {
               const fill = colors[run_index] === style.color ? '' : ` fill="${colors[run_index]}"`;
               const sized = sizeAttr(run.size);
-              return fill || sized ? `<tspan${fill}${sized}>${escapeXml(run.text)}</tspan>` : escapeXml(run.text);
+              const face = faceAttrs(run.face);
+              return fill || sized || face ? `<tspan${fill}${sized}${face}>${escapeXml(run.text)}</tspan>` : escapeXml(run.text);
             })
             .join('');
-      return `  <text x="${round(anchorX)}" y="${round(baseline)}" fill="${uniform ? colors[0] ?? style.color : style.color}"${uniform ? sizeAttr(sizes[0]) : ''} text-anchor="${style.align}">${body}</text>`;
+      return `  <text x="${round(anchorX)}" y="${round(baseline)}" fill="${uniform ? colors[0] ?? style.color : style.color}"${uniform ? sizeAttr(sizes[0]) + faceAttrs(line[0]!.face) : ''} text-anchor="${style.align}">${body}</text>`;
     })
     .filter((element) => element.length > 0)
     .join('\n');
+}
+
+/** A run's face as SVG attributes: bold, italic, underline. Nothing for a plain run. */
+function faceAttrs(face: Face | undefined): string {
+  if (face === undefined) return '';
+  return (
+    (face.bold ? ' font-weight="bold"' : '') +
+    (face.italic ? ' font-style="italic"' : '') +
+    (face.underline ? ' text-decoration="underline"' : '')
+  );
 }
 
 /**

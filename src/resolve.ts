@@ -44,7 +44,7 @@ import { LINKS_KEY, linksOf, type Link, type LinkEntry } from './links.js';
 import { unsafeLinks } from './markdown.js';
 import { monospaceMeasurer, type Measurer } from './measure.js';
 import { isBoxy, middleOf, sizeFor, SUBPROCESS_INSET } from './outline.js';
-import { markupStyles, parseMarkup, plain, splitRuns, wrapLine, type Line } from './text.js';
+import { markupStyles, parseMarkup, plain, splitRuns, wrapLine, type Face, type Line } from './text.js';
 import { joinedToText, outlineStated, type DepthStatement, type Layout, type LayoutMark, type LayoutEdge, type LayoutNode, type LineLook, type Rect } from './model.js';
 import { checkOpacity, gapPixels, Placer, regionTextAt, type Layout as ChildLayout, type NodeFacts, type RegionTextFacts, type TitlePlace, type Venn } from './place.js';
 
@@ -2242,8 +2242,8 @@ function bracketOf(key: string, attrs: Attrs): Attrs {
  * A style is the only thing markup may name — never a color — so that a marked
  * word borrows a meaning the file already has instead of restating a value that
  * goes stale the day the thing it means is recolored. Both ways that can fail
- * are refused by name: a style nobody declared, and one that gives text neither
- * a color nor a size and so would lend nothing.
+ * are refused by name: a style nobody declared, and one that gives text no
+ * color, size or face and so would lend nothing.
  */
 function markupColors(
   nodes: LayoutNode[],
@@ -2269,10 +2269,10 @@ function markupColors(
         );
       }
       const color = style['text.color'];
-      if (color === undefined && style['text.size'] === undefined) {
+      if (color === undefined && style['text.size'] === undefined && !stylesFace(style)) {
         throw new SourceError(
-          `${what}: its text marks [${name}], and style "${name}" gives text no color or size — ` +
-            `write \`style ${name}  text: (color: …)\` or \`text: (size: …)\``,
+          `${what}: its text marks [${name}], and style "${name}" gives text no color, size, weight, italic or underline — ` +
+            `write \`style ${name}  text: (color: …)\`, or size:, weight: bold, italic: on or underline: on`,
           line,
         );
       }
@@ -2299,6 +2299,7 @@ function markupColors(
 function linesFor(text: string, textAttrs: Attrs, subject: string, line: number, sizes?: TextSizes): Line[] {
   const lines = splitRuns(parseMarkup(text, subject, line));
   if (sizes) sizeRuns(lines, sizes, line);
+  faceRuns(lines, textAttrs, sizes?.styles, subject, line);
   const stated = textAttrs['wrap'];
   if (stated === undefined) return lines;
 
@@ -2307,6 +2308,59 @@ function linesFor(text: string, textAttrs: Attrs, subject: string, line: number,
     throw new SourceError(`wrap must be a whole number of characters, not "${stated}"`, line);
   }
   return lines.flatMap((part) => wrapLine(part, columns, sizes?.base));
+}
+
+/** A face as written: each part on, off, or not said, so a mark can turn off what its text turned on. */
+type StatedFace = { [part in keyof Face]?: boolean };
+
+/**
+ * Read `weight:`, `italic:` and `underline:` from a text's settings, or from a
+ * style's under `text.`. A weight is a word, `bold` or `normal`: the faces
+ * reladraw draws in have no weights between, so a number would draw as one of
+ * the two depending on the machine.
+ */
+function statedFace(attrs: Attrs, prefix: '' | 'text.', subject: string, line: number): StatedFace {
+  const face: StatedFace = {};
+  const weight = attrs[`${prefix}weight`];
+  if (weight !== undefined) {
+    if (weight !== 'bold' && weight !== 'normal') {
+      throw new SourceError(`${subject}: a text's weight is bold or normal, not "${weight}"`, line);
+    }
+    face.bold = weight === 'bold';
+  }
+  for (const part of ['italic', 'underline'] as const) {
+    const value = attrs[`${prefix}${part}`];
+    if (value === undefined) continue;
+    if (value !== 'on' && value !== 'off') {
+      throw new SourceError(`${subject}: a text's ${part} is on or off, not "${value}"`, line);
+    }
+    face[part] = value === 'on';
+  }
+  return face;
+}
+
+/** Whether a style says anything about how its text's letters are drawn. */
+function stylesFace(style: Attrs): boolean {
+  return ['weight', 'italic', 'underline'].some((part) => style[`text.${part}`] !== undefined);
+}
+
+/**
+ * Give each run its face: the text's own, then its style's on top, so
+ * `[plain]…[/plain]` with `italic: off` can set a word upright inside an
+ * italic text. A run left plain carries no face, so a text that says none of
+ * this draws exactly as it always did.
+ */
+function faceRuns(lines: Line[], textAttrs: Attrs, styles: Map<string, Attrs> | undefined, subject: string, line: number): void {
+  const own = statedFace(textAttrs, '', subject, line);
+  for (const run of lines.flat()) {
+    const style = run.style === undefined ? undefined : styles?.get(run.style);
+    const stated = { ...own, ...(style === undefined ? {} : statedFace(style, 'text.', `style "${run.style}"`, line)) };
+    const face: Face = {};
+    if (stated.bold) face.bold = true;
+    if (stated.italic) face.italic = true;
+    if (stated.underline) face.underline = true;
+    if (Object.keys(face).length > 0) run.face = face;
+  }
 }
 
 /**

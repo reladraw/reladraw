@@ -31,6 +31,23 @@ export interface Run {
    * styles and the document's size.
    */
   size?: number;
+  /**
+   * How the run's letters are drawn: bold, italic, underlined. Filled in by the
+   * resolver from the text's own `weight:`, `italic:` and `underline:` and then
+   * the run's style, which wins; undefined when the run is drawn plain.
+   */
+  face?: Face;
+}
+
+/**
+ * The parts of a text's look that change the letters but not their room. The
+ * face is monospace, whose bold and italic advance exactly as its regular does,
+ * so none of these moves anything, as a color doesn't.
+ */
+export interface Face {
+  bold?: true;
+  italic?: true;
+  underline?: true;
 }
 
 /** One drawn line, as the runs it is made of. */
@@ -215,11 +232,16 @@ function words(line: Line): Run[] {
 /** Add a word to a line, joining it to the last run when the style is the same. */
 function append(line: Line, word: Run): void {
   const last = line[line.length - 1];
-  if (last && last.style === word.style) {
+  if (last && last.style === word.style && last.size === word.size && sameFace(last.face, word.face)) {
     last.text += word.text;
     return;
   }
   line.push(word);
+}
+
+/** Whether two runs are drawn with the same letters. */
+export function sameFace(a: Face | undefined, b: Face | undefined): boolean {
+  return a?.bold === b?.bold && a?.italic === b?.italic && a?.underline === b?.underline;
 }
 
 /** The line as it reads, with no markup — what gets measured. */

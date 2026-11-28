@@ -58,6 +58,18 @@ node aside "A quiet remark that folds itself, with [dim]one word[/dim] quieter t
 // A literal bracket is written \[, since [ opens markup.
 node literal "sizes \[small, normal, large]"  below aside (gap: tight)  shape: none
 
+// A text can be bold, italic or underlined, and a style can carry it, so
+// marked words take it as they take a color. Here a UML class: its name is
+// italic because it is abstract, and a static member is underlined. None of
+// the three changes how much room a text takes.
+style key       text: (weight: bold)
+style abstract  text: (italic: on)
+style static    text: (underline: on)
+node class "Shape" (italic: on)  below literal (gap: tight)  shape: table
+node class.id    "[key]id[/key] : int"
+node class.area  "[abstract]area() : float[/abstract]"
+node class.make  "[static]create() : Shape[/static]"
+
 // An edge's text takes the same brackets. A size may be a multiple of normal,
 // such as 1.2, or pixels, such as 12px, as well as a name.
 edge tall -> aside  "carried" (color: theme-muted, size: 12px)  from: right  to: left
