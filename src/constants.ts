@@ -107,10 +107,16 @@ export function widestLine(lines: Line[], measurer: Measurer, fontSize: number):
  * How wide one line is. A line all at the text's own size is measured whole;
  * a line with a marked run of another size is the runs side by side, each at
  * its own size.
+ *
+ * A measurer reads a text as a file writes it, where ` / ` is a break. A
+ * line's breaks are already taken and its `\/` already a plain slash, so the
+ * slash is written back as `\/` before measuring: otherwise
+ * `"retry \/ backoff"` drawn on one line was measured as two (issue #27).
  */
 export function lineWidth(line: Line, measurer: Measurer, fontSize: number): number {
-  if (line.every((run) => run.size === undefined)) return measurer.measure(plain(line), fontSize).width;
-  return line.reduce((sum, run) => sum + measurer.measure(run.text, run.size ?? fontSize).width, 0);
+  const width = (text: string, size: number) => measurer.measure(text.replace(/\//g, '\\/'), size).width;
+  if (line.every((run) => run.size === undefined)) return width(plain(line), fontSize);
+  return line.reduce((sum, run) => sum + width(run.text, run.size ?? fontSize), 0);
 }
 
 /**
