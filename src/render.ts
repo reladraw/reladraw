@@ -1473,6 +1473,9 @@ function markShape(mark: Mark, color: string, background: string): string {
       return `<path d="M 0 0 L 10 5 L 0 10 z" fill="${color}"/>`;
     case 'oarrow':
       return `<path d="M 0.7 1.2 L 9.3 5 L 0.7 8.8 z" ${outline}/>`;
+    // No back and no fill, so the line runs on under it to the tip.
+    case 'vee':
+      return `<path d="M 0.7 0.9 L 9.3 5 L 0.7 9.1" fill="none" stroke="${color}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>`;
     case 'dot':
       return `<circle cx="5" cy="5" r="4" fill="${color}"/>`;
     case 'odot':

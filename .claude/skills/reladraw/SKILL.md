@@ -153,7 +153,7 @@ node note "a longer remark that folds" (size: small, wrap: 30)  shape: none  bel
 edge [<name>] <from> -> <to> ["<text>" [(<placement>)]] [attributes]
 ```
 
-`<-`, `<->` and `--` work too, and each end may carry a mark: `a <|-- b`, `a *--o b`, `a diamond--> b`, and for a database's cardinality `a [erd-one] -- [erd-zero-or-many] b` (also `erd-zero-or-one`, `erd-one-or-many`). `from:` and `to:` name the side of the first and second name written: `from: right  to: left`.
+`<-`, `<->` and `--` work too, and each end may carry a mark: `a <|-- b`, `a *--o b`, `a diamond--> b`, an open arrowhead `a --vee b` (UML's async message, transition and dependency), and for a database's cardinality `a [erd-one] -- [erd-zero-or-many] b` (also `erd-zero-or-one`, `erd-one-or-many`). `from:` and `to:` name the side of the first and second name written: `from: right  to: left`.
 
 - **Straight by default**, between the two boxes and through anything in between, which is reported. `line: (path: square)` or `line: (path: curved)` for a route read off the line's own two boxes and sides.
 - **`via:` lists the places a line passes**: `via: cache top` runs just above `cache`; `via: between a and b` goes through the point between them; `via: proxy` goes through a box's center. This is how to take a line round something.

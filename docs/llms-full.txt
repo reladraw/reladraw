@@ -160,7 +160,7 @@ node note "a longer remark that folds" (size: small, wrap: 30)  shape: none  bel
 edge [<name>] <from> -> <to> ["<text>" [(<placement>)]] [attributes]
 ```
 
-`<-`, `<->` and `--` work too, and each end may carry a mark: `a <|-- b`, `a *--o b`, `a diamond--> b`, and for a database's cardinality `a [erd-one] -- [erd-zero-or-many] b` (also `erd-zero-or-one`, `erd-one-or-many`). `from:` and `to:` name the side of the first and second name written: `from: right  to: left`.
+`<-`, `<->` and `--` work too, and each end may carry a mark: `a <|-- b`, `a *--o b`, `a diamond--> b`, an open arrowhead `a --vee b` (UML's async message, transition and dependency), and for a database's cardinality `a [erd-one] -- [erd-zero-or-many] b` (also `erd-zero-or-one`, `erd-one-or-many`). `from:` and `to:` name the side of the first and second name written: `from: right  to: left`.
 
 - **Straight by default**, between the two boxes and through anything in between, which is reported. `line: (path: square)` or `line: (path: curved)` for a route read off the line's own two boxes and sides.
 - **`via:` lists the places a line passes**: `via: cache top` runs just above `cache`; `via: between a and b` goes through the point between them; `via: proxy` goes through a box's center. This is how to take a line round something.
@@ -1042,6 +1042,7 @@ The arrow is a mark, a shaft, a mark. The shaft is `-` or `--`, and either mark 
 |---|---|---|
 | `arrow` | a filled arrowhead | `>` on the right, `<` on the left |
 | `oarrow` | an outlined arrowhead | `\|>` on the right, `<\|` on the left |
+| `vee` | an open arrowhead: two strokes, no back | |
 | `dot` | a filled circle | `*` |
 | `odot` | an outlined circle | `o` |
 | `diamond` | a filled diamond | |
@@ -1861,6 +1862,7 @@ Pre-1.0, so the minor number is where a breaking change goes. Every removal is r
 **Unreleased**
 
 - **Bold, italic and underlined text.** A text's bracket takes `weight: bold`, `italic: on` and `underline: on`, a style carries them as `text: (…)`, and marked words take them from their style, so `[static]create()[/static]` can be underlined, as UML draws a static member. None of them moves anything. `bold:`, `font-weight:`, `font-style:` and `text-decoration:` are refused, naming the setting to write.
+- **An open arrowhead, `vee`**: two strokes with no back and no fill, as UML draws an asynchronous message, a transition or a dependency, where `oarrow` would read as inheritance. Written as a word, `a --vee b` or `to-mark: vee`.
 - A text with an escaped spaced slash, `"retry \/ backoff"`, is sized as the one line it is drawn as. It used to be sized as if the slash broke the line, so the text ran out past both sides of its box, and a line's text out past its background.
 
 **0.33.1**

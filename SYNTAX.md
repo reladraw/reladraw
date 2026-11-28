@@ -772,6 +772,7 @@ The arrow is a mark, a shaft, a mark. The shaft is `-` or `--`, and either mark 
 |---|---|---|
 | `arrow` | a filled arrowhead | `>` on the right, `<` on the left |
 | `oarrow` | an outlined arrowhead | `\|>` on the right, `<\|` on the left |
+| `vee` | an open arrowhead: two strokes, no back | |
 | `dot` | a filled circle | `*` |
 | `odot` | an outlined circle | `o` |
 | `diamond` | a filled diamond | |
@@ -1591,6 +1592,7 @@ Pre-1.0, so the minor number is where a breaking change goes. Every removal is r
 **Unreleased**
 
 - **Bold, italic and underlined text.** A text's bracket takes `weight: bold`, `italic: on` and `underline: on`, a style carries them as `text: (…)`, and marked words take them from their style, so `[static]create()[/static]` can be underlined, as UML draws a static member. None of them moves anything. `bold:`, `font-weight:`, `font-style:` and `text-decoration:` are refused, naming the setting to write.
+- **An open arrowhead, `vee`**: two strokes with no back and no fill, as UML draws an asynchronous message, a transition or a dependency, where `oarrow` would read as inheritance. Written as a word, `a --vee b` or `to-mark: vee`.
 - A text with an escaped spaced slash, `"retry \/ backoff"`, is sized as the one line it is drawn as. It used to be sized as if the slash broke the line, so the text ran out past both sides of its box, and a line's text out past its background.
 
 **0.33.1**

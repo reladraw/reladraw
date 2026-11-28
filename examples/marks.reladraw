@@ -15,7 +15,13 @@ node uml     "inherits"    below arrows
 node uml2    "a --|> b"    right of uml (gap: wide)  style: label
 edge uml --|> uml2
 
-node whole   "composed"    below uml
+// An open arrowhead, two strokes with no back: UML's asynchronous message,
+// transition and dependency.
+node open    "depends on"  below uml
+node open2   "a --vee b"   right of open (gap: wide)  style: label
+edge open --vee open2
+
+node whole   "composed"    below open
 node whole2  "a diamond--> b"  right of whole (gap: wide)  style: label
 edge whole diamond--> whole2
 

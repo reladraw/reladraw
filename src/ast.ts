@@ -580,6 +580,9 @@ export interface NodeStmt {
 export const MARKS = [
   'arrow',
   'oarrow',
+  // Two strokes, open at the back: UML's async message, transition and
+  // dependency, where `oarrow` would read as inheritance (issue #26).
+  'vee',
   'dot',
   'odot',
   'diamond',
